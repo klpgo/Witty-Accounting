@@ -1,0 +1,39 @@
+services:
+
+  db:
+    image: mariadb:11
+    container_name: witty-accounting-db
+
+    restart: unless-stopped
+
+    environment:
+      MYSQL_DATABASE: witty_accounting
+      MYSQL_USER: witty
+      MYSQL_PASSWORD: changeme
+      MYSQL_ROOT_PASSWORD: rootpassword
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: witty-accounting-backend
+
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    depends_on:
+      - db
+
+    ports:
+      - "8000:8000"
+
+volumes:
+  mariadb_data:
