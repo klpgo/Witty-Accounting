@@ -10,5 +10,7 @@ dependencies = [
     "sqlalchemy",
     "pymysql",
     "pydantic",
-    "pydantic-settings"
+    "pydantic-settings",
+    "alembic",
+    "apscheduler"
 ]

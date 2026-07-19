@@ -35,5 +35,8 @@ services:
     ports:
       - "8000:8000"
 
+    volumes:
+      - ./uploads/logs:/app/logs
+
 volumes:
   mariadb_data:
