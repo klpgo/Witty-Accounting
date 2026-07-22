@@ -18,13 +18,27 @@ class ChargingSession(Base):
     hager_session_id: Mapped[str] = mapped_column(
         String(100),
         unique=True,
-        nullable=False
+        nullable=True
     )
 
     # Identifikation der Witty Ladestation
     station_id: Mapped[str] = mapped_column(
         String(100),
         nullable=False
+    )
+
+    # Hash zur Dublettenerkennung bei XLSX-/CSV-Import
+    import_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=True
+    )
+
+    # Quelle des Datensatzes (xlsx, api, csv ...)
+    source: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="xlsx"
     )
 
     start_time: Mapped[datetime] = mapped_column(
