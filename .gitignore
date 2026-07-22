@@ -28,4 +28,4 @@ backend/alembic/versions/*.py
 *.pid
 
 # Tests
-backend/tests/beispiel.xlsx
+backend/tests/*.xlsx
