@@ -258,3 +258,30 @@ def test_import_xlsx_reports_invalid_duration(
         match="Fehler in XLSX-Zeile 2",
     ):
         import_xlsx(xlsx_path)
+
+
+def test_import_xlsx_rejects_invalid_headers(
+    tmp_path: Path,
+) -> None:
+    xlsx_path = tmp_path / "invalid-headers.xlsx"
+
+    workbook = Workbook()
+    sheet = workbook.active
+
+    sheet.append(
+        [
+            "Datum",
+            "Status",
+            "Dauer",
+            "Energie",
+        ]
+    )
+
+    workbook.save(xlsx_path)
+    workbook.close()
+
+    with pytest.raises(
+        ValueError,
+        match="Ungültige XLSX-Kopfzeile",
+    ):
+        import_xlsx(xlsx_path)

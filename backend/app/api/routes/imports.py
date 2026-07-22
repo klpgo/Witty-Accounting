@@ -1,8 +1,14 @@
 from pathlib import Path
-from shutil import copyfileobj
 from tempfile import NamedTemporaryFile
+from zipfile import BadZipFile
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+)
 from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy.orm import Session
 
@@ -11,10 +17,48 @@ from app.schemas.import_result import ImportResult
 from app.services.importers.xlsx_importer import import_xlsx_to_db
 
 
+MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+UPLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
+
+
 router = APIRouter(
     prefix="/imports",
     tags=["imports"],
 )
+
+
+def save_upload_with_limit(
+    file: UploadFile,
+    destination,
+) -> int:
+    """
+    Speichert einen Upload blockweise und bricht bei Überschreitung
+    des Größenlimits ab.
+    """
+    total_size = 0
+
+    while True:
+        chunk = file.file.read(
+            UPLOAD_CHUNK_SIZE_BYTES
+        )
+
+        if not chunk:
+            break
+
+        total_size += len(chunk)
+
+        if total_size > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    "Die XLSX-Datei ist zu groß. "
+                    "Maximal erlaubt sind 10 MB."
+                ),
+            )
+
+        destination.write(chunk)
+
+    return total_size
 
 
 @router.post(
@@ -30,7 +74,10 @@ def upload_xlsx(
     if Path(filename).suffix.lower() != ".xlsx":
         raise HTTPException(
             status_code=400,
-            detail="Es werden ausschließlich XLSX-Dateien unterstützt.",
+            detail=(
+                "Es werden ausschließlich "
+                "XLSX-Dateien unterstützt."
+            ),
         )
 
     temporary_path: Path | None = None
@@ -41,11 +88,19 @@ def upload_xlsx(
             suffix=".xlsx",
             delete=False,
         ) as temporary_file:
-            temporary_path = Path(temporary_file.name)
+            temporary_path = Path(
+                temporary_file.name
+            )
 
-            copyfileobj(
-                file.file,
-                temporary_file,
+            uploaded_size = save_upload_with_limit(
+                file=file,
+                destination=temporary_file,
+            )
+
+        if uploaded_size == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Die hochgeladene Datei ist leer.",
             )
 
         result = import_xlsx_to_db(
@@ -55,7 +110,11 @@ def upload_xlsx(
 
         return ImportResult(**result)
 
+    except HTTPException:
+        raise
+
     except (
+        BadZipFile,
         InvalidFileException,
         KeyError,
         TypeError,
@@ -63,7 +122,10 @@ def upload_xlsx(
     ) as exc:
         raise HTTPException(
             status_code=400,
-            detail=f"Die XLSX-Datei konnte nicht importiert werden: {exc}",
+            detail=(
+                "Die XLSX-Datei konnte nicht "
+                f"importiert werden: {exc}"
+            ),
         ) from exc
 
     finally:

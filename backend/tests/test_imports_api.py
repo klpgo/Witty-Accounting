@@ -93,3 +93,82 @@ def test_upload_rejects_non_xlsx_file(
             "Es werden ausschließlich XLSX-Dateien unterstützt."
         )
     }
+
+def test_upload_rejects_empty_xlsx(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/imports/xlsx",
+        files={
+            "file": (
+                "empty.xlsx",
+                b"",
+                (
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Die hochgeladene Datei ist leer."
+    }
+
+
+def test_upload_rejects_oversized_file(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.api.routes.imports.MAX_UPLOAD_SIZE_BYTES",
+        8,
+    )
+
+    response = client.post(
+        "/imports/xlsx",
+        files={
+            "file": (
+                "large.xlsx",
+                b"123456789",
+                (
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+            )
+        },
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {
+        "detail": (
+            "Die XLSX-Datei ist zu groß. "
+            "Maximal erlaubt sind 10 MB."
+        )
+    }
+
+
+def test_upload_rejects_corrupt_xlsx(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/imports/xlsx",
+        files={
+            "file": (
+                "corrupt.xlsx",
+                b"Das ist keine XLSX-Datei",
+                (
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith(
+        "Die XLSX-Datei konnte nicht importiert werden:"
+    )
+
+

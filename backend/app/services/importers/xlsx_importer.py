@@ -14,6 +14,53 @@ from sqlalchemy.orm import Session
 from app.models.charging_session import ChargingSession
 from app.models.rfid_card import RFIDCard
 
+HAGER_XLSX_HEADERS = (
+    "Startdatum",
+    "Status",
+    "Dauer",
+    "Gesamte Energie (kWh)",
+    "MID-zertifiziert",
+    "Solarstrom (kWh)",
+    "Solares Verhältnis",
+    "Authentifizierung",
+    "Ladestation",
+)
+
+def validate_headers(header_row: tuple[object, ...] | None) -> None:
+    """
+    Prüft, ob die erwarteten Hager-Spalten vorhanden und korrekt
+    angeordnet sind.
+    """
+    if header_row is None:
+        raise ValueError("Die XLSX-Datei enthält keine Kopfzeile")
+
+    actual_headers = tuple(
+        str(header_row[index] or "").strip()
+        if index < len(header_row)
+        else ""
+        for index in range(len(HAGER_XLSX_HEADERS))
+    )
+
+    if actual_headers == HAGER_XLSX_HEADERS:
+        return
+
+    differences: list[str] = []
+
+    for index, (expected, actual) in enumerate(
+        zip(HAGER_XLSX_HEADERS, actual_headers),
+        start=1,
+    ):
+        if expected != actual:
+            differences.append(
+                f"Spalte {index}: erwartet {expected!r}, "
+                f"gefunden {actual!r}"
+            )
+
+    raise ValueError(
+        "Ungültige XLSX-Kopfzeile. "
+        + "; ".join(differences)
+    )
+
 
 def parse_duration(duration: str) -> timedelta:
     """
@@ -155,9 +202,21 @@ def import_xlsx(path: str | Path) -> list[dict[str, Any]]:
     try:
         sheet = workbook.active
 
+        header_row = next(
+            sheet.iter_rows(
+                min_row=1,
+                max_row=1,
+                values_only=True,
+            ),
+            None,
+        )
+
+        validate_headers(header_row)
+
         for row_number, row in enumerate(
             sheet.iter_rows(
                 min_row=2,
+                max_col=len(HAGER_XLSX_HEADERS),
                 values_only=True,
             ),
             start=2,
