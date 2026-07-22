@@ -12,5 +12,6 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "alembic",
-    "apscheduler"
+    "apscheduler",
+    "openpyxl>=3.1.5",
 ]
