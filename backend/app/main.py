@@ -7,25 +7,38 @@ from app.database import engine
 from app.logging_config import setup_logging
 from app.scheduler import start_scheduler
 
+from app.api.routes.imports import router as imports_router
+
+from app.scheduler import start_scheduler, stop_scheduler
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from app.scheduler import start_scheduler, stop_scheduler
+
+
 
 setup_logging()
 
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+
+    try:
+        yield
+    finally:
+        stop_scheduler()
+
 
 app = FastAPI(
-    title="Witty Accounting"
+    title="Witty Accounting",
+    lifespan=lifespan,
 )
 
-
-@app.on_event("startup")
-def startup():
-
-    logger.info(
-        "Backend gestartet"
-    )
-
-    start_scheduler()
+app.include_router(imports_router)
 
 
 @app.get("/")

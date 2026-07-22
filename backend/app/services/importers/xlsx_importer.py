@@ -26,6 +26,9 @@ def parse_duration(duration: str) -> timedelta:
     """
     normalized_duration = duration.strip()
 
+    if not normalized_duration:
+        raise ValueError("Dauer fehlt")
+
     match = re.fullmatch(
         r"(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?",
         normalized_duration,

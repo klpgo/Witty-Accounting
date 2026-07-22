@@ -16,7 +16,10 @@ def heartbeat():
     )
 
 
-def start_scheduler():
+def start_scheduler() -> None:
+    if scheduler.running:
+        logger.info("Scheduler läuft bereits")
+        return
 
     scheduler.add_job(
         heartbeat,
@@ -28,6 +31,13 @@ def start_scheduler():
 
     scheduler.start()
 
-    logger.info(
-        "Scheduler gestartet"
-    )
+    logger.info("Scheduler gestartet")
+
+
+def stop_scheduler() -> None:
+    if not scheduler.running:
+        return
+
+    scheduler.shutdown(wait=False)
+
+    logger.info("Scheduler gestoppt")

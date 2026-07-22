@@ -1,36 +1,36 @@
 import logging
 import os
-from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 
-def setup_logging():
-
-    os.makedirs(
-        "/app/logs",
-        exist_ok=True
+def setup_logging() -> None:
+    log_dir = Path(
+        os.getenv(
+            "LOG_DIR",
+            Path.cwd() / "logs",
+        )
     )
 
-    formatter = logging.Formatter(
-        "%(asctime)s %(levelname)s %(name)s: %(message)s"
+    log_dir.mkdir(
+        parents=True,
+        exist_ok=True,
     )
 
+    log_file = log_dir / "witty-accounting.log"
 
-    file_handler = RotatingFileHandler(
-        "/app/logs/backend.log",
-        maxBytes=10_000_000,
-        backupCount=5
+    logging.basicConfig(
+        level=logging.INFO,
+        format=(
+            "%(asctime)s "
+            "%(levelname)s "
+            "%(name)s: "
+            "%(message)s"
+        ),
+        handlers=[
+            logging.FileHandler(
+                log_file,
+                encoding="utf-8",
+            ),
+            logging.StreamHandler(),
+        ],
     )
-
-    file_handler.setFormatter(formatter)
-
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-
-    root = logging.getLogger()
-
-    root.setLevel(logging.INFO)
-
-    root.addHandler(file_handler)
-    root.addHandler(console_handler)
