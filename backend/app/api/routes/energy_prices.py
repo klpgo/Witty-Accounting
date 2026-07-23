@@ -15,6 +15,9 @@ from app.schemas.energy_price import (
     EnergyPriceRead,
 )
 
+from app.schemas.pricing import PricingResult
+from app.services.pricing import price_charging_sessions
+
 
 router = APIRouter(
     prefix="/energy-prices",
@@ -91,3 +94,17 @@ def create_energy_price(
     db.refresh(energy_price)
 
     return energy_price
+
+@router.post(
+    "/reprice",
+    response_model=PricingResult,
+)
+def reprice_charging_sessions(
+    db: Session = Depends(get_db),
+) -> PricingResult:
+    result = price_charging_sessions(
+        db=db,
+        overwrite=True,
+    )
+
+    return PricingResult(**result)

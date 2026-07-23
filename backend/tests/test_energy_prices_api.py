@@ -12,6 +12,10 @@ from app.database import Base
 from app.main import app
 from app.models.energy_price import EnergyPrice
 
+from datetime import datetime
+
+from app.models.charging_session import ChargingSession
+
 
 @pytest.fixture
 def database_session() -> Generator[
@@ -207,3 +211,99 @@ def test_rejects_invalid_values(
     )
 
     assert response.status_code == 422
+
+
+def test_reprice_only_updates_uninvoiced_sessions(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    database_session.add(
+        EnergyPrice(
+            valid_from=datetime(2026, 1, 1),
+            grid_price_net=Decimal("0.3000"),
+            pv_price_net=Decimal("0.1000"),
+            vat_rate=Decimal("19.00"),
+        )
+    )
+
+    uninvoiced_session = ChargingSession(
+        hager_session_id=None,
+        station_id="WB2",
+        start_time=datetime(2026, 6, 17, 10, 0),
+        end_time=datetime(2026, 6, 17, 11, 0),
+        rfid_card_id=None,
+        energy_total_kwh=2.0,
+        energy_pv_kwh=0.5,
+        cost_grid_net=None,
+        cost_pv_net=None,
+        vat_rate=None,
+        invoiced=False,
+        invoice_id=None,
+        import_hash="h" * 64,
+        source="xlsx",
+    )
+
+    invoiced_session = ChargingSession(
+        hager_session_id=None,
+        station_id="WB3",
+        start_time=datetime(2026, 6, 17, 12, 0),
+        end_time=datetime(2026, 6, 17, 13, 0),
+        rfid_card_id=None,
+        energy_total_kwh=5.0,
+        energy_pv_kwh=1.0,
+        cost_grid_net=Decimal("7.7777"),
+        cost_pv_net=Decimal("1.1111"),
+        vat_rate=Decimal("7.00"),
+        invoiced=True,
+        invoice_id=123,
+        import_hash="i" * 64,
+        source="xlsx",
+    )
+
+    database_session.add_all(
+        [
+            uninvoiced_session,
+            invoiced_session,
+        ]
+    )
+    database_session.commit()
+
+    response = client.post(
+        "/energy-prices/reprice"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "read": 2,
+        "priced": 1,
+        "missing_price": 0,
+        "invalid_energy": 0,
+        "skipped_invoiced": 1,
+    }
+
+    database_session.refresh(
+        uninvoiced_session
+    )
+    database_session.refresh(
+        invoiced_session
+    )
+
+    assert uninvoiced_session.cost_grid_net == Decimal(
+        "0.4500"
+    )
+    assert uninvoiced_session.cost_pv_net == Decimal(
+        "0.0500"
+    )
+    assert uninvoiced_session.vat_rate == Decimal(
+        "19.00"
+    )
+
+    assert invoiced_session.cost_grid_net == Decimal(
+        "7.7777"
+    )
+    assert invoiced_session.cost_pv_net == Decimal(
+        "1.1111"
+    )
+    assert invoiced_session.vat_rate == Decimal(
+        "7.00"
+    )

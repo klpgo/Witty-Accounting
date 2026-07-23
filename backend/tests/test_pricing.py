@@ -87,6 +87,7 @@ def test_price_charging_session() -> None:
             "priced": 1,
             "missing_price": 0,
             "invalid_energy": 0,
+            "skipped_invoiced": 0,
         }
 
         charging_session = db.scalar(
@@ -235,6 +236,7 @@ def test_reports_missing_energy_price() -> None:
             "priced": 0,
             "missing_price": 1,
             "invalid_energy": 0,
+            "skipped_invoiced": 0,
         }
 
 
@@ -271,3 +273,62 @@ def test_rejects_pv_energy_above_total_energy() -> None:
 
         assert result["priced"] == 0
         assert result["invalid_energy"] == 1
+
+
+def test_does_not_reprice_invoiced_session() -> None:
+    with create_database_session() as db:
+        db.add(
+            EnergyPrice(
+                valid_from=datetime(2026, 1, 1),
+                grid_price_net=Decimal("0.3000"),
+                pv_price_net=Decimal("0.1000"),
+                vat_rate=Decimal("19.00"),
+            )
+        )
+
+        charging_session = create_charging_session(
+            db,
+            start_time=datetime(
+                2026,
+                6,
+                17,
+                10,
+                0,
+            ),
+            energy_total_kwh=10.0,
+            energy_pv_kwh=4.0,
+            import_hash="g" * 64,
+        )
+
+        charging_session.invoiced = True
+        charging_session.invoice_id = 123
+        charging_session.cost_grid_net = Decimal("9.9999")
+        charging_session.cost_pv_net = Decimal("8.8888")
+        charging_session.vat_rate = Decimal("7.00")
+
+        db.commit()
+
+        result = price_charging_sessions(
+            db=db,
+            overwrite=True,
+        )
+
+        assert result == {
+            "read": 1,
+            "priced": 0,
+            "missing_price": 0,
+            "invalid_energy": 0,
+            "skipped_invoiced": 1,
+        }
+
+        db.refresh(charging_session)
+
+        assert charging_session.cost_grid_net == Decimal(
+            "9.9999"
+        )
+        assert charging_session.cost_pv_net == Decimal(
+            "8.8888"
+        )
+        assert charging_session.vat_rate == Decimal(
+            "7.00"
+        )

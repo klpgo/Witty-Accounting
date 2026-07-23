@@ -69,6 +69,7 @@ def price_charging_sessions(
                 "priced": 0,
                 "missing_price": 0,
                 "invalid_energy": 0,
+                "skipped_invoiced": 0,
             }
 
         statement = statement.where(
@@ -93,8 +94,13 @@ def price_charging_sessions(
     priced = 0
     missing_price = 0
     invalid_energy = 0
+    skipped_invoiced = 0
 
     for charging_session in charging_sessions:
+        if charging_session.invoiced:
+            skipped_invoiced += 1
+            continue
+
         energy_total = to_decimal(
             charging_session.energy_total_kwh
         )
@@ -153,4 +159,5 @@ def price_charging_sessions(
         "priced": priced,
         "missing_price": missing_price,
         "invalid_energy": invalid_energy,
+        "skipped_invoiced": skipped_invoiced,
     }
