@@ -7,3 +7,6 @@ class ImportResult(BaseModel):
     skipped: int
     unknown_rfid_sessions: int
     unknown_rfid_numbers: list[str]
+    priced: int
+    missing_price: int
+    invalid_energy: int

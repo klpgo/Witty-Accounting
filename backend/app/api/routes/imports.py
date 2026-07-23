@@ -1,6 +1,7 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from zipfile import BadZipFile
+from app.services.pricing import price_charging_sessions
 
 from fastapi import (
     APIRouter,
@@ -65,6 +66,8 @@ def save_upload_with_limit(
     "/xlsx",
     response_model=ImportResult,
 )
+
+
 def upload_xlsx(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -108,7 +111,35 @@ def upload_xlsx(
             path=temporary_path,
         )
 
-        return ImportResult(**result)
+        import_result = import_xlsx_to_db(
+            db=db,
+            path=temporary_path,
+        )
+
+        imported_hashes = set(
+            import_result["imported_hashes"]
+        )
+
+        pricing_result = price_charging_sessions(
+            db=db,
+            overwrite=False,
+            import_hashes=imported_hashes,
+        )
+
+        return ImportResult(
+            read=int(import_result["read"]),
+            imported=int(import_result["imported"]),
+            skipped=int(import_result["skipped"]),
+            unknown_rfid_sessions=int(
+                import_result["unknown_rfid_sessions"]
+            ),
+            unknown_rfid_numbers=list(
+                import_result["unknown_rfid_numbers"]
+            ),
+            priced=pricing_result["priced"],
+            missing_price=pricing_result["missing_price"],
+            invalid_energy=pricing_result["invalid_energy"],
+        )
 
     except HTTPException:
         raise

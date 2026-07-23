@@ -42,11 +42,38 @@ def test_upload_xlsx_returns_import_result(
             "skipped": 0,
             "unknown_rfid_sessions": 1,
             "unknown_rfid_numbers": ["ABC123"],
+            "imported_hashes": [
+                "a" * 64,
+                "b" * 64,
+            ],
+        }
+
+    def fake_pricing(
+        db: Any,
+        overwrite: bool = False,
+        import_hashes: set[str] | None = None,
+    ) -> dict[str, int]:
+        assert overwrite is False
+        assert import_hashes == {
+            "a" * 64,
+            "b" * 64,
+        }
+
+        return {
+            "read": 2,
+            "priced": 2,
+            "missing_price": 0,
+            "invalid_energy": 0,
         }
 
     monkeypatch.setattr(
         "app.api.routes.imports.import_xlsx_to_db",
         fake_import,
+    )
+
+    monkeypatch.setattr(
+        "app.api.routes.imports.price_charging_sessions",
+        fake_pricing,
     )
 
     response = client.post(
@@ -63,13 +90,16 @@ def test_upload_xlsx_returns_import_result(
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json() == {
         "read": 2,
         "imported": 2,
         "skipped": 0,
         "unknown_rfid_sessions": 1,
         "unknown_rfid_numbers": ["ABC123"],
+        "priced": 2,
+        "missing_price": 0,
+        "invalid_energy": 0,
     }
 
 

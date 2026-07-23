@@ -316,7 +316,7 @@ def import_xlsx(path: str | Path) -> list[dict[str, Any]]:
 def import_xlsx_to_db(
     db: Session,
     path: str | Path,
-) -> dict[str, int]:
+) -> dict[str, object]:
     """
     Importiert Ladevorgänge aus einer Hager-XLSX-Datei in die Datenbank.
 
@@ -330,6 +330,7 @@ def import_xlsx_to_db(
     skipped = 0
     unknown_rfid_sessions = 0
     unknown_rfid_numbers: set[str] = set()
+    imported_hashes: list[str] = []
 
     for session_data in parsed_sessions:
         import_hash = session_data["import_hash"]
@@ -379,6 +380,7 @@ def import_xlsx_to_db(
 
         db.add(charging_session)
         imported += 1
+        imported_hashes.append(import_hash)
 
     try:
         db.commit()
@@ -392,4 +394,5 @@ def import_xlsx_to_db(
         "skipped": skipped,
         "unknown_rfid_sessions": unknown_rfid_sessions,
         "unknown_rfid_numbers": sorted(unknown_rfid_numbers),
+        "imported_hashes": imported_hashes,
     }
