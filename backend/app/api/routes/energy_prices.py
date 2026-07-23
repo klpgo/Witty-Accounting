@@ -18,6 +18,7 @@ from app.schemas.energy_price import (
 from app.schemas.pricing import PricingResult
 from app.services.pricing import price_charging_sessions
 
+from app.auth import require_admin
 
 router = APIRouter(
     prefix="/energy-prices",
@@ -45,6 +46,7 @@ def list_energy_prices(
     "",
     response_model=EnergyPriceRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
 )
 def create_energy_price(
     data: EnergyPriceCreate,
@@ -98,6 +100,7 @@ def create_energy_price(
 @router.post(
     "/reprice",
     response_model=PricingResult,
+    dependencies=[Depends(require_admin)],
 )
 def reprice_charging_sessions(
     db: Session = Depends(get_db),

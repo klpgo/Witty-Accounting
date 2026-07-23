@@ -16,6 +16,8 @@ from datetime import datetime
 
 from app.models.charging_session import ChargingSession
 
+from app.auth import require_admin
+
 
 @pytest.fixture
 def database_session() -> Generator[
@@ -51,9 +53,16 @@ def client(
     ]:
         yield database_session
 
+    def override_require_admin() -> None:
+        return None
+
     app.dependency_overrides[get_db] = (
         override_get_db
     )
+
+    app.dependency_overrides[
+        require_admin
+    ] = override_require_admin
 
     with TestClient(app) as test_client:
         yield test_client

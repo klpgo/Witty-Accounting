@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,8 @@ class Settings(BaseSettings):
     secret_key: str
 
     log_level: str = "INFO"
+
+    jwt_secret_key: SecretStr
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

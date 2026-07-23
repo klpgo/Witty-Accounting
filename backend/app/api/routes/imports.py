@@ -17,6 +17,8 @@ from app.api.dependencies import get_db
 from app.schemas.import_result import ImportResult
 from app.services.importers.xlsx_importer import import_xlsx_to_db
 
+from app.auth import require_admin
+
 
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 UPLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
@@ -65,6 +67,7 @@ def save_upload_with_limit(
 @router.post(
     "/xlsx",
     response_model=ImportResult,
+    dependencies=[Depends(require_admin)],
 )
 
 
