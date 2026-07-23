@@ -23,6 +23,10 @@ from app.api.routes.energy_prices import (
 
 from app.api.routes.auth import router as auth_router
 
+from app.api.routes.invoices import (
+    router as invoices_router,
+)
+
 
 setup_logging()
 
@@ -48,6 +52,8 @@ app.include_router(imports_router)
 app.include_router(energy_prices_router)
 
 app.include_router(auth_router)
+
+app.include_router(invoices_router)
 
 
 @app.get("/")

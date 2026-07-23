@@ -1,5 +1,5 @@
 from app.database import Base
-from app.models import import_state
+from app.models import import_state, invoice
 
 from logging.config import fileConfig
 

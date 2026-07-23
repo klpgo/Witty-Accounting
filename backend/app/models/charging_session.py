@@ -93,6 +93,12 @@ class ChargingSession(Base):
         nullable=True
     )
 
+    invoice_item = relationship(
+        "InvoiceItem",
+        back_populates="charging_session",
+        uselist=False,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utc_now

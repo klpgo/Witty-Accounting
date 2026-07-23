@@ -89,3 +89,8 @@ class User(Base):
         "RFIDCard",
         back_populates="user"
     )
+
+    invoices = relationship(
+        "Invoice",
+        back_populates="user",
+    )
