@@ -17,6 +17,9 @@ from fastapi import FastAPI
 
 from app.scheduler import start_scheduler, stop_scheduler
 
+from app.api.routes.energy_prices import (
+    router as energy_prices_router,
+)
 
 
 setup_logging()
@@ -39,6 +42,8 @@ app = FastAPI(
 )
 
 app.include_router(imports_router)
+
+app.include_router(energy_prices_router)
 
 
 @app.get("/")
