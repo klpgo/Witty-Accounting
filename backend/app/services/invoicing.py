@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import select
@@ -11,6 +11,8 @@ from app.models.rfid_card import RFIDCard
 from app.models.user import User
 
 from app.utils.utc import utc_now
+
+from app.config import settings
 
 
 FOUR_DECIMALS = Decimal("0.0001")
@@ -62,6 +64,10 @@ class InvoiceSessionAlreadyInvoicedError(
     """Raised when an invoice item is already billed."""
 
 
+class InvalidDueDateError(InvoiceDraftError):
+    """Raised when the due date precedes the issue date."""
+
+
 def to_decimal(value: object) -> Decimal:
     return Decimal(str(value))
 
@@ -80,6 +86,34 @@ def find_energy_price(
         )
         .limit(1)
     )
+
+    recipient_name = " ".join(
+        part
+        for part in (
+            user.salutation,
+            user.first_name,
+            user.last_name,
+        )
+        if part
+    )
+
+    if not user.address:
+        raise InvoiceDraftError(
+            "Für den Rechnungsempfänger ist "
+            "keine Anschrift hinterlegt."
+        )
+
+    issuer_tax_number = (
+        settings.invoice_tax_number
+    )
+    issuer_vat_id = settings.invoice_vat_id
+
+    if not issuer_tax_number and not issuer_vat_id:
+        raise InvoiceDraftError(
+            "Für den Rechnungsaussteller muss "
+            "eine Steuernummer oder USt-IdNr. "
+            "konfiguriert sein."
+        )
 
 
 def create_invoice_draft(
@@ -147,11 +181,44 @@ def create_invoice_draft(
             "Ladevorgänge gefunden."
         )
 
+    recipient_name = " ".join(
+        part
+        for part in (
+            user.salutation,
+            user.first_name,
+            user.last_name,
+        )
+        if part
+    )
+
+    if not user.address:
+        raise InvoiceDraftError(
+            "Für den Rechnungsempfänger ist "
+            "keine Anschrift hinterlegt."
+        )
+
+    issuer_tax_number = settings.invoice_tax_number
+    issuer_vat_id = settings.invoice_vat_id
+
+    if not issuer_tax_number and not issuer_vat_id:
+        raise InvoiceDraftError(
+            "Für den Rechnungsaussteller muss "
+            "eine Steuernummer oder USt-IdNr. "
+            "konfiguriert sein."
+        )
+
     invoice = Invoice(
         invoice_number=None,
         user_id=user_id,
+        issuer_name=settings.invoice_issuer_name,
+        issuer_address=settings.invoice_issuer_address,
+        issuer_tax_number=issuer_tax_number,
+        issuer_vat_id=issuer_vat_id,
+        recipient_name=recipient_name,
+        recipient_address=user.address,
         status="draft",
         issue_date=None,
+        due_date=None,
         service_period_start=service_period_start,
         service_period_end=service_period_end,
         currency="EUR",
@@ -159,6 +226,10 @@ def create_invoice_draft(
         vat_amount=Decimal("0.00"),
         total_gross=Decimal("0.00"),
         finalized_at=None,
+        pdf_storage_path=None,
+        pdf_sha256=None,
+        pdf_size_bytes=None,
+        pdf_created_at=None,
     )
 
     total_net = Decimal("0.00")
@@ -338,6 +409,7 @@ def finalize_invoice(
     *,
     invoice_id: int,
     issue_date: date | None = None,
+    due_date: date | None = None,
 ) -> Invoice:
     invoice = db.scalar(
         select(Invoice)
@@ -367,12 +439,36 @@ def finalize_invoice(
         else utc_now().date()
     )
 
+    payment_term_days = (
+        settings.invoice_payment_term_days
+    )
+
+    if payment_term_days < 0:
+        raise InvalidDueDateError(
+            "Die konfigurierte Zahlungsfrist "
+            "darf nicht negativ sein."
+        )
+
+    final_due_date = (
+        due_date
+        if due_date is not None
+        else final_issue_date
+        + timedelta(days=payment_term_days)
+    )
+
+    if final_due_date < final_issue_date:
+        raise InvalidDueDateError(
+            "Das Zahlungsziel darf nicht vor "
+            "dem Rechnungsdatum liegen."
+        )
+
     try:
         invoice.invoice_number = (
             f"RE-{final_issue_date.year}-"
             f"{invoice.id:06d}"
         )
         invoice.issue_date = final_issue_date
+        invoice.due_date = final_due_date
         invoice.status = "finalized"
         invoice.finalized_at = utc_now()
 

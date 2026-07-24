@@ -16,6 +16,7 @@ from app.models.invoice import InvoiceItem
 from app.models.rfid_card import RFIDCard
 from app.models.user import User
 from app.services.invoicing import (
+    InvalidDueDateError,
     InvoiceAlreadyFinalizedError,
     InvoiceNotFoundError,
     InvalidServicePeriodError,
@@ -56,7 +57,7 @@ def create_test_data(
         salutation=None,
         first_name="Invoice",
         last_name="User",
-        address=None,
+        address="Teststraße 1, 12345 Teststadt",
         phone=None,
         invoice_delivery_email=True,
         invoice_delivery_post=False,
@@ -263,6 +264,7 @@ def test_finalizes_invoice_and_locks_session(
         database_session,
         invoice_id=invoice.id,
         issue_date=date(2026, 7, 5),
+        due_date=date(2026, 7, 19),
     )
 
     assert finalized_invoice.status == "finalized"
@@ -273,6 +275,11 @@ def test_finalizes_invoice_and_locks_session(
         2026,
         7,
         5,
+    )
+    assert finalized_invoice.due_date == date(
+        2026,
+        7,
+        19,
     )
     assert finalized_invoice.finalized_at is not None
 
@@ -327,4 +334,33 @@ def test_rejects_unknown_invoice(
             database_session,
             invoice_id=999999,
             issue_date=date(2026, 7, 5),
+        )
+
+
+def test_rejects_due_date_before_issue_date(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    with pytest.raises(InvalidDueDateError):
+        finalize_invoice(
+            database_session,
+            invoice_id=invoice.id,
+            issue_date=date(2026, 7, 5),
+            due_date=date(2026, 7, 4),
         )

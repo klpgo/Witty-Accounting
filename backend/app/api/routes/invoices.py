@@ -21,6 +21,7 @@ from app.schemas.invoice import (
     InvoiceResponse,
 )
 from app.services.invoicing import (
+    InvalidDueDateError,
     EmptyInvoiceError,
     InvalidChargingSessionError,
     InvalidServicePeriodError,
@@ -33,7 +34,6 @@ from app.services.invoicing import (
     create_invoice_draft,
     finalize_invoice,
 )
-
 
 router = APIRouter(
     prefix="/invoices",
@@ -97,6 +97,14 @@ def create_draft(
             detail=str(exc),
         ) from exc
 
+    except InvalidDueDateError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_ENTITY
+            ),
+            detail=str(exc),
+        ) from exc
+
     except InvalidServicePeriodError as exc:
         raise HTTPException(
             status_code=(
@@ -134,6 +142,7 @@ def finalize_draft(
             db,
             invoice_id=invoice_id,
             issue_date=payload.issue_date,
+            due_date=payload.due_date,
         )
 
     except InvoiceNotFoundError as exc:

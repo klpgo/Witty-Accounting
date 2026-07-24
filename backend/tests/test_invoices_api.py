@@ -80,7 +80,7 @@ def create_billable_session(
         salutation=None,
         first_name="Billing",
         last_name="User",
-        address=None,
+        address="Teststraße 1, 12345 Teststadt",
         phone=None,
         invoice_delivery_email=True,
         invoice_delivery_post=False,

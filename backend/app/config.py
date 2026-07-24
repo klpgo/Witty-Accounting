@@ -29,5 +29,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
+    invoice_issuer_name: str
+    invoice_issuer_address: str
+    invoice_tax_number: str | None = None
+    invoice_vat_id: str | None = None
+    invoice_payment_term_days: int = 0
+
 
 settings = Settings()

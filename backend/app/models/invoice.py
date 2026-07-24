@@ -38,6 +38,36 @@ class Invoice(Base):
         index=True,
     )
 
+    issuer_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    issuer_address: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    issuer_tax_number: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    issuer_vat_id: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    recipient_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    recipient_address: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -46,6 +76,11 @@ class Invoice(Base):
     )
 
     issue_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+
+    due_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
     )
@@ -116,6 +151,26 @@ class Invoice(Base):
         back_populates="invoice",
         cascade="all, delete-orphan",
         order_by="InvoiceItem.position_number",
+    )
+
+    pdf_storage_path: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    pdf_sha256: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    pdf_size_bytes: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    pdf_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
     )
 
 

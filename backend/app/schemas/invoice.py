@@ -12,6 +12,7 @@ class InvoiceDraftCreate(BaseModel):
 
 class InvoiceFinalizeRequest(BaseModel):
     issue_date: date | None = None
+    due_date: date | None = None
 
 
 class InvoiceItemResponse(BaseModel):
@@ -49,6 +50,7 @@ class InvoiceResponse(BaseModel):
     user_id: int
     status: str
     issue_date: date | None
+    due_date: date | None
     service_period_start: datetime
     service_period_end: datetime
     currency: str
