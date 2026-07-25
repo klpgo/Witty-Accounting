@@ -32,3 +32,6 @@ backend/tests/*.xlsx
 
 # Generated temporary files
 backend/tmp/
+
+# Archived invoice PDFs
+/backend/data/invoices/

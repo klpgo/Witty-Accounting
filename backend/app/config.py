@@ -35,5 +35,9 @@ class Settings(BaseSettings):
     invoice_vat_id: str | None = None
     invoice_payment_term_days: int = 0
 
+    invoice_pdf_archive_dir: Path = Path(
+        "data/invoices"
+    )
+
 
 settings = Settings()

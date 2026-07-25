@@ -6,6 +6,8 @@ from fastapi import (
     HTTPException,
     status,
 )
+from fastapi.responses import FileResponse
+
 from sqlalchemy import select
 from sqlalchemy.orm import (
     Session,
@@ -33,6 +35,20 @@ from app.services.invoicing import (
     NoBillableSessionsError,
     create_invoice_draft,
     finalize_invoice,
+)
+
+from app.services.invoice_archive import (
+    InvoiceArchiveError,
+    InvoiceArchiveMetadataError,
+    InvoiceArchiveNotFoundError,
+    InvoicePdfIntegrityError,
+    archive_invoice_pdf,
+    get_archived_invoice_pdf,
+)
+
+from app.services.invoice_pdf import (
+    InvoiceNotFinalizedError,
+    InvoicePdfError,
 )
 
 router = APIRouter(
@@ -138,12 +154,21 @@ def finalize_draft(
     ],
 ) -> Invoice:
     try:
-        return finalize_invoice(
+        invoice = finalize_invoice(
             db,
             invoice_id=invoice_id,
             issue_date=payload.issue_date,
             due_date=payload.due_date,
         )
+
+        archive_invoice_pdf(
+            db,
+            invoice_id=invoice.id,
+        )
+
+        db.refresh(invoice)
+
+        return invoice
 
     except InvoiceNotFoundError as exc:
         raise HTTPException(
@@ -160,6 +185,131 @@ def finalize_draft(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+
+    except (
+        InvoiceArchiveError,
+        InvoicePdfError,
+    ) as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=(
+                "Die Rechnung wurde finalisiert, "
+                "aber die PDF-Archivierung ist "
+                f"fehlgeschlagen: {exc}"
+            ),
+        ) from exc
+
+@router.post(
+    "/{invoice_id}/archive",
+    response_model=InvoiceResponse,
+    dependencies=[Depends(require_admin)],
+)
+def archive_invoice(
+    invoice_id: int,
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> Invoice:
+    try:
+        archive_invoice_pdf(
+            db,
+            invoice_id=invoice_id,
+        )
+
+    except InvoiceArchiveNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except InvoiceNotFinalizedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    except (
+        InvoiceArchiveMetadataError,
+        InvoicePdfIntegrityError,
+        InvoiceArchiveError,
+        InvoicePdfError,
+    ) as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=str(exc),
+        ) from exc
+
+    invoice = db.scalar(
+        select(Invoice)
+        .options(
+            selectinload(Invoice.items)
+        )
+        .where(Invoice.id == invoice_id)
+    )
+
+    if invoice is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Rechnung {invoice_id} "
+                "wurde nicht gefunden."
+            ),
+        )
+
+    return invoice
+
+
+@router.get(
+    "/{invoice_id}/pdf",
+    response_class=FileResponse,
+    dependencies=[Depends(require_admin)],
+)
+def download_invoice_pdf(
+    invoice_id: int,
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> FileResponse:
+    try:
+        archived_pdf = get_archived_invoice_pdf(
+            db,
+            invoice_id=invoice_id,
+        )
+
+    except InvoiceArchiveNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except InvoiceArchiveMetadataError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Für diese Rechnung wurde noch "
+                "keine PDF archiviert."
+            ),
+        ) from exc
+
+    except InvoicePdfIntegrityError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=str(exc),
+        ) from exc
+
+    return FileResponse(
+        path=archived_pdf.absolute_path,
+        media_type="application/pdf",
+        filename=archived_pdf.absolute_path.name,
+    )
 
 
 @router.get(
