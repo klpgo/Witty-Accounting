@@ -29,6 +29,23 @@ class Invoice(Base):
         nullable=True,
     )
 
+    document_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="invoice",
+        server_default="invoice",
+    )
+
+    cancellation_reason: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
     user_id: Mapped[int] = mapped_column(
         ForeignKey(
             "users.id",
@@ -173,6 +190,33 @@ class Invoice(Base):
         nullable=True,
     )
 
+    original_invoice: Mapped[
+        "Invoice | None"
+    ] = relationship(
+        "Invoice",
+        remote_side="Invoice.id",
+        foreign_keys="Invoice.original_invoice_id",
+        back_populates="cancellation_invoice",
+    )
+
+    cancellation_invoice: Mapped[
+        "Invoice | None"
+    ] = relationship(
+        "Invoice",
+        foreign_keys="Invoice.original_invoice_id",
+        back_populates="original_invoice",
+        uselist=False,
+    )
+
+    original_invoice_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "invoices.id",
+            ondelete="RESTRICT",
+        ),
+        unique=True,
+        nullable=True,
+    )
+
 
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"
@@ -197,13 +241,26 @@ class InvoiceItem(Base):
         index=True,
     )
 
-    charging_session_id: Mapped[int] = mapped_column(
+    charging_session_id: Mapped[
+        int | None
+    ] = mapped_column(
         ForeignKey(
             "charging_sessions.id",
             ondelete="RESTRICT",
         ),
-        nullable=False,
+        nullable=True,
         unique=True,
+    )
+
+    reversed_invoice_item_id: Mapped[
+        int | None
+    ] = mapped_column(
+        ForeignKey(
+            "invoice_items.id",
+            ondelete="RESTRICT",
+        ),
+        unique=True,
+        nullable=True,
     )
 
     position_number: Mapped[int] = mapped_column(
@@ -294,4 +351,24 @@ class InvoiceItem(Base):
     charging_session = relationship(
         "ChargingSession",
         back_populates="invoice_item",
+    )
+
+    reversed_invoice_item: Mapped[
+        "InvoiceItem | None"
+    ] = relationship(
+        "InvoiceItem",
+        remote_side="InvoiceItem.id",
+        foreign_keys=[reversed_invoice_item_id],
+        back_populates="reversal_item",
+    )
+
+    reversal_item: Mapped[
+        "InvoiceItem | None"
+    ] = relationship(
+        "InvoiceItem",
+        foreign_keys=(
+            "InvoiceItem.reversed_invoice_item_id"
+        ),
+        back_populates="reversed_invoice_item",
+        uselist=False,
     )

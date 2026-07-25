@@ -21,7 +21,19 @@ from app.schemas.invoice import (
     InvoiceDraftCreate,
     InvoiceFinalizeRequest,
     InvoiceResponse,
+    InvoiceCancellationCreate,
+    InvoiceCancellationFinalize,
 )
+
+from app.services.invoice_cancellation import (
+    InvoiceAlreadyCancelledError,
+    InvoiceCancellationError,
+    InvoiceCancellationNotFoundError,
+    InvoiceCancellationStateError,
+    create_cancellation_draft,
+    finalize_cancellation,
+)
+
 from app.services.invoicing import (
     InvalidDueDateError,
     EmptyInvoiceError,
@@ -310,6 +322,114 @@ def download_invoice_pdf(
         media_type="application/pdf",
         filename=archived_pdf.absolute_path.name,
     )
+
+
+@router.post(
+    "/{invoice_id}/cancellations",
+    response_model=InvoiceResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
+def create_invoice_cancellation(
+    invoice_id: int,
+    payload: InvoiceCancellationCreate,
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> Invoice:
+    try:
+        return create_cancellation_draft(
+            db,
+            original_invoice_id=invoice_id,
+            reason=payload.reason,
+        )
+
+    except InvoiceCancellationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except (
+        InvoiceAlreadyCancelledError,
+        InvoiceCancellationStateError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    except InvoiceCancellationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{cancellation_id}/cancellation/finalize",
+    response_model=InvoiceResponse,
+    dependencies=[Depends(require_admin)],
+)
+def finalize_invoice_cancellation(
+    cancellation_id: int,
+    payload: InvoiceCancellationFinalize,
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> Invoice:
+    try:
+        cancellation = finalize_cancellation(
+            db,
+            cancellation_id=cancellation_id,
+            issue_date=payload.issue_date,
+        )
+
+        archive_invoice_pdf(
+            db,
+            invoice_id=cancellation.id,
+        )
+
+        db.refresh(cancellation)
+
+        return cancellation
+
+    except InvoiceCancellationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except InvoiceCancellationStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    except (
+        InvoiceArchiveError,
+        InvoicePdfError,
+    ) as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=(
+                "Das Storno wurde finalisiert, "
+                "aber die PDF-Archivierung ist "
+                f"fehlgeschlagen: {exc}"
+            ),
+        ) from exc
+
+    except InvoiceCancellationError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(

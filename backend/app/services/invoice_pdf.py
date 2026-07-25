@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 from html import escape
 from io import BytesIO
+from functools import partial
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -97,8 +98,11 @@ def validate_invoice(invoice: Invoice) -> None:
             "Das Rechnungsdatum fehlt."
         )
 
-    if invoice.due_date is None:
-        raise IncompleteInvoicePdfDataError(
+    if (
+        invoice.document_type == "invoice"
+        and invoice.due_date is None
+    ):
+        raise InvoicePdfError(
             "Das Zahlungsziel fehlt."
         )
 
@@ -132,9 +136,11 @@ class InvoiceCanvas(pdf_canvas.Canvas):
     def __init__(
         self,
         *args: object,
+        is_cancellation: bool = False,
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)
+        self.is_cancellation = is_cancellation
         self._saved_page_states: list[
             dict[str, object]
         ] = []
@@ -166,11 +172,16 @@ class InvoiceCanvas(pdf_canvas.Canvas):
         self.setFillColor(
             colors.HexColor("#666666")
         )
-
+    
+        footer_document_label = (
+            "Elektronisch erstellter Stornobeleg"
+            if self.is_cancellation
+            else "Elektronisch erstellte Rechnung"
+        )
         self.drawString(
             18 * mm,
             10 * mm,
-            "Elektronisch erstellte Rechnung",
+            footer_document_label,
         )
 
         if page_count > 1:
@@ -248,6 +259,46 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
 
     story: list[object] = []
 
+    is_cancellation = (
+        invoice.document_type == "cancellation"
+    )
+
+    document_title = (
+        "STORNORECHNUNG"
+        if is_cancellation
+        else "RECHNUNG"
+    )
+
+    recipient_heading = (
+        "Stornorechnung an"
+        if is_cancellation
+        else "Rechnung an"
+    )
+
+    issue_date_label = (
+        "Stornodatum"
+        if is_cancellation
+        else "Rechnungsdatum"
+    )
+
+    document_number_label = (
+        "Stornonummer"
+        if is_cancellation
+        else "Rechnungsnummer"
+    )
+
+    total_label = (
+        "Stornobetrag"
+        if is_cancellation
+        else "Rechnungsbetrag"
+    )
+
+    payment_heading = (
+        "Hinweis"
+        if is_cancellation
+        else "Zahlungsbedingung"
+    )
+
     issuer_identifiers: list[str] = []
 
     if invoice.issuer_tax_number:
@@ -270,9 +321,17 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
         body_style,
     )
 
+    title_font_size = (
+        16
+        if is_cancellation
+        else 20
+    )
+
     title_block = Paragraph(
         (
-            "RECHNUNG<br/>"
+            f"<font size='{title_font_size}'>"
+            f"{document_title}"
+            "</font><br/>"
             f"<font size='10'>"
             f"{escape(invoice.invoice_number)}"
             "</font>"
@@ -330,7 +389,7 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
 
     story.append(
         Paragraph(
-            "<b>Rechnung an</b>",
+            f"<b>{recipient_heading}</b>",
             body_style,
         )
     )
@@ -349,7 +408,7 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
 
     metadata = [
         [
-            "Rechnungsdatum",
+            issue_date_label,
             format_date(invoice.issue_date),
             "Leistungszeitraum",
             (
@@ -363,12 +422,28 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
             ),
         ],
         [
-            "Rechnungsnummer",
+            document_number_label,
             invoice.invoice_number,
             "Währung",
             invoice.currency,
         ],
     ]
+
+    if is_cancellation:
+        original_number = (
+            invoice.original_invoice.invoice_number
+            if invoice.original_invoice is not None
+            else None
+        )
+
+        metadata.append(
+            [
+                "Originalrechnung",
+                original_number or "-",
+                "Stornierungsgrund",
+                invoice.cancellation_reason or "-",
+            ]
+        )
 
     metadata_table = Table(
         metadata,
@@ -684,7 +759,7 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
                 format_money(invoice.vat_amount),
             ],
             [
-                "Rechnungsbetrag",
+                total_label,
                 format_money(invoice.total_gross),
             ],
         ],
@@ -745,20 +820,38 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
         )
     )
 
-    payment_term_days = (
-        invoice.due_date - invoice.issue_date
-    ).days
-
-    if payment_term_days == 0:
-        payment_term_text = (
-            "Der Betrag ist sofort fällig."
+    if invoice.document_type == "cancellation":
+        payment_text = (
+            "Dieser Stornobeleg hebt die "
+            "zugehörige Rechnung vollständig auf. "
+            "Für den Stornobeleg besteht kein "
+            "Zahlungsziel."
         )
     else:
-        payment_term_text = (
-            "Der Betrag ist innerhalb von "
-            f"{payment_term_days} Tagen ohne "
-            "Abzug fällig."
-        )
+        if invoice.due_date is None:
+            raise InvoicePdfError(
+                "Das Zahlungsziel fehlt."
+            )
+
+        payment_term_days = (
+            invoice.due_date - invoice.issue_date
+        ).days
+
+        if payment_term_days == 0:
+            payment_text = (
+                "Der Rechnungsbetrag ist sofort "
+                "ohne Abzug fällig.<br/>"
+                "Zahlbar bis "
+                f"{format_date(invoice.due_date)}."
+            )
+        else:
+            payment_text = (
+                "Der Rechnungsbetrag ist innerhalb "
+                f"von {payment_term_days} Tagen "
+                "ohne Abzug fällig.<br/>"
+                "Zahlbar bis "
+                f"{format_date(invoice.due_date)}."
+            )
 
     story.append(totals_table)
     story.append(Spacer(1, 7 * mm))
@@ -766,10 +859,8 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
     story.append(
         Paragraph(
             (
-                "<b>Zahlungsbedingung</b><br/>"
-                f"{payment_term_text} "
-                "Zahlbar bis "
-                f"{format_date(invoice.due_date)}."
+                f"<b>{payment_heading}</b><br/>"
+                f"{payment_text}"
             ),
             body_style,
         )
@@ -785,13 +876,22 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
             )
         )
 
+    footer_text = (
+        (
+            "Bitte bewahren Sie diesen Stornobeleg "
+            "zusammen mit der Originalrechnung auf."
+        )
+        if is_cancellation
+        else (
+            "Vielen Dank. Bitte bewahren Sie diese "
+            "Rechnung für Ihre Unterlagen auf."
+        )
+    )
+
     story.append(
         Paragraph(
-            (
-                "Vielen Dank. Bitte bewahren Sie "
-                "diese Rechnung für Ihre Unterlagen auf."
-            ),
-            right_style,
+            footer_text,
+            body_style,
         )
     )
 
@@ -799,7 +899,10 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
 
     document.build(
         story,
-        canvasmaker=InvoiceCanvas,
+        canvasmaker=partial(
+            InvoiceCanvas,
+            is_cancellation=is_cancellation,
+        ),
     )
 
     return buffer.getvalue()

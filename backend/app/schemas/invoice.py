@@ -21,7 +21,8 @@ class InvoiceItemResponse(BaseModel):
     )
 
     id: int
-    charging_session_id: int
+    charging_session_id: int | None
+    reversed_invoice_item_id: int | None
     position_number: int
     description: str
     session_start: datetime
@@ -39,6 +40,14 @@ class InvoiceItemResponse(BaseModel):
     vat_amount: Decimal
     gross_amount: Decimal
 
+class InvoiceCancellationCreate(BaseModel):
+    reason: str = Field(
+        min_length=1,
+        max_length=500,
+    )
+
+class InvoiceCancellationFinalize(BaseModel):
+    issue_date: date
 
 class InvoiceResponse(BaseModel):
     model_config = ConfigDict(
@@ -47,6 +56,12 @@ class InvoiceResponse(BaseModel):
 
     id: int
     invoice_number: str | None
+    document_type: str
+    original_invoice_id: int | None
+    cancellation_reason: str | None
+    cancelled_at: datetime | None
+    user_id: int
+    status: str
     user_id: int
     status: str
     issue_date: date | None
@@ -60,4 +75,12 @@ class InvoiceResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     finalized_at: datetime | None
+    # bestehende Rechnungsfelder ...
+    pdf_storage_path: str | None
+    pdf_sha256: str | None
+    pdf_size_bytes: int | None
+    pdf_created_at: datetime | None
+
     items: list[InvoiceItemResponse]
+
+

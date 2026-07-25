@@ -245,7 +245,8 @@ def archive_invoice_pdf(
     invoice = db.scalar(
         select(Invoice)
         .options(
-            selectinload(Invoice.items)
+            selectinload(Invoice.items),
+            selectinload(Invoice.original_invoice),
         )
         .where(Invoice.id == invoice_id)
         .with_for_update()

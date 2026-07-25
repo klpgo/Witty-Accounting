@@ -1,0 +1,356 @@
+from datetime import date
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from app.models.invoice import Invoice, InvoiceItem
+from app.utils.utc import utc_now
+
+
+class InvoiceCancellationError(Exception):
+    pass
+
+
+class InvoiceCancellationNotFoundError(
+    InvoiceCancellationError
+):
+    pass
+
+
+class InvoiceCancellationStateError(
+    InvoiceCancellationError
+):
+    pass
+
+
+class InvoiceAlreadyCancelledError(
+    InvoiceCancellationError
+):
+    pass
+
+
+def create_cancellation_draft(
+    db: Session,
+    *,
+    original_invoice_id: int,
+    reason: str,
+) -> Invoice:
+    normalized_reason = reason.strip()
+
+    if not normalized_reason:
+        raise InvoiceCancellationError(
+            "Ein Stornierungsgrund ist erforderlich."
+        )
+
+    original_invoice = db.scalar(
+        select(Invoice)
+        .options(
+            selectinload(Invoice.items)
+        )
+        .where(
+            Invoice.id == original_invoice_id
+        )
+        .with_for_update()
+    )
+
+    if original_invoice is None:
+        raise InvoiceCancellationNotFoundError(
+            f"Rechnung {original_invoice_id} "
+            "wurde nicht gefunden."
+        )
+
+    if original_invoice.document_type != "invoice":
+        raise InvoiceCancellationStateError(
+            "Nur eine normale Rechnung kann "
+            "storniert werden."
+        )
+
+    if original_invoice.status != "finalized":
+        raise InvoiceCancellationStateError(
+            "Nur eine finalisierte Rechnung kann "
+            "storniert werden."
+        )
+
+    existing_cancellation = db.scalar(
+        select(Invoice.id).where(
+            Invoice.original_invoice_id
+            == original_invoice.id
+        )
+    )
+
+    if existing_cancellation is not None:
+        raise InvoiceAlreadyCancelledError(
+            "Für diese Rechnung existiert bereits "
+            "ein Storno."
+        )
+
+    cancellation = Invoice(
+        invoice_number=None,
+        document_type="cancellation",
+        original_invoice_id=original_invoice.id,
+        cancellation_reason=normalized_reason,
+        cancelled_at=None,
+        user_id=original_invoice.user_id,
+        issuer_name=original_invoice.issuer_name,
+        issuer_address=(
+            original_invoice.issuer_address
+        ),
+        issuer_tax_number=(
+            original_invoice.issuer_tax_number
+        ),
+        issuer_vat_id=(
+            original_invoice.issuer_vat_id
+        ),
+        recipient_name=(
+            original_invoice.recipient_name
+        ),
+        recipient_address=(
+            original_invoice.recipient_address
+        ),
+        status="draft",
+        issue_date=None,
+        due_date=None,
+        service_period_start=(
+            original_invoice.service_period_start
+        ),
+        service_period_end=(
+            original_invoice.service_period_end
+        ),
+        currency=original_invoice.currency,
+        total_net=-original_invoice.total_net,
+        vat_amount=-original_invoice.vat_amount,
+        total_gross=-original_invoice.total_gross,
+        finalized_at=None,
+        pdf_storage_path=None,
+        pdf_sha256=None,
+        pdf_size_bytes=None,
+        pdf_created_at=None,
+    )
+
+    for original_item in original_invoice.items:
+        cancellation.items.append(
+            InvoiceItem(
+                charging_session_id=None,
+                reversed_invoice_item_id=(
+                    original_item.id
+                ),
+                position_number=(
+                    original_item.position_number
+                ),
+                description=(
+                    "Storno zu "
+                    f"{original_item.description}"
+                ),
+                session_start=(
+                    original_item.session_start
+                ),
+                session_end=(
+                    original_item.session_end
+                ),
+                station_id=original_item.station_id,
+                energy_total_kwh=(
+                    -original_item.energy_total_kwh
+                ),
+                energy_grid_kwh=(
+                    -original_item.energy_grid_kwh
+                ),
+                energy_pv_kwh=(
+                    -original_item.energy_pv_kwh
+                ),
+                grid_price_net=(
+                    original_item.grid_price_net
+                ),
+                pv_price_net=(
+                    original_item.pv_price_net
+                ),
+                cost_grid_net=(
+                    -original_item.cost_grid_net
+                ),
+                cost_pv_net=(
+                    -original_item.cost_pv_net
+                ),
+                net_amount=(
+                    -original_item.net_amount
+                ),
+                vat_rate=original_item.vat_rate,
+                vat_amount=(
+                    -original_item.vat_amount
+                ),
+                gross_amount=(
+                    -original_item.gross_amount
+                ),
+            )
+        )
+
+    try:
+        db.add(cancellation)
+        db.commit()
+
+        cancellation = db.scalar(
+            select(Invoice)
+            .options(
+                selectinload(Invoice.items)
+            )
+            .where(Invoice.id == cancellation.id)
+        )
+
+        if cancellation is None:
+            raise InvoiceCancellationError(
+                "Der Storno-Entwurf konnte nicht "
+                "geladen werden."
+            )
+
+        return cancellation
+
+    except Exception:
+        db.rollback()
+        raise
+
+
+def create_cancellation_number(
+    db: Session,
+    *,
+    issue_date: date,
+) -> str:
+    prefix = f"ST-{issue_date.year}-"
+
+    last_number = db.scalar(
+        select(Invoice.invoice_number)
+        .where(
+            Invoice.document_type == "cancellation",
+            Invoice.invoice_number.is_not(None),
+            Invoice.invoice_number.like(
+                f"{prefix}%"
+            ),
+        )
+        .order_by(
+            Invoice.invoice_number.desc()
+        )
+        .limit(1)
+    )
+
+    sequence_number = 1
+
+    if last_number is not None:
+        try:
+            sequence_number = (
+                int(last_number.rsplit("-", 1)[1])
+                + 1
+            )
+        except (IndexError, ValueError) as exc:
+            raise InvoiceCancellationError(
+                "Die letzte Stornonummer besitzt "
+                "ein ungültiges Format."
+            ) from exc
+
+    return f"{prefix}{sequence_number:06d}"
+
+
+def finalize_cancellation(
+    db: Session,
+    *,
+    cancellation_id: int,
+    issue_date: date,
+) -> Invoice:
+    cancellation = db.scalar(
+        select(Invoice)
+        .options(
+            selectinload(Invoice.items),
+            selectinload(
+                Invoice.original_invoice
+            ),
+        )
+        .where(
+            Invoice.id == cancellation_id
+        )
+        .with_for_update()
+    )
+
+    if cancellation is None:
+        raise InvoiceCancellationNotFoundError(
+            f"Storno {cancellation_id} "
+            "wurde nicht gefunden."
+        )
+
+    if cancellation.document_type != "cancellation":
+        raise InvoiceCancellationStateError(
+            "Nur ein Stornodokument kann über "
+            "diese Funktion finalisiert werden."
+        )
+
+    if cancellation.status != "draft":
+        raise InvoiceCancellationStateError(
+            "Nur ein Storno-Entwurf kann "
+            "finalisiert werden."
+        )
+
+    original_invoice = cancellation.original_invoice
+
+    if original_invoice is None:
+        raise InvoiceCancellationStateError(
+            "Dem Storno ist keine "
+            "Originalrechnung zugeordnet."
+        )
+
+    if original_invoice.status != "finalized":
+        raise InvoiceCancellationStateError(
+            "Die Originalrechnung ist nicht "
+            "finalisiert."
+        )
+
+    if (
+        original_invoice.issue_date is not None
+        and issue_date < original_invoice.issue_date
+    ):
+        raise InvoiceCancellationStateError(
+            "Das Stornodatum darf nicht vor "
+            "dem Rechnungsdatum liegen."
+        )
+
+    if not cancellation.items:
+        raise InvoiceCancellationStateError(
+            "Ein Storno ohne Positionen kann "
+            "nicht finalisiert werden."
+        )
+
+    timestamp = utc_now()
+
+    cancellation.invoice_number = (
+        create_cancellation_number(
+            db,
+            issue_date=issue_date,
+        )
+    )
+    cancellation.status = "finalized"
+    cancellation.issue_date = issue_date
+    cancellation.due_date = None
+    cancellation.finalized_at = timestamp
+    cancellation.cancelled_at = timestamp
+
+    try:
+        db.commit()
+
+        finalized_cancellation = db.scalar(
+            select(Invoice)
+            .options(
+                selectinload(Invoice.items),
+                selectinload(
+                    Invoice.original_invoice
+                ),
+            )
+            .where(
+                Invoice.id == cancellation.id
+            )
+        )
+
+        if finalized_cancellation is None:
+            raise InvoiceCancellationError(
+                "Das finalisierte Storno konnte "
+                "nicht geladen werden."
+            )
+
+        return finalized_cancellation
+
+    except Exception:
+        db.rollback()
+        raise

@@ -3,6 +3,15 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
+
+from pypdf import PdfReader
+
+from pathlib import Path
+
+from hashlib import sha256
+
+from app.config import settings
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -19,10 +28,6 @@ from app.models.energy_price import EnergyPrice
 from app.models.rfid_card import RFIDCard
 from app.models.user import User
 
-from hashlib import sha256
-from pathlib import Path
-
-from app.config import settings
 from app.models.invoice import Invoice
 
 
@@ -416,3 +421,402 @@ def test_pdf_download_rejects_unarchived_draft(
     )
 
     assert response.status_code == 409
+
+
+def test_creates_cancellation_draft(
+    client: TestClient,
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert draft_response.status_code == 201
+
+    original_invoice_id = (
+        draft_response.json()["id"]
+    )
+
+    finalize_response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/finalize"
+        ),
+        json={
+            "issue_date": "2026-07-05",
+        },
+    )
+
+    assert finalize_response.status_code == 200
+
+    original_body = finalize_response.json()
+
+    response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/cancellations"
+        ),
+        json={
+            "reason": "Fehlerhafte Abrechnung",
+        },
+    )
+
+    assert response.status_code == 201
+
+    body = response.json()
+
+    assert body["document_type"] == "cancellation"
+    assert body["status"] == "draft"
+    assert body["invoice_number"] is None
+
+    assert body["original_invoice_id"] == (
+        original_invoice_id
+    )
+    assert body["cancellation_reason"] == (
+        "Fehlerhafte Abrechnung"
+    )
+    assert body["cancelled_at"] is None
+
+    assert len(body["items"]) == 1
+
+    item = body["items"][0]
+
+    assert item["charging_session_id"] is None
+    assert (
+        item["reversed_invoice_item_id"]
+        == original_body["items"][0]["id"]
+    )
+
+    assert float(body["total_net"]) == (
+        -float(original_body["total_net"])
+    )
+    assert float(body["vat_amount"]) == (
+        -float(original_body["vat_amount"])
+    )
+    assert float(body["total_gross"]) == (
+        -float(original_body["total_gross"])
+    )
+
+
+def test_rejects_second_cancellation_draft(
+    client: TestClient,
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert draft_response.status_code == 201
+
+    original_invoice_id = (
+        draft_response.json()["id"]
+    )
+
+    finalize_response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/finalize"
+        ),
+        json={
+            "issue_date": "2026-07-05",
+        },
+    )
+
+    assert finalize_response.status_code == 200
+
+    first_response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/cancellations"
+        ),
+        json={
+            "reason": "Fehlerhafte Abrechnung",
+        },
+    )
+
+    assert first_response.status_code == 201
+
+    second_response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/cancellations"
+        ),
+        json={
+            "reason": "Zweiter Stornoversuch",
+        },
+    )
+
+    assert second_response.status_code == 409
+    assert "existiert bereits" in (
+        second_response.json()["detail"]
+    )
+
+
+def test_rejects_cancellation_of_draft_invoice(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert draft_response.status_code in {
+        200,
+        201,
+    }
+
+    invoice_id = draft_response.json()["id"]
+
+    response = client.post(
+        f"/invoices/{invoice_id}/cancellations",
+        json={
+            "reason": "Unzulässiger Stornoversuch",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Nur eine finalisierte Rechnung" in (
+        response.json()["detail"]
+    )
+
+def test_rejects_cancellation_for_missing_invoice(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/invoices/999999/cancellations",
+        json={
+            "reason": "Nicht vorhandene Rechnung",
+        },
+    )
+
+    assert response.status_code == 404
+    assert "wurde nicht gefunden" in (
+        response.json()["detail"]
+    )
+
+
+def test_finalizes_cancellation_draft(
+    client: TestClient,
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert draft_response.status_code in {
+        200,
+        201,
+    }
+
+    original_invoice_id = (
+        draft_response.json()["id"]
+    )
+
+    original_finalize_response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/finalize"
+        ),
+        json={
+            "issue_date": "2026-07-05",
+        },
+    )
+
+    assert (
+        original_finalize_response.status_code
+        == 200
+    )
+
+    cancellation_response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/cancellations"
+        ),
+        json={
+            "reason": "Fehlerhafte Abrechnung",
+        },
+    )
+
+    assert cancellation_response.status_code == 201
+
+    cancellation_id = (
+        cancellation_response.json()["id"]
+    )
+
+    response = client.post(
+        (
+            f"/invoices/{cancellation_id}"
+            "/cancellation/finalize"
+        ),
+        json={
+            "issue_date": "2026-07-06",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+
+    assert body["id"] == cancellation_id
+    assert body["document_type"] == "cancellation"
+    assert body["status"] == "finalized"
+    assert body["invoice_number"] == (
+        "ST-2026-000001"
+    )
+    assert body["issue_date"] == "2026-07-06"
+    assert body["due_date"] is None
+    assert body["finalized_at"] is not None
+    assert body["cancelled_at"] is not None
+
+    assert body["pdf_storage_path"] == (
+        "2026/ST-2026-000001.pdf"
+    )
+    assert body["pdf_sha256"] is not None
+    assert body["pdf_size_bytes"] is not None
+    assert body["pdf_created_at"] is not None
+
+    pdf_path = (
+        tmp_path / body["pdf_storage_path"]
+    )
+
+    assert pdf_path.is_file()
+
+    pdf_bytes = pdf_path.read_bytes()
+
+    assert pdf_bytes.startswith(b"%PDF-")
+    assert len(pdf_bytes) == (
+        body["pdf_size_bytes"]
+    )
+    assert sha256(pdf_bytes).hexdigest() == (
+        body["pdf_sha256"]
+    )
+
+    assert body["original_invoice_id"] == (
+        original_invoice_id
+    )
+    assert body["cancellation_reason"] == (
+        "Fehlerhafte Abrechnung"
+    )
+
+    original_response = client.get(
+        f"/invoices/{original_invoice_id}"
+    )
+
+    assert original_response.status_code == 200
+
+    original_body = original_response.json()
+
+    assert original_body["status"] == "finalized"
+    assert original_body["document_type"] == "invoice"
+    assert original_body["cancelled_at"] is None
+
+    reader = PdfReader(pdf_path)
+
+    pdf_text = "\n".join(
+        page.extract_text() or ""
+        for page in reader.pages
+    )
+
+    normalized_pdf_text = "".join(
+        pdf_text.split()
+    )
+
+    assert "STORNORECHNUNG" in pdf_text
+    assert "Stornodatum" in pdf_text
+    assert "Stornonummer" in pdf_text
+    assert "Stornobetrag" in pdf_text
+    assert "Originalrechnung" in pdf_text
+    assert "STORNORECHNUNG" in normalized_pdf_text
+    assert "Fehlerhafte Abrechnung" in pdf_text
+    assert "Hinweis" in pdf_text
+    assert "Zahlungsbedingung" not in pdf_text
+
+    original_invoice_number = (
+        original_finalize_response.json()[
+            "invoice_number"
+        ]
+    )
+
+    assert original_invoice_number in pdf_text
+
+    assert "Bitte bewahren Sie diesen Stornobeleg" in pdf_text
+    assert "Elektronisch erstellter Stornobeleg" in pdf_text
+    assert "Elektronisch erstellte Rechnung" not in pdf_text
+
+
