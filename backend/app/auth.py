@@ -47,10 +47,7 @@ def authenticate_user(
         )
     )
 
-    if user is None:
-        return None
-
-    if not user.active:
+    if user is None or not user.active:
         return None
 
     if not verify_password(

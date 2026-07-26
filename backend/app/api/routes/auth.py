@@ -13,9 +13,13 @@ from app.api.dependencies import get_db
 from app.auth import (
     authenticate_user,
     create_access_token,
+    get_current_user,
 )
-from app.schemas.auth import Token
-
+from app.models.user import User
+from app.schemas.auth import (
+    AuthenticatedUserResponse,
+    Token,
+)
 
 router = APIRouter(
     prefix="/auth",
@@ -54,4 +58,19 @@ def login(
 
     return Token(
         access_token=create_access_token(user),
+    )
+
+
+@router.get(
+    "/me",
+    response_model=AuthenticatedUserResponse,
+)
+def get_authenticated_user(
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+) -> AuthenticatedUserResponse:
+    return AuthenticatedUserResponse.model_validate(
+        current_user
     )

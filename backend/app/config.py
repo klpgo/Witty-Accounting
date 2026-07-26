@@ -11,6 +11,11 @@ class Settings(BaseSettings):
 
     app_name: str = "Witty-Accounting"
 
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
     db_host: str
     db_port: int = 3306
     db_name: str

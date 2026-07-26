@@ -262,3 +262,41 @@ def test_create_energy_price_requires_authentication(
     )
 
     assert response.status_code == 401
+
+def test_me_returns_authenticated_user(
+    unauthenticated_client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        is_admin=True,
+    )
+
+    response = unauthenticated_client.get(
+        "/auth/me",
+        headers=authorization_header(admin),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": admin.id,
+        "email": admin.email,
+        "first_name": admin.first_name,
+        "last_name": admin.last_name,
+        "is_admin": True,
+        "active": True,
+    }
+
+
+def test_me_requires_authentication(
+    unauthenticated_client: TestClient,
+) -> None:
+    response = unauthenticated_client.get(
+        "/auth/me"
+    )
+
+    assert response.status_code == 401
+    assert response.headers[
+        "www-authenticate"
+    ] == "Bearer"
