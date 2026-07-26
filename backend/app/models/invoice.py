@@ -249,10 +249,20 @@ class InvoiceItem(Base):
             ondelete="RESTRICT",
         ),
         nullable=True,
-        unique=True,
     )
 
     reversed_invoice_item_id: Mapped[
+        int | None
+    ] = mapped_column(
+        ForeignKey(
+            "invoice_items.id",
+            ondelete="RESTRICT",
+        ),
+        unique=True,
+        nullable=True,
+    )
+
+    rebills_invoice_item_id: Mapped[
         int | None
     ] = mapped_column(
         ForeignKey(
@@ -350,7 +360,7 @@ class InvoiceItem(Base):
 
     charging_session = relationship(
         "ChargingSession",
-        back_populates="invoice_item",
+        back_populates="invoice_items",
     )
 
     reversed_invoice_item: Mapped[
@@ -360,6 +370,26 @@ class InvoiceItem(Base):
         remote_side="InvoiceItem.id",
         foreign_keys=[reversed_invoice_item_id],
         back_populates="reversal_item",
+    )
+
+    rebills_invoice_item: Mapped[
+        "InvoiceItem | None"
+    ] = relationship(
+        "InvoiceItem",
+        remote_side="InvoiceItem.id",
+        foreign_keys=[rebills_invoice_item_id],
+        back_populates="rebilled_by_item",
+    )
+
+    rebilled_by_item: Mapped[
+        "InvoiceItem | None"
+    ] = relationship(
+        "InvoiceItem",
+        foreign_keys=(
+            "InvoiceItem.rebills_invoice_item_id"
+        ),
+        back_populates="rebills_invoice_item",
+        uselist=False,
     )
 
     reversal_item: Mapped[

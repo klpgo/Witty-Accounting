@@ -131,22 +131,15 @@ def create_cancellation_draft(
         cancellation.items.append(
             InvoiceItem(
                 charging_session_id=None,
-                reversed_invoice_item_id=(
-                    original_item.id
-                ),
-                position_number=(
-                    original_item.position_number
-                ),
+                reversed_invoice_item_id=original_item.id,
+                rebills_invoice_item_id=None,
+                position_number=original_item.position_number,
                 description=(
                     "Storno zu "
                     f"{original_item.description}"
                 ),
-                session_start=(
-                    original_item.session_start
-                ),
-                session_end=(
-                    original_item.session_end
-                ),
+                session_start=original_item.session_start,
+                session_end=original_item.session_end,
                 station_id=original_item.station_id,
                 energy_total_kwh=(
                     -original_item.energy_total_kwh
@@ -255,7 +248,13 @@ def finalize_cancellation(
     cancellation = db.scalar(
         select(Invoice)
         .options(
-            selectinload(Invoice.items),
+            selectinload(Invoice.items)
+            .selectinload(
+                InvoiceItem.reversed_invoice_item
+            )
+            .selectinload(
+                InvoiceItem.charging_session
+            ),
             selectinload(
                 Invoice.original_invoice
             ),
@@ -312,6 +311,48 @@ def finalize_cancellation(
             "Ein Storno ohne Positionen kann "
             "nicht finalisiert werden."
         )
+    charging_sessions = []
+
+    for cancellation_item in cancellation.items:
+        original_item = (
+            cancellation_item.reversed_invoice_item
+        )
+
+    if original_item is None:
+        raise InvoiceCancellationStateError(
+            "Eine Stornoposition besitzt keine "
+            "zugehörige Originalposition."
+        )
+
+    if original_item.invoice_id != original_invoice.id:
+        raise InvoiceCancellationStateError(
+            "Eine Stornoposition verweist nicht "
+            "auf die Originalrechnung."
+        )
+
+    charging_session = (
+        original_item.charging_session
+    )
+
+    if charging_session is None:
+        raise InvoiceCancellationStateError(
+            "Der Originalposition ist kein "
+            "Ladevorgang zugeordnet."
+        )
+
+    if (
+        not charging_session.invoiced
+        or charging_session.invoice_id
+        != original_invoice.id
+    ):
+        raise InvoiceCancellationStateError(
+            "Der Ladevorgang ist nicht mehr "
+            "der Originalrechnung zugeordnet."
+        )
+
+    charging_sessions.append(
+        charging_session
+    )
 
     timestamp = utc_now()
 
@@ -326,6 +367,10 @@ def finalize_cancellation(
     cancellation.due_date = None
     cancellation.finalized_at = timestamp
     cancellation.cancelled_at = timestamp
+
+    for charging_session in charging_sessions:
+        charging_session.invoiced = False
+        charging_session.invoice_id = None
 
     try:
         db.commit()

@@ -22,7 +22,8 @@ uploads/invoices/*
 uploads/logs/*
 
 # Alembic
-backend/alembic/versions/*.py
+backend/alembic/versions/__pycache__/
+backend/alembic/versions/*.pyc
 
 # Docker
 *.pid

@@ -662,8 +662,10 @@ def test_finalizes_cancellation_draft(
         tmp_path,
     )
 
-    user, _ = create_billable_session(
-        database_session
+    user, charging_session = (
+        create_billable_session(
+            database_session
+        )
     )
 
     draft_response = client.post(
@@ -698,10 +700,7 @@ def test_finalizes_cancellation_draft(
         },
     )
 
-    assert (
-        original_finalize_response.status_code
-        == 200
-    )
+    assert original_finalize_response.status_code == 200
 
     cancellation_response = client.post(
         (
@@ -729,7 +728,14 @@ def test_finalizes_cancellation_draft(
         },
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
+
+    database_session.refresh(
+        charging_session
+    )
+
+    assert charging_session.invoiced is False
+    assert charging_session.invoice_id is None
 
     body = response.json()
 
@@ -819,4 +825,183 @@ def test_finalizes_cancellation_draft(
     assert "Elektronisch erstellter Stornobeleg" in pdf_text
     assert "Elektronisch erstellte Rechnung" not in pdf_text
 
+def test_rebills_session_after_finalized_cancellation(
+    client: TestClient,
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
 
+    user, charging_session = (
+        create_billable_session(
+            database_session
+        )
+    )
+
+    original_draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert original_draft_response.status_code in {
+        200,
+        201,
+    }
+
+    original_draft = (
+        original_draft_response.json()
+    )
+    original_invoice_id = original_draft["id"]
+    original_item_id = (
+        original_draft["items"][0]["id"]
+    )
+
+    original_finalize_response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/finalize"
+        ),
+        json={
+            "issue_date": "2026-07-05",
+        },
+    )
+
+    assert (
+        original_finalize_response.status_code
+        == 200
+    )
+
+    cancellation_response = client.post(
+        (
+            f"/invoices/{original_invoice_id}"
+            "/cancellations"
+        ),
+        json={
+            "reason": "Fehlerhafte Abrechnung",
+        },
+    )
+
+    assert cancellation_response.status_code == 201
+
+    cancellation_id = (
+        cancellation_response.json()["id"]
+    )
+
+    cancellation_finalize_response = client.post(
+        (
+            f"/invoices/{cancellation_id}"
+            "/cancellation/finalize"
+        ),
+        json={
+            "issue_date": "2026-07-06",
+        },
+    )
+
+    assert (
+        cancellation_finalize_response.status_code
+        == 200
+    )
+
+    database_session.refresh(
+        charging_session
+    )
+
+    assert charging_session.invoiced is False
+    assert charging_session.invoice_id is None
+
+    rebill_draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert rebill_draft_response.status_code in {
+        200,
+        201,
+    }
+
+    rebill_draft = rebill_draft_response.json()
+    rebill_invoice_id = rebill_draft["id"]
+
+    assert rebill_invoice_id != original_invoice_id
+    assert len(rebill_draft["items"]) == 1
+
+    rebill_item = rebill_draft["items"][0]
+
+    assert rebill_item["id"] != original_item_id
+    assert (
+        rebill_item["charging_session_id"]
+        == charging_session.id
+    )
+    assert (
+        rebill_item["rebills_invoice_item_id"]
+        == original_item_id
+    )
+    assert (
+        rebill_item["reversed_invoice_item_id"]
+        is None
+    )
+
+    rebill_finalize_response = client.post(
+        (
+            f"/invoices/{rebill_invoice_id}"
+            "/finalize"
+        ),
+        json={
+            "issue_date": "2026-07-07",
+        },
+    )
+
+    assert (
+        rebill_finalize_response.status_code
+        == 200
+    )
+
+    database_session.refresh(
+        charging_session
+    )
+
+    assert charging_session.invoiced is True
+    assert (
+        charging_session.invoice_id
+        == rebill_invoice_id
+    )
+
+    original_response = client.get(
+        f"/invoices/{original_invoice_id}"
+    )
+    cancellation_response = client.get(
+        f"/invoices/{cancellation_id}"
+    )
+
+    assert original_response.status_code == 200
+    assert cancellation_response.status_code == 200
+
+    assert (
+        original_response.json()["status"]
+        == "finalized"
+    )
+    assert (
+        cancellation_response.json()["status"]
+        == "finalized"
+    )

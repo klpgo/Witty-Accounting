@@ -93,10 +93,9 @@ class ChargingSession(Base):
         nullable=True
     )
 
-    invoice_item = relationship(
+    invoice_items = relationship(
         "InvoiceItem",
         back_populates="charging_session",
-        uselist=False,
     )
 
     created_at: Mapped[datetime] = mapped_column(

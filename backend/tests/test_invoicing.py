@@ -5,14 +5,13 @@ from decimal import Decimal
 from app.models.invoice import Invoice, InvoiceItem
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.models.charging_session import ChargingSession
 from app.models.energy_price import EnergyPrice
-from app.models.invoice import InvoiceItem
 from app.models.rfid_card import RFIDCard
 from app.models.user import User
 from app.services.invoicing import (
@@ -225,6 +224,353 @@ def test_session_cannot_enter_second_draft(
             InvoiceItem
         ).count()
         == 1
+    )
+
+
+def test_rebills_session_after_finalized_cancellation(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    charging_session = (
+        database_session.query(
+            ChargingSession
+        ).one()
+    )
+
+    original_invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    original_item = original_invoice.items[0]
+    original_item_id = original_item.id
+
+    original_invoice = finalize_invoice(
+        database_session,
+        invoice_id=original_invoice.id,
+        issue_date=date(
+            2026,
+            7,
+            5,
+        ),
+    )
+
+    cancellation = create_cancellation_draft(
+        database_session,
+        original_invoice_id=original_invoice.id,
+        reason="Fehlerhafte Abrechnung",
+    )
+
+    finalize_cancellation(
+        database_session,
+        cancellation_id=cancellation.id,
+        issue_date=date(
+            2026,
+            7,
+            6,
+        ),
+    )
+
+    database_session.refresh(
+        charging_session
+    )
+
+    assert charging_session.invoiced is False
+    assert charging_session.invoice_id is None
+
+    rebill_invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    assert len(rebill_invoice.items) == 1
+
+    rebill_item = rebill_invoice.items[0]
+
+    assert rebill_item.id != original_item_id
+    assert (
+        rebill_item.charging_session_id
+        == charging_session.id
+    )
+    assert (
+        rebill_item.rebills_invoice_item_id
+        == original_item_id
+    )
+
+    stored_original_item = database_session.get(
+        InvoiceItem,
+        original_item_id,
+    )
+
+    assert stored_original_item is not None
+    assert (
+        stored_original_item.charging_session_id
+        == charging_session.id
+    )
+
+
+def test_session_cannot_enter_second_rebill_draft(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    original_invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    original_invoice = finalize_invoice(
+        database_session,
+        invoice_id=original_invoice.id,
+        issue_date=date(
+            2026,
+            7,
+            5,
+        ),
+    )
+
+    cancellation = create_cancellation_draft(
+        database_session,
+        original_invoice_id=original_invoice.id,
+        reason="Fehlerhafte Abrechnung",
+    )
+
+    finalize_cancellation(
+        database_session,
+        cancellation_id=cancellation.id,
+        issue_date=date(
+            2026,
+            7,
+            6,
+        ),
+    )
+
+    rebill_invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    assert len(rebill_invoice.items) == 1
+    assert (
+        rebill_invoice.items[0]
+        .rebills_invoice_item_id
+        == original_invoice.items[0].id
+    )
+
+    with pytest.raises(
+        NoBillableSessionsError
+    ):
+        create_invoice_draft(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(
+                2026,
+                6,
+                1,
+            ),
+            service_period_end=datetime(
+                2026,
+                7,
+                1,
+            ),
+        )
+
+    billing_items = list(
+        database_session.scalars(
+            select(InvoiceItem).where(
+                InvoiceItem.charging_session_id
+                == original_invoice.items[
+                    0
+                ].charging_session_id
+            )
+        ).all()
+    )
+
+    assert len(billing_items) == 2
+
+
+def test_finalizes_rebill_invoice(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    charging_session = (
+        database_session.query(
+            ChargingSession
+        ).one()
+    )
+
+    original_invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    original_invoice = finalize_invoice(
+        database_session,
+        invoice_id=original_invoice.id,
+        issue_date=date(
+            2026,
+            7,
+            5,
+        ),
+    )
+
+    original_invoice_id = original_invoice.id
+    original_item_id = original_invoice.items[0].id
+    original_invoice_number = (
+        original_invoice.invoice_number
+    )
+
+    cancellation = create_cancellation_draft(
+        database_session,
+        original_invoice_id=original_invoice.id,
+        reason="Fehlerhafte Abrechnung",
+    )
+
+    cancellation = finalize_cancellation(
+        database_session,
+        cancellation_id=cancellation.id,
+        issue_date=date(
+            2026,
+            7,
+            6,
+        ),
+    )
+
+    cancellation_id = cancellation.id
+    cancellation_number = (
+        cancellation.invoice_number
+    )
+
+    rebill_invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    rebill_invoice_id = rebill_invoice.id
+    rebill_item = rebill_invoice.items[0]
+
+    assert (
+        rebill_item.rebills_invoice_item_id
+        == original_item_id
+    )
+
+    rebill_invoice = finalize_invoice(
+        database_session,
+        invoice_id=rebill_invoice.id,
+        issue_date=date(
+            2026,
+            7,
+            7,
+        ),
+    )
+
+    database_session.refresh(
+        charging_session
+    )
+
+    assert rebill_invoice.status == "finalized"
+    assert rebill_invoice.invoice_number is not None
+    assert rebill_invoice.id == rebill_invoice_id
+
+    assert charging_session.invoiced is True
+    assert (
+        charging_session.invoice_id
+        == rebill_invoice.id
+    )
+
+    stored_original = database_session.get(
+        Invoice,
+        original_invoice_id,
+    )
+    stored_cancellation = database_session.get(
+        Invoice,
+        cancellation_id,
+    )
+    stored_original_item = database_session.get(
+        InvoiceItem,
+        original_item_id,
+    )
+
+    assert stored_original is not None
+    assert stored_original.status == "finalized"
+    assert (
+        stored_original.invoice_number
+        == original_invoice_number
+    )
+
+    assert stored_cancellation is not None
+    assert stored_cancellation.status == "finalized"
+    assert (
+        stored_cancellation.invoice_number
+        == cancellation_number
+    )
+
+    assert stored_original_item is not None
+    assert (
+        stored_original_item.charging_session_id
+        == charging_session.id
     )
 
 

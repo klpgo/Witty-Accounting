@@ -23,6 +23,7 @@ class InvoiceItemResponse(BaseModel):
     id: int
     charging_session_id: int | None
     reversed_invoice_item_id: int | None
+    rebills_invoice_item_id: int | None
     position_number: int
     description: str
     session_start: datetime

@@ -116,6 +116,80 @@ def find_energy_price(
         )
 
 
+def get_rebill_source_item_id(
+    db: Session,
+    *,
+    charging_session_id: int,
+) -> tuple[bool, int | None]:
+    billing_rows = list(
+        db.execute(
+            select(
+                InvoiceItem,
+                Invoice.status,
+            )
+            .join(
+                Invoice,
+                InvoiceItem.invoice_id == Invoice.id,
+            )
+            .where(
+                InvoiceItem.charging_session_id
+                == charging_session_id,
+                Invoice.document_type == "invoice",
+            )
+            .order_by(
+                InvoiceItem.id.desc()
+            )
+        ).all()
+    )
+
+    # Noch nie abgerechnet.
+    if not billing_rows:
+        return True, None
+
+    # Eine Sitzung darf nicht gleichzeitig in mehreren
+    # Rechnungsentwürfen enthalten sein.
+    if any(
+        invoice_status == "draft"
+        for _, invoice_status in billing_rows
+    ):
+        return False, None
+
+    for billing_item, invoice_status in billing_rows:
+        if invoice_status != "finalized":
+            continue
+
+        rebilled_item_id = db.scalar(
+            select(InvoiceItem.id)
+            .where(
+                InvoiceItem.rebills_invoice_item_id
+                == billing_item.id
+            )
+        )
+
+        if rebilled_item_id is not None:
+            continue
+
+        finalized_cancellation_item_id = db.scalar(
+            select(InvoiceItem.id)
+            .join(
+                Invoice,
+                InvoiceItem.invoice_id == Invoice.id,
+            )
+            .where(
+                InvoiceItem.reversed_invoice_item_id
+                == billing_item.id,
+                Invoice.document_type
+                == "cancellation",
+                Invoice.status == "finalized",
+            )
+        )
+
+        if finalized_cancellation_item_id is not None:
+            return True, billing_item.id
+
+    return False, None
+
+
 def create_invoice_draft(
     db: Session,
     *,
@@ -136,18 +210,13 @@ def create_invoice_draft(
             f"Benutzer {user_id} wurde nicht gefunden."
         )
 
-    charging_sessions = list(
+    candidate_sessions = list(
         db.scalars(
             select(ChargingSession)
             .join(
                 RFIDCard,
                 ChargingSession.rfid_card_id
                 == RFIDCard.id,
-            )
-            .outerjoin(
-                InvoiceItem,
-                InvoiceItem.charging_session_id
-                == ChargingSession.id,
             )
             .where(
                 RFIDCard.user_id == user_id,
@@ -156,7 +225,6 @@ def create_invoice_draft(
                 ChargingSession.end_time
                 <= service_period_end,
                 ChargingSession.invoiced.is_(False),
-                InvoiceItem.id.is_(None),
                 ChargingSession.cost_grid_net.is_not(
                     None
                 ),
@@ -171,8 +239,31 @@ def create_invoice_draft(
                 ChargingSession.start_time,
                 ChargingSession.id,
             )
+            .with_for_update()
         ).all()
     )
+
+    charging_sessions: list[
+        tuple[ChargingSession, int | None]
+    ] = []
+
+    for charging_session in candidate_sessions:
+        is_billable, rebill_source_item_id = (
+            get_rebill_source_item_id(
+                db,
+                charging_session_id=(
+                    charging_session.id
+                ),
+            )
+        )
+
+        if is_billable:
+            charging_sessions.append(
+                (
+                    charging_session,
+                    rebill_source_item_id,
+                )
+            )
 
     if not charging_sessions:
         raise NoBillableSessionsError(
@@ -244,7 +335,10 @@ def create_invoice_draft(
         db.add(invoice)
         db.flush()
 
-        for position_number, charging_session in enumerate(
+        for position_number, (
+            charging_session,
+            rebill_source_item_id,
+        ) in enumerate(
             charging_sessions,
             start=1,
         ):
@@ -345,6 +439,7 @@ def create_invoice_draft(
                     charging_session.id
                 ),
                 reversed_invoice_item_id=None,
+                rebills_invoice_item_id=rebill_source_item_id,
                 position_number=position_number,
                 description=(
                     "Ladevorgang "
