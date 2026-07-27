@@ -62,8 +62,8 @@ class InvoiceResponse(BaseModel):
     cancellation_reason: str | None
     cancelled_at: datetime | None
     user_id: int
-    status: str
-    user_id: int
+    recipient_name: str
+    recipient_address: str
     status: str
     issue_date: date | None
     due_date: date | None
@@ -76,7 +76,6 @@ class InvoiceResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     finalized_at: datetime | None
-    # bestehende Rechnungsfelder ...
     pdf_storage_path: str | None
     pdf_sha256: str | None
     pdf_size_bytes: int | None
