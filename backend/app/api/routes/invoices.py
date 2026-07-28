@@ -4,6 +4,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Response,
     status,
 )
 from fastapi.responses import FileResponse
@@ -276,6 +277,53 @@ def archive_invoice(
         )
 
     return invoice
+
+
+@router.delete(
+    "/{invoice_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+def delete_invoice_draft(
+    invoice_id: int,
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> Response:
+    invoice = db.get(
+        Invoice,
+        invoice_id,
+    )
+
+    if invoice is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Rechnung {invoice_id} "
+                "wurde nicht gefunden."
+            ),
+        )
+
+    if invoice.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Nur ein Entwurf kann gelöscht "
+                "werden."
+            ),
+        )
+
+    try:
+        db.delete(invoice)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
 
 
 @router.get(

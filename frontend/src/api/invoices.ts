@@ -287,3 +287,25 @@ export async function finalizeInvoiceCancellation(
 
   return (await response.json()) as Invoice
 }
+
+export async function deleteInvoiceDraft(
+  accessToken: string,
+  invoiceId: number,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+}

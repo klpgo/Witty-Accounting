@@ -13,7 +13,7 @@ from hashlib import sha256
 from app.config import settings
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -28,7 +28,7 @@ from app.models.energy_price import EnergyPrice
 from app.models.rfid_card import RFIDCard
 from app.models.user import User
 
-from app.models.invoice import Invoice
+from app.models.invoice import Invoice, InvoiceItem
 
 
 @pytest.fixture
@@ -858,6 +858,7 @@ def test_finalizes_cancellation_draft(
     assert "Elektronisch erstellter Stornobeleg" in pdf_text
     assert "Elektronisch erstellte Rechnung" not in pdf_text
 
+
 def test_rebills_session_after_finalized_cancellation(
     client: TestClient,
     database_session: Session,
@@ -1038,3 +1039,109 @@ def test_rebills_session_after_finalized_cancellation(
         cancellation_response.json()["status"]
         == "finalized"
     )
+
+def test_deletes_invoice_draft(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert draft_response.status_code == 201
+
+    invoice_id = draft_response.json()["id"]
+
+    response = client.delete(
+        f"/invoices/{invoice_id}"
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    assert database_session.get(
+        Invoice,
+        invoice_id,
+    ) is None
+
+    remaining_items = list(
+        database_session.scalars(
+            select(InvoiceItem).where(
+                InvoiceItem.invoice_id
+                == invoice_id
+            )
+        ).all()
+    )
+
+    assert remaining_items == []
+
+
+def test_rejects_deleting_finalized_invoice(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert draft_response.status_code == 201
+
+    invoice_id = draft_response.json()["id"]
+
+    invoice = database_session.get(
+        Invoice,
+        invoice_id,
+    )
+
+    assert invoice is not None
+
+    invoice.status = "finalized"
+    database_session.commit()
+
+    response = client.delete(
+        f"/invoices/{invoice_id}"
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": (
+            "Nur ein Entwurf kann gelöscht "
+            "werden."
+        ),
+    }
+
+
+def test_delete_invoice_returns_not_found(
+    client: TestClient,
+) -> None:
+    response = client.delete(
+        "/invoices/999999"
+    )
+
+    assert response.status_code == 404

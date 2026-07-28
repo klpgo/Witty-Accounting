@@ -12,6 +12,7 @@ import {
   downloadInvoicePdf,
   getInvoice,
   InvoiceApiError,
+  deleteInvoiceDraft,
   type Invoice,
 } from '../api/invoices'
 import { getAccessToken } from '../auth/tokenStorage'
@@ -136,6 +137,14 @@ function InvoiceDetailPage() {
   const [
     pdfErrorMessage,
     setPdfErrorMessage,
+  ] = useState<string | null>(null)
+
+  const [isDeleting, setIsDeleting] =
+    useState(false)
+
+  const [
+    deleteErrorMessage,
+    setDeleteErrorMessage,
   ] = useState<string | null>(null)
 
   const [
@@ -297,6 +306,75 @@ function InvoiceDetailPage() {
     }
   }
 
+  async function handleDeleteDraft(): Promise<void> {
+    if (
+      invoice === null ||
+      invoice.status !== 'draft'
+    ) {
+      return
+    }
+
+    const documentLabel =
+      invoice.document_type === 'cancellation'
+        ? 'Stornoentwurf'
+        : 'Rechnungsentwurf'
+
+    const confirmed = window.confirm(
+      `Soll dieser ${documentLabel} wirklich gelöscht werden?`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+
+      navigate('/login', {
+        replace: true,
+      })
+
+      return
+    }
+
+    setDeleteErrorMessage(null)
+    setIsDeleting(true)
+
+    try {
+      await deleteInvoiceDraft(
+        accessToken,
+        invoice.id,
+      )
+
+      navigate('/invoices', {
+        replace: true,
+      })
+    } catch (error) {
+        if (
+        error instanceof InvoiceApiError &&
+        error.status === 401
+      ) {
+          signOut()
+
+        navigate('/login', {
+          replace: true,
+        })
+
+          return
+      }
+
+      setDeleteErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Der Entwurf konnte nicht gelöscht werden.',
+      )
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="page">
@@ -346,6 +424,21 @@ function InvoiceDetailPage() {
           ← Zurück zu den Rechnungen
         </Link>
 
+        {invoice.status === 'draft' && (
+          <button
+            className="button button-danger"
+            type="button"
+            disabled={isDeleting}
+            onClick={() => {
+              void handleDeleteDraft()
+            }}
+          >
+            {isDeleting
+              ? 'Entwurf wird gelöscht …'
+              : 'Entwurf löschen'}
+          </button>
+        )}
+
         <button
           className="button button-primary"
           type="button"
@@ -391,6 +484,15 @@ function InvoiceDetailPage() {
           {getStatusLabel(invoice.status)}
         </span>
       </header>
+
+      {deleteErrorMessage && (
+        <section
+          className="form-error detail-error"
+          role="alert"
+        >
+          {deleteErrorMessage}
+        </section>
+      )}
 
       {pdfErrorMessage && (
         <section
