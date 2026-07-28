@@ -243,10 +243,6 @@ function InvoicesPage() {
                           {invoice.invoice_number ??
                               `Entwurf #${invoice.id}`}
                         </Link>
-                        <strong>
-                          {invoice.invoice_number ??
-                            `Entwurf #${invoice.id}`}
-                        </strong>
                       </td>
 
                       <td>
