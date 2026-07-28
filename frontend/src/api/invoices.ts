@@ -113,3 +113,51 @@ export async function listInvoices(
 
   return (await response.json()) as Invoice[]
 }
+
+export async function getInvoice(
+  accessToken: string,
+  invoiceId: number,
+  signal?: AbortSignal,
+): Promise<Invoice> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as Invoice
+}
+
+export async function downloadInvoicePdf(
+  accessToken: string,
+  invoiceId: number,
+): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/pdf`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return response.blob()
+}

@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage'
 import InvoicesPage from './pages/InvoicesPage'
 import LoginPage from './pages/LoginPage'
 import ProtectedRoute from './router/ProtectedRoute'
+import InvoiceDetailPage from './pages/InvoiceDetailPage'
 
 function App() {
   return (
@@ -28,6 +29,11 @@ function App() {
           <Route
             path="invoices"
             element={<InvoicesPage />}
+          />
+
+          <Route
+            path="invoices/:invoiceId"
+            element={<InvoiceDetailPage />}
           />
         </Route>
       </Route>

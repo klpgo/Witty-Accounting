@@ -388,3 +388,104 @@ h2 {
   background: #ecfdf3;
   color: #067647;
 }
+
+.invoice-detail-page {
+  padding-top: 32px;
+}
+
+.detail-header-actions {
+  display: flex;
+  margin-bottom: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.back-link,
+.table-link {
+  color: #2949bd;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.back-link:hover,
+.table-link:hover {
+  text-decoration: underline;
+}
+
+.invoice-summary-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.detail-list {
+  display: grid;
+  margin: 0;
+  gap: 16px;
+}
+
+.detail-list div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.detail-list dt {
+  color: #667085;
+}
+
+.detail-list dd {
+  margin: 0;
+  font-weight: 650;
+  text-align: right;
+}
+
+.invoice-address {
+  margin-bottom: 0;
+  color: #52617a;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.invoice-total-row {
+  border-top: 1px solid #dfe4ec;
+  padding-top: 16px;
+  font-size: 1.1rem;
+}
+
+.detail-section {
+  margin-top: 24px;
+}
+
+.detail-error {
+  margin-bottom: 24px;
+}
+
+.section-heading {
+  padding: 24px 24px 8px;
+}
+
+.section-heading h2 {
+  margin-bottom: 0;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 900px) {
+  .invoice-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .detail-header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

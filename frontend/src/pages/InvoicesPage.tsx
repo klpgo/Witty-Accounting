@@ -2,7 +2,10 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { useNavigate } from 'react-router-dom'
+import {
+  Link,
+  useNavigate,
+} from 'react-router-dom'
 
 import {
   InvoiceApiError,
@@ -11,6 +14,7 @@ import {
 } from '../api/invoices'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+
 
 function formatCurrency(
   value: string | number,
@@ -226,6 +230,13 @@ function InvoicesPage() {
                   {invoices.map((invoice) => (
                     <tr key={invoice.id}>
                       <td>
+                        <Link
+                          className="table-link"
+                          to={`/invoices/${invoice.id}`}
+                        >
+                          {invoice.invoice_number ??
+                              `Entwurf #${invoice.id}`}
+                        </Link>
                         <strong>
                           {invoice.invoice_number ??
                             `Entwurf #${invoice.id}`}
