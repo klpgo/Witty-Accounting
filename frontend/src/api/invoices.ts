@@ -193,3 +193,97 @@ export async function createInvoiceDraft(
 
   return (await response.json()) as Invoice
 }
+
+export interface InvoiceFinalizeRequest {
+  issue_date: string
+  due_date: string
+}
+
+export async function finalizeInvoice(
+  accessToken: string,
+  invoiceId: number,
+  payload: InvoiceFinalizeRequest,
+): Promise<Invoice> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/finalize`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as Invoice
+}
+
+export interface InvoiceCancellationCreate {
+  reason: string
+}
+
+export async function createInvoiceCancellation(
+  accessToken: string,
+  invoiceId: number,
+  payload: InvoiceCancellationCreate,
+): Promise<Invoice> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/cancellations`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as Invoice
+}
+
+export interface InvoiceCancellationFinalize {
+  issue_date: string
+}
+
+export async function finalizeInvoiceCancellation(
+  accessToken: string,
+  cancellationId: number,
+  payload: InvoiceCancellationFinalize,
+): Promise<Invoice> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${cancellationId}/cancellation/finalize`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as Invoice
+}

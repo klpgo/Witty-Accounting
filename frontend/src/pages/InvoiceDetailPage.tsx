@@ -16,6 +16,9 @@ import {
 } from '../api/invoices'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import InvoiceFinalizeForm from '../components/InvoiceFinalizeForm'
+import InvoiceCancellationCreateForm from '../components/InvoiceCancellationCreateForm'
+import InvoiceCancellationFinalizeForm from '../components/InvoiceCancellationFinalizeForm'
 
 function formatCurrency(
   value: string | number,
@@ -498,6 +501,23 @@ function InvoiceDetailPage() {
         </article>
       </section>
 
+      {invoice.status === 'draft' &&
+        invoice.document_type === 'invoice' && (
+        <InvoiceFinalizeForm
+          invoiceId={invoice.id}
+          onFinalized={setInvoice}
+        />
+      )}
+
+      {invoice.status === 'draft' &&
+        invoice.document_type ===
+          'cancellation' && (
+        <InvoiceCancellationFinalizeForm
+          cancellationId={invoice.id}
+          onFinalized={setInvoice}
+        />
+      )}
+
       {invoice.document_type ===
         'cancellation' && (
         <section className="card detail-section">
@@ -628,6 +648,13 @@ function InvoiceDetailPage() {
           </table>
         </div>
       </section>
+      {invoice.status === 'finalized' &&
+          invoice.document_type === 'invoice' &&
+          invoice.cancelled_at === null && (
+          <InvoiceCancellationCreateForm
+          invoiceId={invoice.id}
+          />
+      )}
     </div>
   )
 }

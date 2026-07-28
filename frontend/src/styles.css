@@ -553,3 +553,39 @@ h2 {
     flex-direction: column-reverse;
   }
 }
+
+.finalize-intro {
+  margin-bottom: 24px;
+}
+
+.finalize-form {
+  display: grid;
+  gap: 24px;
+}
+
+.finalize-form .form-actions {
+  border-top: 1px solid #e7eaf0;
+  padding-top: 20px;
+}
+
+.form-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 7rem;
+  padding: 12px 14px;
+  border: 1px solid #cfd5df;
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.form-field textarea:focus {
+  border-color: #52606d;
+  outline: 2px solid rgb(82 96 109 / 20%);
+  outline-offset: 1px;
+}
+
+.form-field textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
