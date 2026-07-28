@@ -12,7 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.charging_session import ChargingSession
-from app.models.rfid_card import RFIDCard
+from app.services.rfid_assignments import (
+    resolve_rfid_assignment,
+)
+#from app.models.rfid_card import RFIDCard
 
 HAGER_XLSX_HEADERS = (
     "Startdatum",
@@ -321,8 +324,10 @@ def import_xlsx_to_db(
     Importiert Ladevorgänge aus einer Hager-XLSX-Datei in die Datenbank.
 
     Bereits vorhandene Datensätze werden anhand des import_hash übersprungen.
-    Existiert eine RFID-Karte, wird sie dem Ladevorgang zugeordnet.
-    Unbekannte oder fehlende RFID-Karten führen zu rfid_card_id=None.
+    Existiert zum Startzeitpunkt eine gültige Zuordnung
+    einer aktiven RFID-Karte, wird sie gespeichert.
+    Unbekannte, deaktivierte oder nicht zugeordnete
+    RFID-Karten bleiben ohne Zuordnung.
     """
     parsed_sessions = import_xlsx(path)
 
@@ -347,19 +352,25 @@ def import_xlsx_to_db(
 
         rfid_number = session_data["rfid"]
         rfid_card_id: int | None = None
+        rfid_assignment_id: int | None = None
 
         if rfid_number is not None:
-            rfid_card = db.scalar(
-                select(RFIDCard).where(
-                    RFIDCard.rfid_number == rfid_number
-                )
+            assignment = resolve_rfid_assignment(
+                db,
+                rfid_number=rfid_number,
+                at=session_data["start_time"],
             )
 
-            if rfid_card is not None:
-                rfid_card_id = rfid_card.id
+            if assignment is not None:
+                rfid_card_id = (
+                    assignment.rfid_card_id
+                )
+                rfid_assignment_id = assignment.id
             else:
                 unknown_rfid_sessions += 1
-                unknown_rfid_numbers.add(rfid_number)
+                unknown_rfid_numbers.add(
+                    rfid_number
+                )
 
         charging_session = ChargingSession(
             hager_session_id=None,
@@ -367,6 +378,9 @@ def import_xlsx_to_db(
             start_time=session_data["start_time"],
             end_time=session_data["end_time"],
             rfid_card_id=rfid_card_id,
+            rfid_assignment_id=(
+                rfid_assignment_id
+            ),
             energy_total_kwh=session_data["energy_total_kwh"],
             energy_pv_kwh=session_data["energy_pv_kwh"],
             cost_grid_net=None,

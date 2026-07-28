@@ -90,6 +90,14 @@ class User(Base):
         back_populates="user"
     )
 
+    rfid_assignments = relationship(
+        "RFIDCardAssignment",
+        back_populates="user",
+        order_by=(
+            "RFIDCardAssignment.valid_from"
+        ),
+    )
+
     invoices = relationship(
         "Invoice",
         back_populates="user",

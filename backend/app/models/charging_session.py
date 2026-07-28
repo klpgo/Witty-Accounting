@@ -59,6 +59,15 @@ class ChargingSession(Base):
         nullable=True
     )
 
+    rfid_assignment_id: Mapped[
+        int | None
+    ] = mapped_column(
+        ForeignKey(
+            "rfid_card_assignments.id"
+        ),
+        nullable=True,
+    )
+
     energy_total_kwh: Mapped[float] = mapped_column(
         Float,
         nullable=False
@@ -111,4 +120,9 @@ class ChargingSession(Base):
 
     rfid_card = relationship(
         "RFIDCard"
+    )
+
+    rfid_assignment = relationship(
+        "RFIDCardAssignment",
+        back_populates="charging_sessions",
     )

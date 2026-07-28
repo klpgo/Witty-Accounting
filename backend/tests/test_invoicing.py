@@ -13,6 +13,9 @@ from app.database import Base
 from app.models.charging_session import ChargingSession
 from app.models.energy_price import EnergyPrice
 from app.models.rfid_card import RFIDCard
+from app.models.rfid_card_assignment import (
+    RFIDCardAssignment,
+)
 from app.models.user import User
 from app.services.invoicing import (
     InvalidDueDateError,
@@ -92,6 +95,23 @@ def create_test_data(
     db.add(user)
     db.flush()
 
+    db.add(rfid_card)
+    db.flush()
+
+    rfid_assignment = RFIDCardAssignment(
+        rfid_card_id=rfid_card.id,
+        user_id=user.id,
+        valid_from=datetime(
+            2026,
+            1,
+            1,
+        ),
+        valid_to=None,
+    )
+
+    db.add(rfid_assignment)
+    db.flush()
+
     db.add(
         ChargingSession(
             hager_session_id=None,
@@ -111,6 +131,7 @@ def create_test_data(
                 0,
             ),
             rfid_card=rfid_card,
+            rfid_assignment=rfid_assignment,
             energy_total_kwh=10.0,
             energy_pv_kwh=4.0,
             cost_grid_net=Decimal("1.8000"),
@@ -1022,6 +1043,15 @@ def test_finalizes_cancellation_draft(
 
     assert rfid_card is not None
 
+    rfid_assignment = database_session.scalar(
+        select(RFIDCardAssignment).where(
+            RFIDCardAssignment.rfid_card_id
+            == rfid_card.id
+        )
+    )
+
+    assert rfid_assignment is not None
+
     database_session.add_all(
         [
             ChargingSession(
@@ -1042,6 +1072,9 @@ def test_finalizes_cancellation_draft(
                     0,
                 ),
                 rfid_card_id=rfid_card.id,
+                rfid_assignment_id=(
+                    rfid_assignment.id
+                ),
                 energy_total_kwh=8.0,
                 energy_pv_kwh=2.0,
                 cost_grid_net=Decimal("1.8000"),
@@ -1070,6 +1103,9 @@ def test_finalizes_cancellation_draft(
                     0,
                 ),
                 rfid_card_id=rfid_card.id,
+                rfid_assignment_id=(
+                    rfid_assignment.id
+                ),
                 energy_total_kwh=6.0,
                 energy_pv_kwh=6.0,
                 cost_grid_net=Decimal("0.0000"),

@@ -36,3 +36,5 @@ backend/tmp/
 
 # Archived invoice PDFs
 /backend/data/invoices/
+
+backups/

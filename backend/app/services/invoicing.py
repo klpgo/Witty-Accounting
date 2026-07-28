@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from app.models.charging_session import ChargingSession
 from app.models.energy_price import EnergyPrice
 from app.models.invoice import Invoice, InvoiceItem
-from app.models.rfid_card import RFIDCard
+from app.models.rfid_card_assignment import (
+    RFIDCardAssignment,
+)
 from app.models.user import User
 
 from app.utils.utc import utc_now
@@ -185,13 +187,14 @@ def create_invoice_draft(
     candidate_sessions = list(
         db.scalars(
             select(ChargingSession)
+
             .join(
-                RFIDCard,
-                ChargingSession.rfid_card_id
-                == RFIDCard.id,
+                RFIDCardAssignment,
+                ChargingSession.rfid_assignment_id
+                == RFIDCardAssignment.id,
             )
             .where(
-                RFIDCard.user_id == user_id,
+                RFIDCardAssignment.user_id == user_id,
                 ChargingSession.start_time
                 >= service_period_start,
                 ChargingSession.end_time

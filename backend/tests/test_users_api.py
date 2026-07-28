@@ -12,6 +12,10 @@ from app.database import Base
 from app.main import app
 from app.models.user import User
 
+from app.security import (
+    hash_password,
+    verify_password,
+)
 
 @pytest.fixture
 def database_session() -> Generator[
@@ -67,10 +71,15 @@ def create_user(
     last_name: str,
     is_admin: bool = False,
     active: bool = True,
+    password: str | None = None,
 ) -> User:
     user = User(
         email=email,
-        password_hash="not-used",
+        password_hash=(
+            hash_password(password)
+            if password is not None
+            else "not-used"
+        ),
         salutation=None,
         first_name=first_name,
         last_name=last_name,
@@ -198,3 +207,437 @@ def test_list_users_returns_sorted_users(
         assert "id" in user
         assert "created_at" in user
         assert "updated_at" in user
+
+
+def test_get_own_profile_requires_authentication(
+    client: TestClient,
+) -> None:
+    response = client.get("/users/me")
+
+    assert response.status_code == 401
+
+
+def test_get_own_profile(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Max",
+        last_name="Mustermann",
+    )
+
+    response = client.get(
+        "/users/me",
+        headers=authorization_header(user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == user.id
+    assert (
+        response.json()["email"]
+        == "user@example.com"
+    )
+    assert "password_hash" not in response.json()
+
+
+def test_updates_own_profile(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="old@example.com",
+        first_name="Max",
+        last_name="Mustermann",
+    )
+
+    response = client.patch(
+        "/users/me",
+        headers=authorization_header(user),
+        json={
+            "email": "NEW@example.com",
+            "first_name": " Erika ",
+            "last_name": " Musterfrau ",
+            "address": (
+                "Musterstraße 2\n"
+                "12345 Musterstadt"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["email"] == "new@example.com"
+    assert body["first_name"] == "Erika"
+    assert body["last_name"] == "Musterfrau"
+    assert body["address"] == (
+        "Musterstraße 2\n"
+        "12345 Musterstadt"
+    )
+
+    database_session.refresh(user)
+
+    assert user.email == "new@example.com"
+    assert user.first_name == "Erika"
+    assert user.last_name == "Musterfrau"
+
+
+def test_update_own_profile_rejects_duplicate_email(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Normal",
+        last_name="User",
+    )
+
+    create_user(
+        database_session,
+        email="used@example.com",
+        first_name="Other",
+        last_name="User",
+    )
+
+    response = client.patch(
+        "/users/me",
+        headers=authorization_header(user),
+        json={
+            "email": "USED@example.com",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": (
+            "Diese E-Mail-Adresse wird "
+            "bereits verwendet."
+        ),
+    }
+
+
+def test_update_own_profile_rejects_admin_fields(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Normal",
+        last_name="User",
+    )
+
+    response = client.patch(
+        "/users/me",
+        headers=authorization_header(user),
+        json={
+            "is_admin": True,
+            "active": False,
+        },
+    )
+
+    assert response.status_code == 422
+
+    database_session.refresh(user)
+
+    assert user.is_admin is False
+    assert user.active is True
+
+
+def test_changes_own_password(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Normal",
+        last_name="User",
+        password="old-password",
+    )
+
+    response = client.post(
+        "/users/me/password",
+        headers=authorization_header(user),
+        json={
+            "current_password": "old-password",
+            "new_password": "new-password",
+        },
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    database_session.refresh(user)
+
+    assert verify_password(
+        "new-password",
+        user.password_hash,
+    )
+    assert not verify_password(
+        "old-password",
+        user.password_hash,
+    )
+
+
+def test_change_own_password_rejects_wrong_password(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Normal",
+        last_name="User",
+        password="old-password",
+    )
+
+    original_password_hash = user.password_hash
+
+    response = client.post(
+        "/users/me/password",
+        headers=authorization_header(user),
+        json={
+            "current_password": "wrong-password",
+            "new_password": "new-password",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": (
+            "Das aktuelle Passwort ist "
+            "nicht korrekt."
+        ),
+    }
+
+    database_session.refresh(user)
+
+    assert (
+        user.password_hash
+        == original_password_hash
+    )
+
+
+def test_get_user_requires_admin(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Normal",
+        last_name="User",
+    )
+
+    target = create_user(
+        database_session,
+        email="target@example.com",
+        first_name="Target",
+        last_name="User",
+    )
+
+    response = client.get(
+        f"/users/{target.id}",
+        headers=authorization_header(user),
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_gets_user(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    target = create_user(
+        database_session,
+        email="target@example.com",
+        first_name="Target",
+        last_name="User",
+    )
+
+    response = client.get(
+        f"/users/{target.id}",
+        headers=authorization_header(admin),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == target.id
+    assert (
+        response.json()["email"]
+        == "target@example.com"
+    )
+    assert "password_hash" not in response.json()
+
+
+def test_admin_updates_user(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    target = create_user(
+        database_session,
+        email="old@example.com",
+        first_name="Old",
+        last_name="Name",
+    )
+
+    response = client.patch(
+        f"/users/{target.id}",
+        headers=authorization_header(admin),
+        json={
+            "email": "NEW@example.com",
+            "first_name": " Erika ",
+            "last_name": " Musterfrau ",
+            "address": (
+                "Musterstraße 5\n"
+                "12345 Musterstadt"
+            ),
+            "active": False,
+            "is_admin": True,
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["email"] == "new@example.com"
+    assert body["first_name"] == "Erika"
+    assert body["last_name"] == "Musterfrau"
+    assert body["active"] is False
+    assert body["is_admin"] is True
+
+    database_session.refresh(target)
+
+    assert target.email == "new@example.com"
+    assert target.first_name == "Erika"
+    assert target.last_name == "Musterfrau"
+    assert target.active is False
+    assert target.is_admin is True
+
+
+def test_admin_update_rejects_duplicate_email(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    target = create_user(
+        database_session,
+        email="target@example.com",
+        first_name="Target",
+        last_name="User",
+    )
+
+    create_user(
+        database_session,
+        email="used@example.com",
+        first_name="Used",
+        last_name="User",
+    )
+
+    response = client.patch(
+        f"/users/{target.id}",
+        headers=authorization_header(admin),
+        json={
+            "email": "USED@example.com",
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_admin_resets_user_password(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    target = create_user(
+        database_session,
+        email="target@example.com",
+        first_name="Target",
+        last_name="User",
+        password="old-password",
+    )
+
+    response = client.post(
+        f"/users/{target.id}/password",
+        headers=authorization_header(admin),
+        json={
+            "new_password": "new-password",
+        },
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    database_session.refresh(target)
+
+    assert verify_password(
+        "new-password",
+        target.password_hash,
+    )
+    assert not verify_password(
+        "old-password",
+        target.password_hash,
+    )
+
+
+def test_admin_user_routes_return_not_found(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    response = client.get(
+        "/users/999999",
+        headers=authorization_header(admin),
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": (
+            "Benutzer 999999 wurde nicht "
+            "gefunden."
+        ),
+    }

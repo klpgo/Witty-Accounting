@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime
 
 from openpyxl import Workbook
 from sqlalchemy import create_engine, select
@@ -9,7 +10,9 @@ from app.models.charging_session import ChargingSession
 from app.models.rfid_card import RFIDCard
 from app.models.user import User
 from app.services.importers.xlsx_importer import import_xlsx_to_db
-
+from app.models.rfid_card_assignment import (
+    RFIDCardAssignment,
+)
 
 HEADERS = [
     "Startdatum",
@@ -72,7 +75,9 @@ def create_database_session() -> Session:
     return Session(engine)
 
 
-def create_user_with_rfid(db: Session) -> RFIDCard:
+def create_user_with_rfid(
+    db: Session,
+) -> tuple[RFIDCard, RFIDCardAssignment]:
     user = User(
         email="max.mustermann@example.invalid",
         password_hash="test-password-hash",
@@ -97,9 +102,25 @@ def create_user_with_rfid(db: Session) -> RFIDCard:
     )
 
     db.add(rfid_card)
-    db.commit()
+    db.flush()
 
-    return rfid_card
+    assignment = RFIDCardAssignment(
+        rfid_card_id=rfid_card.id,
+        user_id=user.id,
+        valid_from=datetime(
+            2026,
+            1,
+            1,
+        ),
+        valid_to=None,
+    )
+
+    db.add(assignment)
+    db.commit()
+    db.refresh(rfid_card)
+    db.refresh(assignment)
+
+    return rfid_card, assignment
 
 
 def test_import_xlsx_to_db_assigns_rfid_and_skips_duplicates(
@@ -109,7 +130,9 @@ def test_import_xlsx_to_db_assigns_rfid_and_skips_duplicates(
     create_test_workbook(xlsx_path)
 
     with create_database_session() as db:
-        rfid_card = create_user_with_rfid(db)
+        rfid_card, assignment = (
+            create_user_with_rfid(db)
+        )
 
         first_result = import_xlsx_to_db(
             db=db,
@@ -134,11 +157,19 @@ def test_import_xlsx_to_db_assigns_rfid_and_skips_duplicates(
         unauthenticated_session = sessions[1]
 
         assert authenticated_session.rfid_card_id == rfid_card.id
+        assert (
+            authenticated_session.rfid_assignment_id
+            == assignment.id
+        )
         assert authenticated_session.station_id == "WB2"
         assert authenticated_session.source == "xlsx"
         assert authenticated_session.hager_session_id is None
 
         assert unauthenticated_session.rfid_card_id is None
+        assert (
+            unauthenticated_session.rfid_assignment_id
+            is None
+        )
         assert unauthenticated_session.station_id == "WB3"
 
         second_result = import_xlsx_to_db(
@@ -186,5 +217,10 @@ def test_import_xlsx_to_db_reports_unknown_rfid(
         assert len(sessions) == 2
         assert all(
             session.rfid_card_id is None
+            for session in sessions
+        )
+
+        assert all(
+            session.rfid_assignment_id is None
             for session in sessions
         )

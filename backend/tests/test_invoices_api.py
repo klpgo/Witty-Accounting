@@ -26,6 +26,9 @@ from app.models.charging_session import (
 )
 from app.models.energy_price import EnergyPrice
 from app.models.rfid_card import RFIDCard
+from app.models.rfid_card_assignment import (
+    RFIDCardAssignment,
+)
 from app.models.user import User
 
 from app.models.invoice import Invoice, InvoiceItem
@@ -106,6 +109,17 @@ def create_billable_session(
         active=True,
     )
 
+    assignment = RFIDCardAssignment(
+        rfid_card=card,
+        user=user,
+        valid_from=datetime(
+            2026,
+            1,
+            1,
+        ),
+        valid_to=None,
+    )
+
     session = ChargingSession(
         hager_session_id=None,
         station_id="WB2",
@@ -124,6 +138,7 @@ def create_billable_session(
             0,
         ),
         rfid_card=card,
+        rfid_assignment=assignment,
         energy_total_kwh=10.0,
         energy_pv_kwh=4.0,
         cost_grid_net=Decimal("1.8000"),
@@ -143,7 +158,14 @@ def create_billable_session(
             vat_rate=Decimal("19.00"),
         )
     )
-    db.add_all([user, session])
+    db.add_all(
+        [
+            user,
+            card,
+            assignment,
+            session,
+        ]
+    )
     db.commit()
     db.refresh(user)
     db.refresh(session)

@@ -51,3 +51,11 @@ class RFIDCard(Base):
         "User",
         back_populates="rfid_cards"
     )
+
+    assignments = relationship(
+        "RFIDCardAssignment",
+        back_populates="rfid_card",
+        order_by=(
+            "RFIDCardAssignment.valid_from"
+        ),
+    )
