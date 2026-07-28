@@ -87,34 +87,6 @@ def find_energy_price(
         .limit(1)
     )
 
-    recipient_name = " ".join(
-        part
-        for part in (
-            user.salutation,
-            user.first_name,
-            user.last_name,
-        )
-        if part
-    )
-
-    if not user.address:
-        raise InvoiceDraftError(
-            "Für den Rechnungsempfänger ist "
-            "keine Anschrift hinterlegt."
-        )
-
-    issuer_tax_number = (
-        settings.invoice_tax_number
-    )
-    issuer_vat_id = settings.invoice_vat_id
-
-    if not issuer_tax_number and not issuer_vat_id:
-        raise InvoiceDraftError(
-            "Für den Rechnungsaussteller muss "
-            "eine Steuernummer oder USt-IdNr. "
-            "konfiguriert sein."
-        )
-
 
 def get_rebill_source_item_id(
     db: Session,
