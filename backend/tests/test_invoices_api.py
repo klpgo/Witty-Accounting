@@ -187,6 +187,39 @@ def test_creates_invoice_draft(
     ] == "6.0000"
 
 
+def test_create_draft_rejects_missing_recipient_address(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    user.address = None
+    database_session.commit()
+
+    response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": (
+            "Für den Rechnungsempfänger "
+            "ist keine Anschrift hinterlegt."
+        ),
+    }
+
+
 def test_finalizes_invoice(
     client: TestClient,
     database_session: Session,

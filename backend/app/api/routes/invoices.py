@@ -47,6 +47,7 @@ from app.services.invoicing import (
     NoBillableSessionsError,
     create_invoice_draft,
     finalize_invoice,
+    InvoiceDraftError,
 )
 
 from app.services.invoice_archive import (
@@ -142,6 +143,7 @@ def create_draft(
         ) from exc
 
     except (
+        InvoiceDraftError,
         NoBillableSessionsError,
         MissingEnergyPriceError,
         InvalidChargingSessionError,
