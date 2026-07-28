@@ -10,6 +10,7 @@ import InvoicesPage from './pages/InvoicesPage'
 import LoginPage from './pages/LoginPage'
 import ProtectedRoute from './router/ProtectedRoute'
 import InvoiceDetailPage from './pages/InvoiceDetailPage'
+import InvoiceDraftCreatePage from './pages/InvoiceDraftCreatePage'
 
 function App() {
   return (
@@ -29,6 +30,11 @@ function App() {
           <Route
             path="invoices"
             element={<InvoicesPage />}
+          />
+
+          <Route
+            path="invoices/new"
+            element={<InvoiceDraftCreatePage />}
           />
 
           <Route

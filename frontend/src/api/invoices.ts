@@ -161,3 +161,35 @@ export async function downloadInvoicePdf(
 
   return response.blob()
 }
+
+export interface InvoiceDraftCreate {
+  user_id: number
+  service_period_start: string
+  service_period_end: string
+}
+
+export async function createInvoiceDraft(
+  accessToken: string,
+  payload: InvoiceDraftCreate,
+): Promise<Invoice> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/drafts`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as Invoice
+}

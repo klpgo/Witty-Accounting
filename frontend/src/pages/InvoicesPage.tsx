@@ -174,6 +174,12 @@ function InvoicesPage() {
             und Stornobelege.
           </p>
         </div>
+        <Link
+          className="button button-primary"
+          to="/invoices/new"
+        >
+          Entwurf erstellen
+        </Link>
       </header>
 
       {isLoading && (

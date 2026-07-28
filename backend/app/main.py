@@ -13,6 +13,9 @@ from app.api.routes.imports import router as imports_router
 from app.api.routes.invoices import (
     router as invoices_router,
 )
+from app.api.routes.users import (
+    router as users_router,
+)
 from app.config import settings
 from app.database import engine
 from app.logging_config import setup_logging
@@ -54,7 +57,7 @@ app.include_router(imports_router)
 app.include_router(energy_prices_router)
 app.include_router(auth_router)
 app.include_router(invoices_router)
-
+app.include_router(users_router)
 
 @app.get("/")
 def root() -> dict[str, str]:

@@ -489,3 +489,67 @@ h2 {
     flex-direction: column;
   }
 }
+
+.invoice-create-page {
+  padding-top: 32px;
+}
+
+.create-page-header {
+  margin-top: 24px;
+}
+
+.create-form-card {
+  width: min(760px, 100%);
+}
+
+.invoice-create-form {
+  display: grid;
+  gap: 24px;
+}
+
+.form-field select {
+  width: 100%;
+  border: 1px solid #cfd6e2;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px 14px;
+  color: #172033;
+  outline: none;
+}
+
+.form-field select:focus {
+  border-color: #3659d9;
+  box-shadow: 0 0 0 3px rgb(54 89 217 / 14%);
+}
+
+.form-field select:disabled,
+.form-field input:disabled {
+  cursor: not-allowed;
+  background: #f5f6f8;
+  color: #667085;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+}
