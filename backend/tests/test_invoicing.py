@@ -1014,6 +1014,91 @@ def test_finalizes_cancellation_draft(
 ) -> None:
     user = create_test_data(database_session)
 
+    rfid_card = database_session.scalar(
+        select(RFIDCard).where(
+            RFIDCard.user_id == user.id
+        )
+    )
+
+    assert rfid_card is not None
+
+    database_session.add_all(
+        [
+            ChargingSession(
+                hager_session_id=None,
+                station_id="WB2",
+                start_time=datetime(
+                    2026,
+                    6,
+                    18,
+                    10,
+                    0,
+                ),
+                end_time=datetime(
+                    2026,
+                    6,
+                    18,
+                    11,
+                    0,
+                ),
+                rfid_card_id=rfid_card.id,
+                energy_total_kwh=8.0,
+                energy_pv_kwh=2.0,
+                cost_grid_net=Decimal("1.8000"),
+                cost_pv_net=Decimal("0.2000"),
+                vat_rate=Decimal("19.00"),
+                invoiced=False,
+                invoice_id=None,
+                import_hash="k" * 64,
+                source="xlsx",
+            ),
+            ChargingSession(
+                hager_session_id=None,
+                station_id="WB2",
+                start_time=datetime(
+                    2026,
+                    6,
+                    19,
+                    10,
+                    0,
+                ),
+                end_time=datetime(
+                    2026,
+                    6,
+                    19,
+                    11,
+                    0,
+                ),
+                rfid_card_id=rfid_card.id,
+                energy_total_kwh=6.0,
+                energy_pv_kwh=6.0,
+                cost_grid_net=Decimal("0.0000"),
+                cost_pv_net=Decimal("0.6000"),
+                vat_rate=Decimal("19.00"),
+                invoiced=False,
+                invoice_id=None,
+                import_hash="l" * 64,
+                source="xlsx",
+            ),
+        ]
+    )
+
+    database_session.commit()
+
+    charging_sessions = list(
+        database_session.scalars(
+            select(ChargingSession)
+            .where(
+                ChargingSession.rfid_card_id
+                == rfid_card.id
+            )
+            .order_by(ChargingSession.id)
+        ).all()
+    )
+
+    assert len(charging_sessions) == 3
+
+
     original_invoice = create_invoice_draft(
         database_session,
         user_id=user.id,
@@ -1028,6 +1113,8 @@ def test_finalizes_cancellation_draft(
             1,
         ),
     )
+
+    assert len(original_invoice.items) == 3
 
     original_invoice = finalize_invoice(
         database_session,
@@ -1051,6 +1138,8 @@ def test_finalizes_cancellation_draft(
         original_invoice_id=original_invoice.id,
         reason="Fehlerhafte Abrechnung",
     )
+
+    assert len(cancellation.items) == 3
 
     cancellation = finalize_cancellation(
         database_session,
@@ -1102,6 +1191,14 @@ def test_finalizes_cancellation_draft(
         original_finalized_at
     )
     assert original_invoice.cancelled_at is None
+
+    for charging_session in charging_sessions:
+        database_session.refresh(
+            charging_session
+        )
+
+        assert charging_session.invoiced is False
+        assert charging_session.invoice_id is None
 
 
 def test_rejects_second_cancellation_finalization(

@@ -311,6 +311,7 @@ def finalize_cancellation(
             "Ein Storno ohne Positionen kann "
             "nicht finalisiert werden."
         )
+
     charging_sessions = []
 
     for cancellation_item in cancellation.items:
@@ -318,41 +319,44 @@ def finalize_cancellation(
             cancellation_item.reversed_invoice_item
         )
 
-    if original_item is None:
-        raise InvoiceCancellationStateError(
-            "Eine Stornoposition besitzt keine "
-            "zugehörige Originalposition."
+        if original_item is None:
+            raise InvoiceCancellationStateError(
+                "Eine Stornoposition besitzt keine "
+                "zugehörige Originalposition."
+            )
+
+        if (
+            original_item.invoice_id
+            != original_invoice.id
+        ):
+            raise InvoiceCancellationStateError(
+                "Eine Stornoposition verweist nicht "
+                "auf die Originalrechnung."
+            )
+
+        charging_session = (
+            original_item.charging_session
         )
 
-    if original_item.invoice_id != original_invoice.id:
-        raise InvoiceCancellationStateError(
-            "Eine Stornoposition verweist nicht "
-            "auf die Originalrechnung."
+        if charging_session is None:
+            raise InvoiceCancellationStateError(
+                "Der Originalposition ist kein "
+                "Ladevorgang zugeordnet."
+            )
+
+        if (
+            not charging_session.invoiced
+            or charging_session.invoice_id
+            != original_invoice.id
+        ):
+            raise InvoiceCancellationStateError(
+                "Der Ladevorgang ist nicht mehr "
+                "der Originalrechnung zugeordnet."
+            )
+
+        charging_sessions.append(
+            charging_session
         )
-
-    charging_session = (
-        original_item.charging_session
-    )
-
-    if charging_session is None:
-        raise InvoiceCancellationStateError(
-            "Der Originalposition ist kein "
-            "Ladevorgang zugeordnet."
-        )
-
-    if (
-        not charging_session.invoiced
-        or charging_session.invoice_id
-        != original_invoice.id
-    ):
-        raise InvoiceCancellationStateError(
-            "Der Ladevorgang ist nicht mehr "
-            "der Originalrechnung zugeordnet."
-        )
-
-    charging_sessions.append(
-        charging_session
-    )
 
     timestamp = utc_now()
 
