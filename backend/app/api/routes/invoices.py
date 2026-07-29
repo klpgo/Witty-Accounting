@@ -18,6 +18,9 @@ from sqlalchemy.orm import (
 from app.api.dependencies import get_db
 from app.auth import require_admin
 from app.models.invoice import Invoice
+from app.models.monthly_base_fee_charge import (
+    MonthlyBaseFeeCharge,
+)
 from app.schemas.invoice import (
     InvoiceDraftCreate,
     InvoiceFinalizeRequest,
@@ -49,6 +52,7 @@ from app.services.invoicing import (
     create_invoice_draft,
     finalize_invoice,
     InvoiceDraftError,
+    InvoiceItemStateError,
 )
 
 from app.services.invoice_archive import (
@@ -148,6 +152,7 @@ def create_draft(
         NoBillableSessionsError,
         MissingEnergyPriceError,
         InvalidChargingSessionError,
+        InvoiceItemStateError,
     ) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -315,6 +320,25 @@ def delete_invoice_draft(
         )
 
     try:
+        base_fee_charges = list(
+            db.scalars(
+                select(MonthlyBaseFeeCharge)
+                .where(
+                    MonthlyBaseFeeCharge.invoice_id
+                    == invoice.id
+                )
+                .with_for_update()
+            ).all()
+        )
+
+        for base_fee_charge in base_fee_charges:
+            base_fee_charge.invoice_id = None
+            base_fee_charge.invoiced = False
+
+        # Der Foreign Key der Grundgebühr verwendet
+        # ON DELETE RESTRICT. Daher zuerst freigeben.
+        db.flush()
+
         db.delete(invoice)
         db.commit()
     except Exception:

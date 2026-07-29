@@ -587,14 +587,78 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
         ]
     ]
 
+    base_fee_row_indices: list[int] = []
+
     for item in invoice.items:
+        if item.item_type == "monthly_base_fee":
+            base_fee_row_indices.append(
+                len(item_rows)
+            )
+
+            item_rows.append(
+                [
+                    str(item.position_number),
+                    Paragraph(
+                        multiline_text(
+                            item.description
+                        ),
+                        body_style,
+                    ),
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    format_decimal(
+                        item.net_amount,
+                        2,
+                    ),
+                    format_decimal(
+                        item.vat_rate,
+                        2,
+                    ),
+                    format_decimal(
+                        item.gross_amount,
+                        2,
+                    ),
+                ]
+            )
+            continue
+
+        if item.item_type != "charging_session":
+            raise IncompleteInvoicePdfDataError(
+                "Die Rechnungsposition "
+                f"{item.id} besitzt den "
+                f"unbekannten Typ "
+                f"{item.item_type!r}."
+            )
+
+        if any(
+            value is None
+            for value in (
+                item.session_start,
+                item.station_id,
+                item.energy_total_kwh,
+                item.energy_grid_kwh,
+                item.energy_pv_kwh,
+                item.grid_price_net,
+                item.pv_price_net,
+            )
+        ):
+            raise IncompleteInvoicePdfDataError(
+                "Für die Ladeposition "
+                f"{item.id} fehlen "
+                "abrechnungsrelevante Daten."
+            )
+
         item_rows.append(
             [
                 str(item.position_number),
                 item.session_start.strftime(
                     "%d.%m.%Y"
                 ),
-                str(item.station_id),
+                item.station_id,
                 format_energy(
                     item.energy_total_kwh
                 ),
@@ -744,6 +808,25 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
             ]
         )
     )
+
+    for row_index in base_fee_row_indices:
+        items_table.setStyle(
+            TableStyle(
+                [
+                    (
+                        "SPAN",
+                        (1, row_index),
+                        (7, row_index),
+                    ),
+                    (
+                        "ALIGN",
+                        (1, row_index),
+                        (7, row_index),
+                        "LEFT",
+                    ),
+                ]
+            )
+        )
 
     story.append(items_table)
     story.append(Spacer(1, 8 * mm))

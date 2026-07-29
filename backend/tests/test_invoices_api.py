@@ -21,8 +21,12 @@ from app.api.dependencies import get_db
 from app.auth import require_admin
 from app.database import Base
 from app.main import app
+from app.models.global_settings import GlobalSettings
 from app.models.charging_session import (
     ChargingSession,
+)
+from app.models.monthly_base_fee_charge import (
+    MonthlyBaseFeeCharge,
 )
 from app.models.energy_price import EnergyPrice
 from app.models.rfid_card import RFIDCard
@@ -32,6 +36,8 @@ from app.models.rfid_card_assignment import (
 from app.models.user import User
 
 from app.models.invoice import Invoice, InvoiceItem
+
+from app.services.invoicing import create_invoice_draft
 
 
 @pytest.fixture
@@ -206,6 +212,71 @@ def test_creates_invoice_draft(
     assert body["items"][0][
         "energy_grid_kwh"
     ] == "6.0000"
+
+
+def test_creates_base_fee_only_draft_via_api(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("10.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.commit()
+
+    response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-07-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-08-01T00:00:00"
+            ),
+        },
+    )
+
+    assert response.status_code == 201
+
+    body = response.json()
+
+    assert body["status"] == "draft"
+    assert body["total_net"] == "10.00"
+    assert body["vat_amount"] == "1.90"
+    assert body["total_gross"] == "11.90"
+    assert len(body["items"]) == 1
+
+    item = body["items"][0]
+
+    assert item["item_type"] == "monthly_base_fee"
+    assert item["monthly_base_fee_charge_id"] is not None
+    assert item["charging_session_id"] is None
+    assert item["description"] == (
+        "Monatliche Grundgebühr RFID-Karte "
+        "BILLING-CARD – Juli 2026"
+    )
+    assert item["session_start"] is None
+    assert item["session_end"] is None
+    assert item["station_id"] is None
+    assert item["energy_total_kwh"] is None
+    assert item["energy_grid_kwh"] is None
+    assert item["energy_pv_kwh"] is None
+    assert item["grid_price_net"] is None
+    assert item["pv_price_net"] is None
+    assert item["cost_grid_net"] is None
+    assert item["cost_pv_net"] is None
+    assert item["net_amount"] == "10.0000"
+    assert item["vat_rate"] == "19.00"
+    assert item["vat_amount"] == "1.90"
+    assert item["gross_amount"] == "11.90"
 
 
 def test_create_draft_rejects_missing_recipient_address(
@@ -1108,6 +1179,110 @@ def test_deletes_invoice_draft(
     )
 
     assert remaining_items == []
+
+
+def test_deleting_draft_releases_monthly_base_fee(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user, _ = create_billable_session(
+        database_session
+    )
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("10.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.commit()
+
+    draft = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            7,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            8,
+            1,
+        ),
+    )
+
+    assert len(draft.items) == 1
+
+    original_invoice_id = draft.id
+    charge_id = (
+        draft.items[0]
+        .monthly_base_fee_charge_id
+    )
+
+    assert charge_id is not None
+
+    response = client.delete(
+        f"/invoices/{original_invoice_id}"
+    )
+
+    assert response.status_code == 204
+
+    assert database_session.get(
+        Invoice,
+        original_invoice_id,
+    ) is None
+
+    charge = database_session.get(
+        MonthlyBaseFeeCharge,
+        charge_id,
+    )
+
+    assert charge is not None
+    assert charge.invoice_id is None
+    assert charge.invoiced is False
+
+    remaining_items = list(
+        database_session.scalars(
+            select(InvoiceItem).where(
+                InvoiceItem.invoice_id
+                == original_invoice_id
+            )
+        ).all()
+    )
+
+    assert remaining_items == []
+
+    replacement_draft = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            7,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            8,
+            1,
+        ),
+    )
+
+    assert len(replacement_draft.items) == 1
+    assert (
+        replacement_draft.items[0]
+        .monthly_base_fee_charge_id
+        == charge_id
+    )
+
+    charge_ids = list(
+        database_session.scalars(
+            select(MonthlyBaseFeeCharge.id)
+        ).all()
+    )
+
+    assert charge_ids == [charge_id]
 
 
 def test_rejects_deleting_finalized_invoice(

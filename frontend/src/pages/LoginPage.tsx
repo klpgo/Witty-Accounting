@@ -8,8 +8,10 @@ import {
 } from 'react-router-dom'
 
 import { useAuth } from '../auth/useAuth'
+import { useAppSettings } from '../settings/useAppSettings'
 
 function LoginPage() {
+  const { appName } = useAppSettings()
   const navigate = useNavigate()
   const {
     signIn,
@@ -44,7 +46,7 @@ function LoginPage() {
       <main className="page page-centered">
         <section className="card loading-card">
           <p className="eyebrow">
-            Witty Accounting
+            {appName}
           </p>
 
           <h1>Sitzung wird geprüft</h1>
@@ -89,7 +91,7 @@ function LoginPage() {
     <main className="page page-centered">
       <section className="card login-card">
         <p className="eyebrow">
-          Witty Accounting
+          {appName}
         </p>
 
         <h1>Anmeldung</h1>

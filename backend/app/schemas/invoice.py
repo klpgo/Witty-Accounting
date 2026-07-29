@@ -21,21 +21,23 @@ class InvoiceItemResponse(BaseModel):
     )
 
     id: int
+    item_type: str
+    monthly_base_fee_charge_id: int | None
     charging_session_id: int | None
     reversed_invoice_item_id: int | None
     rebills_invoice_item_id: int | None
     position_number: int
     description: str
-    session_start: datetime
-    session_end: datetime
-    station_id: str
-    energy_total_kwh: Decimal
-    energy_grid_kwh: Decimal
-    energy_pv_kwh: Decimal
-    grid_price_net: Decimal
-    pv_price_net: Decimal
-    cost_grid_net: Decimal
-    cost_pv_net: Decimal
+    session_start: datetime | None
+    session_end: datetime | None
+    station_id: str | None
+    energy_total_kwh: Decimal | None
+    energy_grid_kwh: Decimal | None
+    energy_pv_kwh: Decimal | None
+    grid_price_net: Decimal | None
+    pv_price_net: Decimal | None
+    cost_grid_net: Decimal | None
+    cost_pv_net: Decimal | None
     net_amount: Decimal
     vat_rate: Decimal
     vat_amount: Decimal

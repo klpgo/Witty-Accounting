@@ -1,4 +1,4 @@
-from app.database import Base
+from app.database import Base, DATABASE_URL
 from app.models import import_state, invoice
 
 from logging.config import fileConfig
@@ -42,7 +42,10 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = (
+        config.get_main_option("sqlalchemy.url")
+        or DATABASE_URL
+    )
     context.configure(
         url=url,
         target_metadata=target_metadata,

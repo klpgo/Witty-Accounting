@@ -61,6 +61,8 @@ def create_finalized_invoice() -> Invoice:
         InvoiceItem(
             id=1,
             invoice_id=1,
+            item_type="charging_session",
+            monthly_base_fee_charge_id=None,
             charging_session_id=1,
             position_number=1,
             description="Ladevorgang",
@@ -149,6 +151,76 @@ def test_builds_readable_invoice_pdf() -> None:
         "Zahlbar bis 19.07.2026"
         in extracted_text
     )
+
+
+def test_builds_monthly_base_fee_invoice_pdf() -> None:
+    invoice = create_finalized_invoice()
+
+    invoice.service_period_start = datetime(
+        2026,
+        7,
+        1,
+    )
+    invoice.service_period_end = datetime(
+        2026,
+        8,
+        1,
+    )
+    invoice.total_net = Decimal("10.00")
+    invoice.vat_amount = Decimal("1.90")
+    invoice.total_gross = Decimal("11.90")
+
+    invoice.items = [
+        InvoiceItem(
+            id=2,
+            invoice_id=invoice.id,
+            item_type="monthly_base_fee",
+            monthly_base_fee_charge_id=1,
+            charging_session_id=None,
+            reversed_invoice_item_id=None,
+            rebills_invoice_item_id=None,
+            position_number=1,
+            description=(
+                "Monatliche Grundgebühr RFID-Karte "
+                "BASE-FEE-CARD – Juli 2026"
+            ),
+            session_start=None,
+            session_end=None,
+            station_id=None,
+            energy_total_kwh=None,
+            energy_grid_kwh=None,
+            energy_pv_kwh=None,
+            grid_price_net=None,
+            pv_price_net=None,
+            cost_grid_net=None,
+            cost_pv_net=None,
+            net_amount=Decimal("10.0000"),
+            vat_rate=Decimal("19.00"),
+            vat_amount=Decimal("1.90"),
+            gross_amount=Decimal("11.90"),
+        )
+    ]
+
+    pdf_bytes = build_invoice_pdf(invoice)
+
+    assert pdf_bytes.startswith(b"%PDF-")
+    assert len(pdf_bytes) > 1000
+
+    reader = PdfReader(
+        BytesIO(pdf_bytes)
+    )
+
+    extracted_text = "\n".join(
+        page.extract_text() or ""
+        for page in reader.pages
+    )
+
+    assert "Monatliche Grundgebühr" in extracted_text
+    assert "BASE-FEE-CARD" in extracted_text
+    assert "Juli 2026" in extracted_text
+    assert "10,00" in extracted_text
+    assert "19,00" in extracted_text
+    assert "11,90" in extracted_text
 
 
 def test_rejects_draft_invoice() -> None:

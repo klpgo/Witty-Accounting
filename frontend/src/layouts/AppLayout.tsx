@@ -5,14 +5,26 @@ import {
 } from 'react-router-dom'
 
 import { useAuth } from '../auth/useAuth'
+import { useAppSettings } from '../settings/useAppSettings'
 
 function AppLayout() {
+  const { appName } = useAppSettings()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
 
   const displayName = user
     ? `${user.first_name} ${user.last_name}`.trim()
     : 'Administrator'
+
+  const brandMark =
+    appName
+      .split(/[\s-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) =>
+        part.charAt(0).toUpperCase(),
+      )
+      .join('') || 'WA'
 
   function handleSignOut(): void {
     signOut()
@@ -28,11 +40,11 @@ function AppLayout() {
         <div className="app-header-content">
           <div className="app-brand">
             <span className="app-brand-mark">
-              WA
+              {brandMark}
             </span>
 
             <div>
-              <strong>Witty Accounting</strong>
+              <strong>{appName}</strong>
 
               <span>
                 Verwaltungsoberfläche
@@ -84,6 +96,16 @@ function AppLayout() {
               }
             >
               RFID-Karten
+            </NavLink>
+            <NavLink
+              to="/admin/settings"
+              className={({ isActive }) =>
+                isActive
+                  ? 'nav-link nav-link-active'
+                  : 'nav-link'
+              }
+            >
+              Einstellungen
             </NavLink>
           </nav>
 

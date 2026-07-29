@@ -130,6 +130,10 @@ def create_cancellation_draft(
     for original_item in original_invoice.items:
         cancellation.items.append(
             InvoiceItem(
+                item_type=original_item.item_type,
+                monthly_base_fee_charge_id=(
+                    original_item.monthly_base_fee_charge_id
+                ),
                 charging_session_id=None,
                 reversed_invoice_item_id=original_item.id,
                 rebills_invoice_item_id=None,
@@ -143,12 +147,21 @@ def create_cancellation_draft(
                 station_id=original_item.station_id,
                 energy_total_kwh=(
                     -original_item.energy_total_kwh
+                    if original_item.energy_total_kwh
+                    is not None
+                    else None
                 ),
                 energy_grid_kwh=(
                     -original_item.energy_grid_kwh
+                    if original_item.energy_grid_kwh
+                    is not None
+                    else None
                 ),
                 energy_pv_kwh=(
                     -original_item.energy_pv_kwh
+                    if original_item.energy_pv_kwh
+                    is not None
+                    else None
                 ),
                 grid_price_net=(
                     original_item.grid_price_net
@@ -158,9 +171,15 @@ def create_cancellation_draft(
                 ),
                 cost_grid_net=(
                     -original_item.cost_grid_net
+                    if original_item.cost_grid_net
+                    is not None
+                    else None
                 ),
                 cost_pv_net=(
                     -original_item.cost_pv_net
+                    if original_item.cost_pv_net
+                    is not None
+                    else None
                 ),
                 net_amount=(
                     -original_item.net_amount
@@ -255,6 +274,13 @@ def finalize_cancellation(
             .selectinload(
                 InvoiceItem.charging_session
             ),
+            selectinload(Invoice.items)
+            .selectinload(
+                InvoiceItem.reversed_invoice_item
+            )
+            .selectinload(
+                InvoiceItem.monthly_base_fee_charge
+            ),
             selectinload(
                 Invoice.original_invoice
             ),
@@ -313,6 +339,7 @@ def finalize_cancellation(
         )
 
     charging_sessions = []
+    monthly_base_fee_charges = []
 
     for cancellation_item in cancellation.items:
         original_item = (
@@ -334,28 +361,84 @@ def finalize_cancellation(
                 "auf die Originalrechnung."
             )
 
-        charging_session = (
-            original_item.charging_session
-        )
-
-        if charging_session is None:
-            raise InvoiceCancellationStateError(
-                "Der Originalposition ist kein "
-                "Ladevorgang zugeordnet."
-            )
-
         if (
-            not charging_session.invoiced
-            or charging_session.invoice_id
-            != original_invoice.id
+            cancellation_item.item_type
+            != original_item.item_type
         ):
             raise InvoiceCancellationStateError(
-                "Der Ladevorgang ist nicht mehr "
-                "der Originalrechnung zugeordnet."
+                "Der Typ der Stornoposition stimmt "
+                "nicht mit der Originalposition "
+                "überein."
             )
 
-        charging_sessions.append(
-            charging_session
+        if original_item.item_type == "charging_session":
+            charging_session = (
+                original_item.charging_session
+            )
+
+            if charging_session is None:
+                raise InvoiceCancellationStateError(
+                    "Der Originalposition ist kein "
+                    "Ladevorgang zugeordnet."
+                )
+
+            if (
+                not charging_session.invoiced
+                or charging_session.invoice_id
+                != original_invoice.id
+            ):
+                raise InvoiceCancellationStateError(
+                    "Der Ladevorgang ist nicht mehr "
+                    "der Originalrechnung zugeordnet."
+                )
+
+            charging_sessions.append(
+                charging_session
+            )
+            continue
+
+        if original_item.item_type == "monthly_base_fee":
+            base_fee_charge = (
+                original_item.monthly_base_fee_charge
+            )
+
+            if base_fee_charge is None:
+                raise InvoiceCancellationStateError(
+                    "Der Originalposition ist keine "
+                    "Grundgebühr zugeordnet."
+                )
+
+            if (
+                cancellation_item
+                .monthly_base_fee_charge_id
+                != base_fee_charge.id
+            ):
+                raise InvoiceCancellationStateError(
+                    "Die Stornoposition verweist nicht "
+                    "auf die Grundgebühr der "
+                    "Originalposition."
+                )
+
+            if (
+                not base_fee_charge.invoiced
+                or base_fee_charge.invoice_id
+                != original_invoice.id
+            ):
+                raise InvoiceCancellationStateError(
+                    "Die Grundgebühr ist nicht mehr "
+                    "der Originalrechnung zugeordnet."
+                )
+
+            monthly_base_fee_charges.append(
+                base_fee_charge
+            )
+            continue
+
+        raise InvoiceCancellationStateError(
+            "Die Originalposition "
+            f"{original_item.id} besitzt den "
+            f"unbekannten Typ "
+            f"{original_item.item_type!r}."
         )
 
     timestamp = utc_now()
@@ -375,6 +458,12 @@ def finalize_cancellation(
     for charging_session in charging_sessions:
         charging_session.invoiced = False
         charging_session.invoice_id = None
+
+    for base_fee_charge in (
+        monthly_base_fee_charges
+    ):
+        base_fee_charge.invoiced = False
+        base_fee_charge.invoice_id = None
 
     try:
         db.commit()

@@ -241,6 +241,24 @@ class InvoiceItem(Base):
         index=True,
     )
 
+    item_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="charging_session",
+        server_default="charging_session",
+    )
+
+    monthly_base_fee_charge_id: Mapped[
+        int | None
+    ] = mapped_column(
+        ForeignKey(
+            "monthly_base_fee_charges.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
+
     charging_session_id: Mapped[
         int | None
     ] = mapped_column(
@@ -285,52 +303,52 @@ class InvoiceItem(Base):
 
     session_start: Mapped[datetime] = mapped_column(
         DateTime,
-        nullable=False,
+        nullable=True,
     )
 
     session_end: Mapped[datetime] = mapped_column(
         DateTime,
-        nullable=False,
+        nullable=True,
     )
 
     station_id: Mapped[str] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
     )
 
     energy_total_kwh: Mapped[Decimal] = mapped_column(
         Numeric(12, 4),
-        nullable=False,
+        nullable=True,
     )
 
     energy_grid_kwh: Mapped[Decimal] = mapped_column(
         Numeric(12, 4),
-        nullable=False,
+        nullable=True,
     )
 
     energy_pv_kwh: Mapped[Decimal] = mapped_column(
         Numeric(12, 4),
-        nullable=False,
+        nullable=True,
     )
 
     grid_price_net: Mapped[Decimal] = mapped_column(
         Numeric(10, 4),
-        nullable=False,
+        nullable=True,
     )
 
     pv_price_net: Mapped[Decimal] = mapped_column(
         Numeric(10, 4),
-        nullable=False,
+        nullable=True,
     )
 
     cost_grid_net: Mapped[Decimal] = mapped_column(
         Numeric(12, 4),
-        nullable=False,
+        nullable=True,
     )
 
     cost_pv_net: Mapped[Decimal] = mapped_column(
         Numeric(12, 4),
-        nullable=False,
+        nullable=True,
     )
 
     net_amount: Mapped[Decimal] = mapped_column(
@@ -360,6 +378,11 @@ class InvoiceItem(Base):
 
     charging_session = relationship(
         "ChargingSession",
+        back_populates="invoice_items",
+    )
+
+    monthly_base_fee_charge = relationship(
+        "MonthlyBaseFeeCharge",
         back_populates="invoice_items",
     )
 

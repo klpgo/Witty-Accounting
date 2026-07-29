@@ -32,6 +32,12 @@ class EnergyPriceCreate(BaseModel):
     vat_rate: VatDecimal
 
 
+class CurrentEnergyPriceUpdate(BaseModel):
+    grid_price_net: PriceDecimal
+    pv_price_net: PriceDecimal
+    vat_rate: VatDecimal
+
+
 class EnergyPriceRead(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,

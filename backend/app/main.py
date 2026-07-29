@@ -20,6 +20,9 @@ from app.api.routes.invoices import (
 from app.api.routes.users import (
     router as users_router,
 )
+from app.api.routes.settings import (
+    router as settings_router,
+)
 from app.config import settings
 from app.database import engine
 from app.logging_config import setup_logging
@@ -64,6 +67,7 @@ app.include_router(auth_router)
 app.include_router(invoices_router)
 app.include_router(users_router)
 app.include_router(rfid_cards_router)
+app.include_router(settings_router)
 
 @app.get("/")
 def root() -> dict[str, str]:

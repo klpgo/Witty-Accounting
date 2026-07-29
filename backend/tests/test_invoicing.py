@@ -25,6 +25,12 @@ from app.services.invoicing import (
     NoBillableSessionsError,
     create_invoice_draft,
     finalize_invoice,
+    find_monthly_base_fee_assignments,
+    InvoiceItemStateError,
+)
+from app.models.global_settings import GlobalSettings
+from app.models.monthly_base_fee_charge import (
+    MonthlyBaseFeeCharge,
 )
 
 from app.services.invoice_cancellation import (
@@ -664,6 +670,54 @@ def test_finalizes_invoice_and_locks_session(
     assert charging_session.invoiced is True
     assert charging_session.invoice_id == invoice.id
 
+
+def test_uses_global_payment_term_for_due_date(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            app_name="Witty-Accounting",
+            monthly_base_fee_net=Decimal("0.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+            invoice_payment_term_days=14,
+        )
+    )
+    database_session.flush()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    finalized_invoice = finalize_invoice(
+        database_session,
+        invoice_id=invoice.id,
+        issue_date=date(2026, 7, 5),
+    )
+
+    assert finalized_invoice.issue_date == date(
+        2026,
+        7,
+        5,
+    )
+    assert finalized_invoice.due_date == date(
+        2026,
+        7,
+        19,
+    )
 
 def test_cannot_finalize_invoice_twice(
     database_session: Session,
@@ -1353,3 +1407,453 @@ def test_rejects_cancellation_date_before_invoice_date(
     assert cancellation.issue_date is None
     assert cancellation.finalized_at is None
     assert cancellation.cancelled_at is None
+
+
+def test_finds_assignment_for_each_month_start(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    assignments = (
+        find_monthly_base_fee_assignments(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(
+                2026,
+                6,
+                1,
+            ),
+            service_period_end=datetime(
+                2026,
+                8,
+                1,
+            ),
+        )
+    )
+
+    assert [
+        (
+            assignment.rfid_card.rfid_number,
+            fee_month,
+        )
+        for assignment, fee_month in assignments
+    ] == [
+        (
+            "INVOICE-CARD",
+            date(2026, 6, 1),
+        ),
+        (
+            "INVOICE-CARD",
+            date(2026, 7, 1),
+        ),
+    ]
+
+
+def test_monthly_assignment_uses_half_open_period(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    assignment = database_session.scalar(
+        select(RFIDCardAssignment).where(
+            RFIDCardAssignment.user_id
+            == user.id
+        )
+    )
+
+    assert assignment is not None
+
+    assignment.valid_from = datetime(
+        2026,
+        6,
+        15,
+    )
+    assignment.valid_to = datetime(
+        2026,
+        8,
+        1,
+    )
+    database_session.flush()
+
+    assignments = (
+        find_monthly_base_fee_assignments(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(
+                2026,
+                6,
+                1,
+            ),
+            service_period_end=datetime(
+                2026,
+                9,
+                1,
+            ),
+        )
+    )
+
+    assert [
+        fee_month
+        for _, fee_month in assignments
+    ] == [
+        date(2026, 7, 1),
+    ]
+
+
+def test_creates_base_fee_only_invoice_draft(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("10.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.flush()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            7,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            8,
+            1,
+        ),
+    )
+
+    assert len(invoice.items) == 1
+
+    item = invoice.items[0]
+
+    assert item.item_type == "monthly_base_fee"
+    assert item.charging_session_id is None
+    assert item.monthly_base_fee_charge_id is not None
+    assert item.description == (
+        "Monatliche Grundgebühr RFID-Karte "
+        "INVOICE-CARD – Juli 2026"
+    )
+    assert item.session_start is None
+    assert item.energy_total_kwh is None
+    assert item.net_amount == Decimal("10.0000")
+    assert item.vat_amount == Decimal("1.90")
+    assert item.gross_amount == Decimal("11.90")
+
+    assert invoice.total_net == Decimal("10.00")
+    assert invoice.vat_amount == Decimal("1.90")
+    assert invoice.total_gross == Decimal("11.90")
+
+    charge = database_session.scalar(
+        select(MonthlyBaseFeeCharge)
+    )
+
+    assert charge is not None
+    assert charge.rfid_card_id == (
+        item.monthly_base_fee_charge.rfid_card_id
+    )
+    assert charge.fee_month == date(2026, 7, 1)
+    assert charge.invoice_id == invoice.id
+    assert charge.invoiced is False
+
+    with pytest.raises(
+        NoBillableSessionsError
+    ):
+        create_invoice_draft(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(
+                2026,
+                7,
+                1,
+            ),
+            service_period_end=datetime(
+                2026,
+                8,
+                1,
+            ),
+        )
+
+
+def test_zero_base_fee_creates_no_invoice_item(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("0.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.flush()
+
+    with pytest.raises(
+        NoBillableSessionsError
+    ):
+        create_invoice_draft(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(
+                2026,
+                7,
+                1,
+            ),
+            service_period_end=datetime(
+                2026,
+                8,
+                1,
+            ),
+        )
+
+    assert database_session.scalar(
+        select(MonthlyBaseFeeCharge.id)
+    ) is None
+
+
+def test_finalizes_monthly_base_fee_charge(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("10.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.flush()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            7,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            8,
+            1,
+        ),
+    )
+
+    item = invoice.items[0]
+    charge = item.monthly_base_fee_charge
+
+    assert charge is not None
+    assert charge.invoice_id == invoice.id
+    assert charge.invoiced is False
+
+    finalized_invoice = finalize_invoice(
+        database_session,
+        invoice_id=invoice.id,
+        issue_date=date(2026, 8, 5),
+        due_date=date(2026, 8, 5),
+    )
+
+    database_session.refresh(charge)
+
+    assert finalized_invoice.status == "finalized"
+    assert charge.invoice_id == invoice.id
+    assert charge.invoiced is True
+
+
+def test_rejects_unreserved_monthly_base_fee(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("10.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.flush()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            7,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            8,
+            1,
+        ),
+    )
+
+    charge = (
+        invoice.items[0]
+        .monthly_base_fee_charge
+    )
+
+    assert charge is not None
+
+    charge.invoice_id = None
+    database_session.flush()
+
+    with pytest.raises(
+        InvoiceItemStateError
+    ):
+        finalize_invoice(
+            database_session,
+            invoice_id=invoice.id,
+            issue_date=date(2026, 8, 5),
+            due_date=date(2026, 8, 5),
+        )
+
+
+def test_cancels_and_rebills_monthly_base_fee(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("10.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.flush()
+
+    original_invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            7,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            8,
+            1,
+        ),
+    )
+
+    assert len(original_invoice.items) == 1
+
+    original_item = original_invoice.items[0]
+    charge = original_item.monthly_base_fee_charge
+
+    assert charge is not None
+
+    original_item_id = original_item.id
+    charge_id = charge.id
+
+    finalize_invoice(
+        database_session,
+        invoice_id=original_invoice.id,
+        issue_date=date(2026, 8, 5),
+        due_date=date(2026, 8, 5),
+    )
+
+    database_session.refresh(charge)
+
+    assert charge.invoiced is True
+    assert charge.invoice_id == original_invoice.id
+
+    cancellation = create_cancellation_draft(
+        database_session,
+        original_invoice_id=original_invoice.id,
+        reason="Teststorno Grundgebühr",
+    )
+
+    assert len(cancellation.items) == 1
+
+    cancellation_item = cancellation.items[0]
+
+    assert (
+        cancellation_item.item_type
+        == "monthly_base_fee"
+    )
+    assert (
+        cancellation_item
+        .monthly_base_fee_charge_id
+        == charge_id
+    )
+    assert (
+        cancellation_item.reversed_invoice_item_id
+        == original_item_id
+    )
+    assert cancellation_item.charging_session_id is None
+    assert cancellation_item.session_start is None
+    assert cancellation_item.energy_total_kwh is None
+    assert cancellation_item.cost_grid_net is None
+    assert (
+        cancellation_item.net_amount
+        == Decimal("-10.0000")
+    )
+    assert (
+        cancellation_item.vat_amount
+        == Decimal("-1.90")
+    )
+    assert (
+        cancellation_item.gross_amount
+        == Decimal("-11.90")
+    )
+
+    finalize_cancellation(
+        database_session,
+        cancellation_id=cancellation.id,
+        issue_date=date(2026, 8, 6),
+    )
+
+    database_session.refresh(charge)
+
+    assert charge.invoiced is False
+    assert charge.invoice_id is None
+
+    rebill_invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            7,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            8,
+            1,
+        ),
+    )
+
+    assert len(rebill_invoice.items) == 1
+
+    rebill_item = rebill_invoice.items[0]
+
+    assert rebill_item.item_type == "monthly_base_fee"
+    assert (
+        rebill_item.monthly_base_fee_charge_id
+        == charge_id
+    )
+    assert (
+        rebill_item.rebills_invoice_item_id
+        == original_item_id
+    )
+
+    charges = list(
+        database_session.scalars(
+            select(MonthlyBaseFeeCharge)
+        ).all()
+    )
+
+    assert len(charges) == 1
+    assert charges[0].id == charge_id

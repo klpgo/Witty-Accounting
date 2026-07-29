@@ -825,3 +825,64 @@ select {
 .admin-users-table .button {
   padding: 8px 12px;
 }
+
+.settings-form {
+  display: grid;
+  gap: 2rem;
+}
+
+.settings-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.settings-section > h2 {
+  margin: 0;
+}
+
+.settings-section .form-field {
+  margin: 0;
+}
+
+.settings-name-field {
+  max-width: 48rem;
+}
+
+.settings-billing-grid {
+  grid-template-columns: repeat(
+    3,
+    minmax(0, 1fr)
+  );
+  align-items: start;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 1100px) {
+  .settings-billing-grid {
+    grid-template-columns: repeat(
+      2,
+      minmax(0, 1fr)
+    );
+  }
+
+  .settings-billing-grid
+    .form-field:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .settings-billing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-billing-grid
+    .form-field:last-child {
+    grid-column: auto;
+  }
+}

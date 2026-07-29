@@ -13,6 +13,7 @@ import InvoiceDetailPage from './pages/InvoiceDetailPage'
 import InvoiceDraftCreatePage from './pages/InvoiceDraftCreatePage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminRFIDCardsPage from './pages/AdminRFIDCardsPage'
+import AdminSettingsPage from './pages/AdminSettingsPage'
 
 function App() {
   return (
@@ -37,6 +38,11 @@ function App() {
           <Route
             path="admin/rfid-cards"
             element={<AdminRFIDCardsPage />}
+          />
+
+          <Route
+            path="admin/settings"
+            element={<AdminSettingsPage />}
           />
 
           <Route
