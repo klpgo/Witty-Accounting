@@ -10,6 +10,7 @@ from app.api.routes.energy_prices import (
     router as energy_prices_router,
 )
 from app.api.routes.rfid_cards import (
+    assignment_router,
     router as rfid_cards_router,
 )
 from app.api.routes.imports import router as imports_router
@@ -57,6 +58,7 @@ app.add_middleware(
 )
 
 app.include_router(imports_router)
+app.include_router(assignment_router)
 app.include_router(energy_prices_router)
 app.include_router(auth_router)
 app.include_router(invoices_router)

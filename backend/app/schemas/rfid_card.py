@@ -169,3 +169,48 @@ class RFIDCardAssignmentCreate(BaseModel):
             )
 
         return self
+
+
+class RFIDCardAssignmentUpdate(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid"
+    )
+
+    user_id: int | None = Field(
+        default=None,
+        gt=0,
+    )
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_update(self):
+        if (
+            "user_id" in self.model_fields_set
+            and self.user_id is None
+        ):
+            raise ValueError(
+                "Der Benutzer darf nicht leer sein."
+            )
+
+        if (
+            "valid_from" in self.model_fields_set
+            and self.valid_from is None
+        ):
+            raise ValueError(
+                "Der Beginn der Zuordnung darf "
+                "nicht leer sein."
+            )
+
+        if (
+            self.valid_from is not None
+            and "valid_to" in self.model_fields_set
+            and self.valid_to is not None
+            and self.valid_to <= self.valid_from
+        ):
+            raise ValueError(
+                "Das Ende der Zuordnung muss "
+                "nach ihrem Beginn liegen."
+            )
+
+        return self

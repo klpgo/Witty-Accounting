@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +11,7 @@ from app.api.dependencies import get_db
 from app.auth import create_access_token
 from app.database import Base
 from app.main import app
+from app.models.charging_session import ChargingSession
 from app.models.rfid_card import RFIDCard
 from app.models.rfid_card_assignment import (
     RFIDCardAssignment,
@@ -119,6 +120,56 @@ def create_card(
     db.refresh(card)
 
     return card
+
+
+def create_assignment(
+    db: Session,
+    *,
+    card: RFIDCard,
+    user: User,
+    valid_from: datetime,
+    valid_to: datetime | None = None,
+) -> RFIDCardAssignment:
+    assignment = RFIDCardAssignment(
+        rfid_card=card,
+        user=user,
+        valid_from=valid_from,
+        valid_to=valid_to,
+    )
+
+    db.add(assignment)
+    db.commit()
+    db.refresh(assignment)
+
+    return assignment
+
+
+def create_charging_session(
+    db: Session,
+    *,
+    card: RFIDCard,
+    assignment: RFIDCardAssignment,
+    start_time: datetime,
+    import_hash: str,
+) -> ChargingSession:
+    session = ChargingSession(
+        hager_session_id=None,
+        station_id="WB-TEST",
+        start_time=start_time,
+        end_time=start_time + timedelta(hours=1),
+        rfid_card=card,
+        rfid_assignment=assignment,
+        energy_total_kwh=10.0,
+        energy_pv_kwh=4.0,
+        import_hash=import_hash,
+        source="xlsx",
+    )
+
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+    return session
 
 
 def test_list_rfid_cards_requires_authentication(
@@ -762,3 +813,519 @@ def test_create_assignment_rejects_invalid_period(
     )
 
     assert response.status_code == 422
+
+
+def test_admin_updates_unused_assignment(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    first_user = create_user(
+        database_session,
+        email="first@example.com",
+        first_name="First",
+    )
+    second_user = create_user(
+        database_session,
+        email="second@example.com",
+        first_name="Second",
+    )
+    card = create_card(
+        database_session,
+        user=first_user,
+        rfid_number="PATCH1",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=first_user,
+        valid_from=datetime(2026, 1, 1),
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "user_id": second_user.id,
+            "valid_from": "2026-02-01T00:00:00",
+            "valid_to": "2026-03-01T00:00:00",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user_id"] == second_user.id
+    assert (
+        body["valid_from"]
+        == "2026-02-01T00:00:00"
+    )
+    assert (
+        body["valid_to"]
+        == "2026-03-01T00:00:00"
+    )
+
+    database_session.refresh(assignment)
+    assert assignment.user_id == second_user.id
+    assert assignment.valid_from == datetime(
+        2026,
+        2,
+        1,
+    )
+    assert assignment.valid_to == datetime(
+        2026,
+        3,
+        1,
+    )
+
+
+def test_admin_opens_assignment_period(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(
+        database_session,
+        user=admin,
+        rfid_number="PATCH2",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 1, 1),
+        valid_to=datetime(2026, 2, 1),
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "valid_to": None,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["valid_to"] is None
+
+    database_session.refresh(assignment)
+    assert assignment.valid_to is None
+
+
+def test_update_assignment_requires_admin(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="User",
+    )
+    card = create_card(
+        database_session,
+        user=user,
+        rfid_number="PATCH3",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=user,
+        valid_from=datetime(2026, 1, 1),
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(user),
+        json={
+            "valid_to": "2026-02-01T00:00:00",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_update_assignment_returns_404(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+
+    response = client.patch(
+        "/rfid-card-assignments/999999",
+        headers=authorization_header(admin),
+        json={
+            "valid_to": "2026-02-01T00:00:00",
+        },
+    )
+
+    assert response.status_code == 404
+    assert (
+        response.json()["detail"]
+        == (
+            "RFID-Zuordnung 999999 "
+            "wurde nicht gefunden."
+        )
+    )
+
+
+def test_update_assignment_returns_404_for_unknown_user(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(
+        database_session,
+        user=admin,
+        rfid_number="PATCH4",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 1, 1),
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "user_id": 999999,
+        },
+    )
+
+    assert response.status_code == 404
+    assert (
+        response.json()["detail"]
+        == "Benutzer 999999 wurde nicht gefunden."
+    )
+
+
+def test_update_assignment_rejects_overlap(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(
+        database_session,
+        user=admin,
+        rfid_number="PATCH5",
+    )
+    first_assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 1, 1),
+        valid_to=datetime(2026, 2, 1),
+    )
+    create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 2, 1),
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{first_assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "valid_to": "2026-03-01T00:00:00",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "überschneidet sich" in (
+        response.json()["detail"]
+    )
+
+
+def test_update_assignment_rejects_invalid_period(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(
+        database_session,
+        user=admin,
+        rfid_number="PATCH6",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 1, 1),
+        valid_to=datetime(2026, 2, 1),
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "valid_from": "2026-03-01T00:00:00",
+        },
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == (
+            "Das Ende der Zuordnung muss "
+            "nach ihrem Beginn liegen."
+        )
+    )
+
+
+def test_used_assignment_rejects_user_change(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    second_user = create_user(
+        database_session,
+        email="second@example.com",
+        first_name="Second",
+    )
+    card = create_card(
+        database_session,
+        user=admin,
+        rfid_number="PATCH7",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 1, 1),
+    )
+    create_charging_session(
+        database_session,
+        card=card,
+        assignment=assignment,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        import_hash="a" * 64,
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "user_id": second_user.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Benutzer" in response.json()["detail"]
+    assert "nicht geändert" in (
+        response.json()["detail"]
+    )
+
+
+def test_used_assignment_rejects_start_change(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(
+        database_session,
+        user=admin,
+        rfid_number="PATCH8",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 1, 1),
+    )
+    create_charging_session(
+        database_session,
+        card=card,
+        assignment=assignment,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        import_hash="b" * 64,
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "valid_from": "2026-02-01T00:00:00",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Beginn" in response.json()["detail"]
+    assert "nicht geändert" in (
+        response.json()["detail"]
+    )
+
+
+def test_used_assignment_rejects_end_excluding_session(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(
+        database_session,
+        user=admin,
+        rfid_number="PATCH9",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 1, 1),
+    )
+    session_start = datetime(
+        2026,
+        6,
+        15,
+        10,
+        0,
+    )
+    create_charging_session(
+        database_session,
+        card=card,
+        assignment=assignment,
+        start_time=session_start,
+        import_hash="c" * 64,
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "valid_to": (
+                "2026-06-15T10:00:00"
+            ),
+        },
+    )
+
+    assert response.status_code == 409
+    assert "Ladevorgänge" in (
+        response.json()["detail"]
+    )
+
+
+def test_used_assignment_allows_safe_end_change(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(
+        database_session,
+        user=admin,
+        rfid_number="PATCH10",
+    )
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 1, 1),
+    )
+    create_charging_session(
+        database_session,
+        card=card,
+        assignment=assignment,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        import_hash="d" * 64,
+    )
+
+    response = client.patch(
+        (
+            "/rfid-card-assignments/"
+            f"{assignment.id}"
+        ),
+        headers=authorization_header(admin),
+        json={
+            "valid_to": (
+                "2026-06-16T00:00:00"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.json()["valid_to"]
+        == "2026-06-16T00:00:00"
+    )
+
+    database_session.refresh(assignment)
+    assert assignment.valid_to == datetime(
+        2026,
+        6,
+        16,
+    )
