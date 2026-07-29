@@ -63,8 +63,28 @@ function AppLayout() {
                   : 'nav-link'
               }
             >
-  Rechnungen
-</NavLink>
+              Rechnungen
+            </NavLink>
+            <NavLink
+              to="/admin/users"
+              className={({ isActive }) =>
+                isActive
+                  ? 'nav-link nav-link-active'
+                  : 'nav-link'
+              }
+            >
+              Benutzer
+            </NavLink>
+            <NavLink
+              to="/admin/rfid-cards"
+              className={({ isActive }) =>
+                isActive
+                  ? 'nav-link nav-link-active'
+                  : 'nav-link'
+              }
+            >
+              RFID-Karten
+            </NavLink>
           </nav>
 
           <div className="user-menu">

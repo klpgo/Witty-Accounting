@@ -11,6 +11,8 @@ import LoginPage from './pages/LoginPage'
 import ProtectedRoute from './router/ProtectedRoute'
 import InvoiceDetailPage from './pages/InvoiceDetailPage'
 import InvoiceDraftCreatePage from './pages/InvoiceDraftCreatePage'
+import AdminUsersPage from './pages/AdminUsersPage'
+import AdminRFIDCardsPage from './pages/AdminRFIDCardsPage'
 
 function App() {
   return (
@@ -25,6 +27,16 @@ function App() {
           <Route
             index
             element={<DashboardPage />}
+          />
+
+          <Route
+            path="admin/users"
+            element={<AdminUsersPage />}
+          />
+
+          <Route
+            path="admin/rfid-cards"
+            element={<AdminRFIDCardsPage />}
           />
 
           <Route
