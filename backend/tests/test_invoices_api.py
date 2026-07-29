@@ -103,7 +103,6 @@ def create_billable_session(
     )
 
     card = RFIDCard(
-        user=user,
         rfid_number="BILLING-CARD",
         description="Rechnungstest",
         active=True,

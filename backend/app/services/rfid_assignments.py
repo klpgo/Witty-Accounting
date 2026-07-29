@@ -61,3 +61,48 @@ def resolve_rfid_assignment(
         return None
 
     return assignments[0]
+
+
+def ensure_rfid_assignment_period_available(
+    db: Session,
+    *,
+    rfid_card_id: int,
+    valid_from: datetime,
+    valid_to: datetime | None,
+    current_assignment_id: int | None = None,
+) -> None:
+    statement = select(
+        RFIDCardAssignment.id
+    ).where(
+        RFIDCardAssignment.rfid_card_id
+        == rfid_card_id,
+        or_(
+            RFIDCardAssignment.valid_to.is_(None),
+            RFIDCardAssignment.valid_to
+            > valid_from,
+        ),
+    )
+
+    if valid_to is not None:
+        statement = statement.where(
+            RFIDCardAssignment.valid_from
+            < valid_to
+        )
+
+    if current_assignment_id is not None:
+        statement = statement.where(
+            RFIDCardAssignment.id
+            != current_assignment_id
+        )
+
+    existing_assignment_id = db.scalar(
+        statement.limit(1)
+    )
+
+    if existing_assignment_id is not None:
+        raise RFIDAssignmentOverlapError(
+            "Der Zuordnungszeitraum "
+            "überschneidet sich mit einer "
+            "bestehenden Zuordnung dieser "
+            "RFID-Karte."
+        )

@@ -85,11 +85,6 @@ class User(Base):
         onupdate=utc_now
     )
 
-    rfid_cards = relationship(
-        "RFIDCard",
-        back_populates="user"
-    )
-
     rfid_assignments = relationship(
         "RFIDCardAssignment",
         back_populates="user",

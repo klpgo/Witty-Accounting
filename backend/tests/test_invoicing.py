@@ -77,7 +77,6 @@ def create_test_data(
     )
 
     rfid_card = RFIDCard(
-        user=user,
         rfid_number="INVOICE-CARD",
         description="Testkarte",
         active=True,
@@ -1035,22 +1034,18 @@ def test_finalizes_cancellation_draft(
 ) -> None:
     user = create_test_data(database_session)
 
-    rfid_card = database_session.scalar(
-        select(RFIDCard).where(
-            RFIDCard.user_id == user.id
-        )
-    )
-
-    assert rfid_card is not None
-
     rfid_assignment = database_session.scalar(
         select(RFIDCardAssignment).where(
-            RFIDCardAssignment.rfid_card_id
-            == rfid_card.id
+            RFIDCardAssignment.user_id
+            == user.id
         )
     )
 
     assert rfid_assignment is not None
+
+    rfid_card = rfid_assignment.rfid_card
+
+    assert rfid_card is not None
 
     database_session.add_all(
         [

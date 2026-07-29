@@ -9,6 +9,9 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.energy_prices import (
     router as energy_prices_router,
 )
+from app.api.routes.rfid_cards import (
+    router as rfid_cards_router,
+)
 from app.api.routes.imports import router as imports_router
 from app.api.routes.invoices import (
     router as invoices_router,
@@ -58,6 +61,7 @@ app.include_router(energy_prices_router)
 app.include_router(auth_router)
 app.include_router(invoices_router)
 app.include_router(users_router)
+app.include_router(rfid_cards_router)
 
 @app.get("/")
 def root() -> dict[str, str]:

@@ -66,7 +66,6 @@ def create_finalized_invoice(
     )
 
     card = RFIDCard(
-        user=user,
         rfid_number="ARCHIVE-CARD",
         description="Archivtest",
         active=True,

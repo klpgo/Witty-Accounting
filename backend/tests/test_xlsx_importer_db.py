@@ -95,7 +95,6 @@ def create_user_with_rfid(
     db.flush()
 
     rfid_card = RFIDCard(
-        user_id=user.id,
         rfid_number="6AA972EA",
         description="RFID Nr.1",
         active=True,

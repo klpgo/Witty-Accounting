@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -13,11 +13,6 @@ class RFIDCard(Base):
 
     id: Mapped[int] = mapped_column(
         primary_key=True
-    )
-
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"),
-        nullable=False
     )
 
     rfid_number: Mapped[str] = mapped_column(
@@ -45,11 +40,6 @@ class RFIDCard(Base):
         DateTime,
         default=utc_now,
         onupdate=utc_now
-    )
-
-    user = relationship(
-        "User",
-        back_populates="rfid_cards"
     )
 
     assignments = relationship(

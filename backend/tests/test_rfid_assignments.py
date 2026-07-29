@@ -74,7 +74,6 @@ def create_card(
     active: bool = True,
 ) -> RFIDCard:
     card = RFIDCard(
-        user_id=user.id,
         rfid_number="TEST-CARD",
         description="Testkarte",
         active=active,
