@@ -469,6 +469,74 @@ def test_changed_energy_price_creates_today_tariff(
     assert len(stored_prices) == 2
 
 
+def test_reset_today_to_previous_price_removes_today_tariff(
+    client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.api.routes.energy_prices.local_now",
+        lambda: datetime(2026, 7, 29, 18, 0),
+    )
+
+    previous_price = EnergyPrice(
+        valid_from=datetime(2026, 1, 1),
+        grid_price_net=Decimal("0.3000"),
+        pv_price_net=Decimal("0.1000"),
+        vat_rate=Decimal("19.00"),
+    )
+
+    database_session.add(previous_price)
+    database_session.commit()
+    database_session.refresh(previous_price)
+
+    changed_response = client.put(
+        "/energy-prices/current",
+        json={
+            "grid_price_net": "0.3500",
+            "pv_price_net": "0.1200",
+            "vat_rate": "19.00",
+        },
+    )
+
+    assert changed_response.status_code == 200
+    assert changed_response.json()["valid_from"] == (
+        "2026-07-29T00:00:00"
+    )
+
+    reset_response = client.put(
+        "/energy-prices/current",
+        json={
+            "grid_price_net": "0.3000",
+            "pv_price_net": "0.1000",
+            "vat_rate": "19.00",
+        },
+    )
+
+    assert reset_response.status_code == 200
+    assert reset_response.json()["id"] == (
+        previous_price.id
+    )
+    assert reset_response.json()["valid_from"] == (
+        "2026-01-01T00:00:00"
+    )
+
+    stored_prices = list(
+        database_session.scalars(
+            select(EnergyPrice).order_by(
+                EnergyPrice.valid_from
+            )
+        ).all()
+    )
+
+    assert len(stored_prices) == 1
+    assert stored_prices[0].id == previous_price.id
+    assert stored_prices[0].grid_price_net == Decimal(
+        "0.3000"
+    )
+
+
+
 def test_first_energy_price_starts_today(
     client: TestClient,
     database_session: Session,

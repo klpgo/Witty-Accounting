@@ -46,6 +46,20 @@ def find_current_energy_price(
     )
 
 
+def energy_price_matches(
+    energy_price: EnergyPrice,
+    data: CurrentEnergyPriceUpdate,
+) -> bool:
+    return (
+        energy_price.grid_price_net
+        == data.grid_price_net
+        and energy_price.pv_price_net
+        == data.pv_price_net
+        and energy_price.vat_rate
+        == data.vat_rate
+    )
+
+
 @router.get(
     "",
     response_model=list[EnergyPriceRead],
@@ -105,12 +119,10 @@ def update_current_energy_price(
 
     if (
         current_price is not None
-        and current_price.grid_price_net
-        == data.grid_price_net
-        and current_price.pv_price_net
-        == data.pv_price_net
-        and current_price.vat_rate
-        == data.vat_rate
+        and energy_price_matches(
+            current_price,
+            data,
+        )
     ):
         return current_price
 
@@ -138,15 +150,41 @@ def update_current_energy_price(
         )
 
     if today_prices:
-        energy_price = today_prices[0]
-        energy_price.valid_from = day_start
-        energy_price.grid_price_net = (
-            data.grid_price_net
+        today_price = today_prices[0]
+
+        previous_price = db.scalar(
+            select(EnergyPrice)
+            .where(
+                EnergyPrice.valid_from
+                < day_start
+            )
+            .order_by(
+                EnergyPrice.valid_from.desc()
+            )
+            .limit(1)
         )
-        energy_price.pv_price_net = (
-            data.pv_price_net
-        )
-        energy_price.vat_rate = data.vat_rate
+
+        if (
+            previous_price is not None
+            and energy_price_matches(
+                previous_price,
+                data,
+            )
+        ):
+            db.delete(today_price)
+            energy_price = previous_price
+        else:
+            energy_price = today_price
+            energy_price.valid_from = day_start
+            energy_price.grid_price_net = (
+                data.grid_price_net
+            )
+            energy_price.pv_price_net = (
+                data.pv_price_net
+            )
+            energy_price.vat_rate = (
+                data.vat_rate
+            )
     else:
         energy_price = EnergyPrice(
             valid_from=day_start,
