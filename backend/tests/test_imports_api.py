@@ -36,10 +36,15 @@ def test_upload_xlsx_returns_import_result(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import_calls = 0
+
     def fake_import(
         db: Any,
         path: str | Path,
     ) -> dict[str, Any]:
+        nonlocal import_calls
+        import_calls += 1
+
         temporary_path = Path(path)
 
         assert temporary_path.exists()
@@ -100,6 +105,7 @@ def test_upload_xlsx_returns_import_result(
     )
 
     assert response.status_code == 200, response.text
+    assert import_calls == 1
     assert response.json() == {
         "read": 2,
         "imported": 2,

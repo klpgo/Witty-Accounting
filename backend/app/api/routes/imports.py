@@ -109,11 +109,6 @@ def upload_xlsx(
                 detail="Die hochgeladene Datei ist leer.",
             )
 
-        result = import_xlsx_to_db(
-            db=db,
-            path=temporary_path,
-        )
-
         import_result = import_xlsx_to_db(
             db=db,
             path=temporary_path,
