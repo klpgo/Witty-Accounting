@@ -38,3 +38,5 @@ backend/tmp/
 /backend/data/invoices/
 
 backups/
+
+/secrets/

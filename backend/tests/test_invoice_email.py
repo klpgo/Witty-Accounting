@@ -29,6 +29,7 @@ from app.services.invoice_email import (
     InvoiceEmailStateError,
     send_invoice_email,
 )
+from app.services.smime import SmimeSigningError
 
 
 class FakeSMTP:
@@ -49,6 +50,9 @@ class FakeSMTP:
             ssl.SSLContext | None
         ) = None
         self.message: EmailMessage | None = None
+        self.mail_from: str | None = None
+        self.rcpt_tos: list[str] | None = None
+        self.raw_message: bytes | None = None
 
         self.instances.append(self)
 
@@ -83,11 +87,37 @@ class FakeSMTP:
         self.message = message
         return {}
 
+    def sendmail(
+        self,
+        from_addr: str,
+        to_addrs: list[str],
+        msg: str | bytes,
+    ) -> dict[str, tuple[int, bytes]]:
+        self.mail_from = from_addr
+        self.rcpt_tos = list(to_addrs)
+        self.raw_message = (
+            msg.encode()
+            if isinstance(msg, str)
+            else msg
+        )
+
+        return {}
+
 
 class FailingSMTP(FakeSMTP):
     def send_message(
         self,
         message: EmailMessage,
+    ) -> dict[str, tuple[int, bytes]]:
+        raise smtplib.SMTPException(
+            "Testfehler"
+        )
+
+    def sendmail(
+        self,
+        from_addr: str,
+        to_addrs: list[str],
+        msg: str | bytes,
     ) -> dict[str, tuple[int, bytes]]:
         raise smtplib.SMTPException(
             "Testfehler"
@@ -158,6 +188,21 @@ def configure_mail_settings(
         settings,
         "mail_from_name",
         "Klaus Gottschalk",
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_enabled",
+        False,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_path",
+        None,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_password_file",
+        None,
     )
 
 
@@ -393,7 +438,14 @@ def test_sends_archived_invoice_pdf(
         preferencelist=("plain",)
     )
 
-    assert plain_body is not None
+    assert plain_body.get_content() == (
+        "Guten Tag,\n\n"
+        "im Anhang erhalten Sie Ihre "
+        "Ladestrom-Rechnung RE-2026-000001 "
+        "als PDF-Datei.\n\n"
+        "Mit freundlichen Grüßen\n"
+        "Klaus Gottschalk\n"
+    )
     assert (
         "RE-2026-000001"
         in plain_body.get_content()
@@ -571,3 +623,294 @@ def test_uses_starttls_when_enabled(
         ssl.SSLContext,
     )
     assert smtp.ehlo_calls == 2
+
+
+def test_sends_signed_message_when_smime_enabled(
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice = create_finalized_invoice(
+        database_session
+    )
+    archive_invoice(
+        database_session,
+        invoice,
+        tmp_path,
+    )
+
+    pkcs12_path = tmp_path / "signing.p12"
+    password_file = tmp_path / "password"
+
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_enabled",
+        True,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_path",
+        pkcs12_path,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_password_file",
+        password_file,
+    )
+
+    signed_bytes = (
+        b"From: rechnung@example.test\r\n"
+        b"To: recipient@example.test\r\n"
+        b"Subject: Signed test\r\n"
+        b"\r\n"
+        b"Signed content"
+    )
+
+    sign_calls: list[
+        tuple[
+            EmailMessage,
+            str,
+            Path,
+            Path,
+        ]
+    ] = []
+
+    def fake_sign_message(
+        *,
+        message: EmailMessage,
+        sender_email: str,
+        pkcs12_path: Path,
+        password_file: Path,
+    ) -> bytes:
+        sign_calls.append(
+            (
+                message,
+                sender_email,
+                pkcs12_path,
+                password_file,
+            )
+        )
+
+        return signed_bytes
+
+    monkeypatch.setattr(
+        "app.services.invoice_email.sign_message",
+        fake_sign_message,
+    )
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FakeSMTP,
+    )
+
+    result = send_invoice_email(
+        database_session,
+        invoice_id=invoice.id,
+    )
+
+    assert result.recipient_email == (
+        "recipient@example.test"
+    )
+    assert result.subject == (
+        "Rechnung RE-2026-000001"
+    )
+
+    assert len(sign_calls) == 1
+
+    (
+        unsigned_message,
+        sender_email,
+        used_pkcs12_path,
+        used_password_file,
+    ) = sign_calls[0]
+
+    assert sender_email == "rechnung@example.test"
+    assert used_pkcs12_path == pkcs12_path
+    assert used_password_file == password_file
+    assert unsigned_message["To"] == (
+        "recipient@example.test"
+    )
+
+    assert len(FakeSMTP.instances) == 1
+
+    smtp = FakeSMTP.instances[0]
+
+    assert smtp.message is None
+    assert smtp.mail_from == "rechnung@example.test"
+    assert smtp.rcpt_tos == [
+        "recipient@example.test"
+    ]
+    assert smtp.raw_message == signed_bytes
+
+
+@pytest.mark.parametrize(
+    (
+        "pkcs12_path",
+        "password_file",
+        "expected_message",
+    ),
+    [
+        (
+            None,
+            Path("/tmp/password"),
+            "PKCS#12",
+        ),
+        (
+            Path("/tmp/signing.p12"),
+            None,
+            "Passwortdatei",
+        ),
+    ],
+)
+def test_rejects_incomplete_smime_configuration(
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pkcs12_path: Path | None,
+    password_file: Path | None,
+    expected_message: str,
+) -> None:
+    invoice = create_finalized_invoice(
+        database_session
+    )
+    archive_invoice(
+        database_session,
+        invoice,
+        tmp_path,
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_enabled",
+        True,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_path",
+        pkcs12_path,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_password_file",
+        password_file,
+    )
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FakeSMTP,
+    )
+
+    with pytest.raises(
+        InvoiceEmailConfigurationError,
+        match=expected_message,
+    ):
+        send_invoice_email(
+            database_session,
+            invoice_id=invoice.id,
+        )
+
+    assert FakeSMTP.instances == []
+
+
+def test_does_not_send_unsigned_mail_on_smime_error(
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice = create_finalized_invoice(
+        database_session
+    )
+    archive_invoice(
+        database_session,
+        invoice,
+        tmp_path,
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_enabled",
+        True,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_path",
+        tmp_path / "signing.p12",
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_password_file",
+        tmp_path / "password",
+    )
+
+    def fail_signing(
+        **kwargs: object,
+    ) -> bytes:
+        raise SmimeSigningError(
+            "Testsignatur fehlgeschlagen."
+        )
+
+    monkeypatch.setattr(
+        "app.services.invoice_email.sign_message",
+        fail_signing,
+    )
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FakeSMTP,
+    )
+
+    with pytest.raises(
+        InvoiceEmailConfigurationError,
+        match="S/MIME",
+    ):
+        send_invoice_email(
+            database_session,
+            invoice_id=invoice.id,
+        )
+
+    assert FakeSMTP.instances == []
+
+
+def test_wraps_signed_smtp_delivery_error(
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice = create_finalized_invoice(
+        database_session
+    )
+    archive_invoice(
+        database_session,
+        invoice,
+        tmp_path,
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_enabled",
+        True,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_path",
+        tmp_path / "signing.p12",
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_password_file",
+        tmp_path / "password",
+    )
+    monkeypatch.setattr(
+        "app.services.invoice_email.sign_message",
+        lambda **kwargs: b"Signed message",
+    )
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FailingSMTP,
+    )
+
+    with pytest.raises(
+        InvoiceEmailDeliveryError,
+        match="nicht per E-Mail",
+    ):
+        send_invoice_email(
+            database_session,
+            invoice_id=invoice.id,
+        )

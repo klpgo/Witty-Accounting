@@ -13,6 +13,10 @@ from app.services.invoice_archive import (
     InvoiceArchiveError,
     get_archived_invoice_pdf,
 )
+from app.services.smime import (
+    SmimeSigningError,
+    sign_message,
+)
 
 
 class InvoiceEmailError(Exception):
@@ -67,17 +71,16 @@ def create_subject(invoice: Invoice) -> str:
         f"{invoice.invoice_number}"
     )
 
-
 def create_body(invoice: Invoice) -> str:
     document_label = (
-        "Stornorechnung"
+        "Ladestrom-Stornorechnung"
         if invoice.document_type == "cancellation"
-        else "Rechnung"
+        else "Ladestrom-Rechnung"
     )
 
     return (
         "Guten Tag,\n\n"
-        f"anbei erhalten Sie Ihre {document_label.lower()} "
+        f"im Anhang erhalten Sie Ihre {document_label} "
         f"{invoice.invoice_number} als PDF-Datei.\n\n"
         "Mit freundlichen Grüßen\n"
         f"{settings.mail_from_name}\n"
@@ -116,6 +119,45 @@ def build_invoice_message(
     )
 
     return message
+
+
+def sign_invoice_message(
+    *,
+    message: EmailMessage,
+    sender_email: str,
+) -> bytes | None:
+    if not settings.mail_smime_enabled:
+        return None
+
+    pkcs12_path = settings.mail_smime_pkcs12_path
+    password_file = (
+        settings.mail_smime_pkcs12_password_file
+    )
+
+    if pkcs12_path is None:
+        raise InvoiceEmailConfigurationError(
+            "Der Pfad zur S/MIME-PKCS#12-Datei "
+            "ist nicht konfiguriert."
+        )
+
+    if password_file is None:
+        raise InvoiceEmailConfigurationError(
+            "Der Pfad zur S/MIME-Passwortdatei "
+            "ist nicht konfiguriert."
+        )
+
+    try:
+        return sign_message(
+            message=message,
+            sender_email=sender_email,
+            pkcs12_path=pkcs12_path,
+            password_file=password_file,
+        )
+    except SmimeSigningError as exc:
+        raise InvoiceEmailConfigurationError(
+            "Die Rechnung konnte nicht mit "
+            f"S/MIME signiert werden: {exc}"
+        ) from exc
 
 
 def send_invoice_email(
@@ -202,6 +244,11 @@ def send_invoice_email(
         ),
     )
 
+    signed_message = sign_invoice_message(
+        message=message,
+        sender_email=sender_email,
+    )
+
     try:
         with smtplib.SMTP(
             settings.smtp_host,
@@ -216,7 +263,14 @@ def send_invoice_email(
                 )
                 smtp.ehlo()
 
-            smtp.send_message(message)
+            if signed_message is None:
+                smtp.send_message(message)
+            else:
+                smtp.sendmail(
+                    sender_email,
+                    [recipient_email],
+                    signed_message,
+                )
 
     except (
         OSError,
