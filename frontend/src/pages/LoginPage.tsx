@@ -97,8 +97,8 @@ function LoginPage() {
         <h1>Anmeldung</h1>
 
         <p className="login-intro">
-          Melde dich mit deinem
-          Administratorenkonto an.
+           Bitte melde dich mit deiner E-Mail-Adresse
+          und deinem Passwort an.
         </p>
 
         <form
