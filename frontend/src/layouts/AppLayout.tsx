@@ -98,6 +98,16 @@ function AppLayout() {
               RFID-Karten
             </NavLink>
             <NavLink
+              to="/admin/import"
+              className={({ isActive }) =>
+                isActive
+                  ? 'nav-link nav-link-active'
+                  : 'nav-link'
+              }
+            >
+              XLSX-Import
+            </NavLink>
+            <NavLink
               to="/admin/settings"
               className={({ isActive }) =>
                 isActive
