@@ -134,6 +134,30 @@ def update_own_profile(
     if "address" in payload.model_fields_set:
         current_user.address = payload.address
 
+    if (
+        "invoice_delivery_email"
+        in payload.model_fields_set
+    ):
+        assert (
+            payload.invoice_delivery_email
+            is not None
+        )
+        user.invoice_delivery_email = (
+            payload.invoice_delivery_email
+        )
+
+    if (
+        "invoice_delivery_post"
+        in payload.model_fields_set
+    ):
+        assert (
+            payload.invoice_delivery_post
+            is not None
+        )
+        user.invoice_delivery_post = (
+            payload.invoice_delivery_post
+        )
+
     try:
         db.commit()
     except IntegrityError as exc:
@@ -269,6 +293,30 @@ def update_user(
 
     if "address" in payload.model_fields_set:
         user.address = payload.address
+
+    if (
+        "invoice_delivery_email"
+        in payload.model_fields_set
+    ):
+        assert (
+            payload.invoice_delivery_email
+            is not None
+        )
+        user.invoice_delivery_email = (
+            payload.invoice_delivery_email
+        )
+
+    if (
+        "invoice_delivery_post"
+        in payload.model_fields_set
+    ):
+        assert (
+            payload.invoice_delivery_post
+            is not None
+        )
+        user.invoice_delivery_post = (
+            payload.invoice_delivery_post
+        )
 
     if "active" in payload.model_fields_set:
         assert payload.active is not None

@@ -635,7 +635,9 @@ def create_invoice_draft(
             rebill_source_item_id,
         ) in enumerate(
             charging_sessions,
-            start=1,
+            start=(
+                len(monthly_base_fee_candidates) + 1
+            ),
         ):
             energy_price = find_energy_price(
                 db,
@@ -778,14 +780,9 @@ def create_invoice_draft(
             total_net += net_amount_cents
             total_vat += vat_amount
             total_gross += gross_amount
-
-        next_position_number = (
-            len(charging_sessions) + 1
-        )
-
         for position_number, candidate in enumerate(
             monthly_base_fee_candidates,
-            start=next_position_number,
+            start=1,
         ):
             charge = candidate.charge
 
@@ -830,10 +827,10 @@ def create_invoice_draft(
                 rounding=ROUND_HALF_UP,
             )
 
-            card_number = (
-                candidate.assignment
-                .rfid_card
-                .rfid_number
+            card = candidate.assignment.rfid_card
+            card_label = (
+                card.description
+                or card.rfid_number
             )
             month_name = MONTH_NAMES_DE[
                 candidate.fee_month.month
@@ -853,9 +850,8 @@ def create_invoice_draft(
                     ),
                     position_number=position_number,
                     description=(
-                        "Monatliche Grundgebühr "
-                        "RFID-Karte "
-                        f"{card_number} – "
+                        "Monatsgebühr RFID-Karte "
+                        f"{card_label} - "
                         f"{month_name} "
                         f"{candidate.fee_month.year}"
                     ),

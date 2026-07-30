@@ -207,6 +207,63 @@ def test_creates_invoice_draft(
     assert item.gross_amount == Decimal("2.62")
 
 
+def test_places_monthly_base_fee_before_charging_session(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("10.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.flush()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    assert [
+        item.item_type
+        for item in invoice.items
+    ] == [
+        "monthly_base_fee",
+        "charging_session",
+    ]
+
+    assert [
+        item.position_number
+        for item in invoice.items
+    ] == [
+        1,
+        2,
+    ]
+
+    monthly_base_fee_item = invoice.items[0]
+
+    assert monthly_base_fee_item.description == (
+        "Monatsgebühr RFID-Karte "
+        "Testkarte - Juni 2026"
+    )
+
+    assert invoice.total_net == Decimal("12.20")
+    assert invoice.vat_amount == Decimal("2.32")
+    assert invoice.total_gross == Decimal("14.52")
+
+
 def test_session_cannot_enter_second_draft(
     database_session: Session,
 ) -> None:
@@ -1537,8 +1594,8 @@ def test_creates_base_fee_only_invoice_draft(
     assert item.charging_session_id is None
     assert item.monthly_base_fee_charge_id is not None
     assert item.description == (
-        "Monatliche Grundgebühr RFID-Karte "
-        "INVOICE-CARD – Juli 2026"
+        "Monatsgebühr RFID-Karte "
+        "Testkarte - Juli 2026"
     )
     assert item.session_start is None
     assert item.energy_total_kwh is None

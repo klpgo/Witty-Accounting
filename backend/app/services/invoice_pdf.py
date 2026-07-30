@@ -139,6 +139,7 @@ class InvoiceCanvas(pdf_canvas.Canvas):
         is_cancellation: bool = False,
         **kwargs: object,
     ) -> None:
+        kwargs["invariant"] = 1
         super().__init__(*args, **kwargs)
         self.is_cancellation = is_cancellation
         self._saved_page_states: list[

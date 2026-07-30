@@ -15,6 +15,11 @@ class InvoiceFinalizeRequest(BaseModel):
     due_date: date | None = None
 
 
+class InvoiceEmailResponse(BaseModel):
+    recipient_email: str
+    subject: str
+
+
 class InvoiceItemResponse(BaseModel):
     model_config = ConfigDict(
         from_attributes=True

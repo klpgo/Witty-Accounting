@@ -39,6 +39,14 @@ from app.models.invoice import Invoice, InvoiceItem
 
 from app.services.invoicing import create_invoice_draft
 
+from app.services.invoice_email import (
+    InvoiceEmailConfigurationError,
+    InvoiceEmailDeliveryError,
+    InvoiceEmailNotFoundError,
+    InvoiceEmailRecipientError,
+    InvoiceEmailResult,
+    InvoiceEmailStateError,
+)
 
 @pytest.fixture
 def database_session() -> Generator[
@@ -260,8 +268,8 @@ def test_creates_base_fee_only_draft_via_api(
     assert item["monthly_base_fee_charge_id"] is not None
     assert item["charging_session_id"] is None
     assert item["description"] == (
-        "Monatliche Grundgebühr RFID-Karte "
-        "BILLING-CARD – Juli 2026"
+        "Monatsgebühr RFID-Karte "
+        "Rechnungstest - Juli 2026"
     )
     assert item["session_start"] is None
     assert item["session_end"] is None
@@ -1341,3 +1349,121 @@ def test_delete_invoice_returns_not_found(
     )
 
     assert response.status_code == 404
+
+
+def test_sends_invoice_email(
+    client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_invoice_ids: list[int] = []
+    captured_sessions: list[Session] = []
+
+    def fake_send_invoice_email(
+        db: Session,
+        *,
+        invoice_id: int,
+    ) -> InvoiceEmailResult:
+        captured_sessions.append(db)
+        captured_invoice_ids.append(invoice_id)
+
+        return InvoiceEmailResult(
+            recipient_email=(
+                "billing@example.com"
+            ),
+            subject=(
+                "Rechnung RE-2026-000001"
+            ),
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.invoices."
+        "send_invoice_email",
+        fake_send_invoice_email,
+    )
+
+    response = client.post(
+        "/invoices/42/send-email"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "recipient_email": (
+            "billing@example.com"
+        ),
+        "subject": (
+            "Rechnung RE-2026-000001"
+        ),
+    }
+
+    assert captured_invoice_ids == [42]
+    assert captured_sessions == [
+        database_session
+    ]
+
+
+@pytest.mark.parametrize(
+    (
+        "exception_type",
+        "message",
+        "expected_status",
+    ),
+    [
+        (
+            InvoiceEmailNotFoundError,
+            "Rechnung wurde nicht gefunden.",
+            404,
+        ),
+        (
+            InvoiceEmailStateError,
+            "Die Rechnung ist nicht finalisiert.",
+            409,
+        ),
+        (
+            InvoiceEmailRecipientError,
+            "Die E-Mail-Zustellung ist deaktiviert.",
+            409,
+        ),
+        (
+            InvoiceEmailConfigurationError,
+            "Die Absenderadresse fehlt.",
+            500,
+        ),
+        (
+            InvoiceEmailDeliveryError,
+            "Der SMTP-Versand ist fehlgeschlagen.",
+            502,
+        ),
+    ],
+)
+def test_maps_invoice_email_errors(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    exception_type: type[Exception],
+    message: str,
+    expected_status: int,
+) -> None:
+    def failing_send_invoice_email(
+        db: Session,
+        *,
+        invoice_id: int,
+    ) -> InvoiceEmailResult:
+        del db
+        del invoice_id
+
+        raise exception_type(message)
+
+    monkeypatch.setattr(
+        "app.api.routes.invoices."
+        "send_invoice_email",
+        failing_send_invoice_email,
+    )
+
+    response = client.post(
+        "/invoices/42/send-email"
+    )
+
+    assert response.status_code == expected_status
+    assert response.json() == {
+        "detail": message,
+    }

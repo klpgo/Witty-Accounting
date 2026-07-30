@@ -50,6 +50,15 @@ function AdminUsersPage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [address, setAddress] = useState('')
+  const [
+    invoiceDeliveryEmail,
+    setInvoiceDeliveryEmail,
+  ] = useState(false)
+
+  const [
+    invoiceDeliveryPost,
+    setInvoiceDeliveryPost,
+  ] = useState(false)
   const [active, setActive] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
 
@@ -182,6 +191,8 @@ function AdminUsersPage() {
       setFirstName('')
       setLastName('')
       setAddress('')
+      setInvoiceDeliveryEmail(false)
+      setInvoiceDeliveryPost(false)
       setActive(false)
       setIsAdmin(false)
 
@@ -192,6 +203,12 @@ function AdminUsersPage() {
     setFirstName(selectedUser.first_name)
     setLastName(selectedUser.last_name)
     setAddress(selectedUser.address ?? '')
+    setInvoiceDeliveryEmail(
+      selectedUser.invoice_delivery_email,
+    )
+    setInvoiceDeliveryPost(
+      selectedUser.invoice_delivery_post,
+    )
     setActive(selectedUser.active)
     setIsAdmin(selectedUser.is_admin)
 
@@ -239,6 +256,10 @@ function AdminUsersPage() {
           first_name: firstName,
           last_name: lastName,
           address: address.trim() || null,
+          invoice_delivery_email:
+            invoiceDeliveryEmail,
+          invoice_delivery_post:
+            invoiceDeliveryPost,
           active,
           is_admin: isAdmin,
         },
@@ -534,6 +555,35 @@ function AdminUsersPage() {
                   />
                 </label>
 
+                <div className="checkbox-group">
+                  <label className="checkbox-field">
+                    <input
+                      type="checkbox"
+                      checked={invoiceDeliveryEmail}
+                      onChange={(event) =>
+                        setInvoiceDeliveryEmail(
+                          event.target.checked,
+                        )
+                      }
+                    />
+
+                    Rechnung per E-Mail zustellen
+                  </label>
+
+                  <label className="checkbox-field">
+                    <input
+                      type="checkbox"
+                      checked={invoiceDeliveryPost}
+                      onChange={(event) =>
+                        setInvoiceDeliveryPost(
+                          event.target.checked,
+                        )
+                      }
+                    />
+
+                    Rechnung per Post zustellen
+                  </label>
+                </div>
                 <div className="checkbox-group">
                   <label className="checkbox-field">
                     <input

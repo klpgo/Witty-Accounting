@@ -45,5 +45,19 @@ class Settings(BaseSettings):
         "data/invoices"
     )
 
+    smtp_host: str = "host.docker.internal"
+    smtp_port: int = 25
+    smtp_timeout_seconds: float = 10.0
+    smtp_starttls: bool = False
+
+    mail_from_address: str = ""
+    mail_from_name: str = "Witty-Accounting"
+
+    mail_smime_enabled: bool = False
+    mail_smime_pkcs12_path: Path | None = None
+    mail_smime_pkcs12_password_file: (
+        Path | None
+    ) = None
+
 
 settings = Settings()

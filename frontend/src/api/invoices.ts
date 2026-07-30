@@ -56,6 +56,11 @@ export interface Invoice {
   items: InvoiceItem[]
 }
 
+export interface InvoiceEmailResponse {
+  recipient_email: string
+  subject: string
+}
+
 interface ApiErrorResponse {
   detail?: string
 }
@@ -160,6 +165,32 @@ export async function downloadInvoicePdf(
   }
 
   return response.blob()
+}
+
+export async function sendInvoiceEmail(
+  accessToken: string,
+  invoiceId: number,
+): Promise<InvoiceEmailResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/send-email`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as InvoiceEmailResponse
 }
 
 export interface InvoiceDraftCreate {

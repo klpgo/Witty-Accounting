@@ -13,6 +13,7 @@ import {
   getInvoice,
   InvoiceApiError,
   deleteInvoiceDraft,
+  sendInvoiceEmail,
   type Invoice,
 } from '../api/invoices'
 import { getAccessToken } from '../auth/tokenStorage'
@@ -20,6 +21,11 @@ import { useAuth } from '../auth/useAuth'
 import InvoiceFinalizeForm from '../components/InvoiceFinalizeForm'
 import InvoiceCancellationCreateForm from '../components/InvoiceCancellationCreateForm'
 import InvoiceCancellationFinalizeForm from '../components/InvoiceCancellationFinalizeForm'
+
+import {
+  getUser,
+  UserApiError,
+} from '../api/users'
 
 function formatCurrency(
   value: string | number,
@@ -126,6 +132,9 @@ function InvoiceDetailPage() {
   const [invoice, setInvoice] =
     useState<Invoice | null>(null)
 
+  const [recipientEmail, setRecipientEmail] =
+    useState<string | null>(null)
+
   const [isLoading, setIsLoading] =
     useState(true)
 
@@ -151,6 +160,21 @@ function InvoiceDetailPage() {
     isDownloading,
     setIsDownloading,
   ] = useState(false)
+
+  const [
+    isSendingEmail,
+    setIsSendingEmail,
+  ] = useState(false)
+
+  const [
+    emailErrorMessage,
+    setEmailErrorMessage,
+  ] = useState<string | null>(null)
+
+  const [
+    emailSuccessMessage,
+    setEmailSuccessMessage,
+  ] = useState<string | null>(null)
 
   useEffect(() => {
     if (
@@ -187,7 +211,14 @@ function InvoiceDetailPage() {
           controller.signal,
         )
 
+        const loadedRecipient = await getUser(
+          token,
+          loadedInvoice.user_id,
+          controller.signal,
+        )
+
         setInvoice(loadedInvoice)
+        setRecipientEmail(loadedRecipient.email)
       } catch (error) {
         if (
           error instanceof Error &&
@@ -283,10 +314,13 @@ function InvoiceDetailPage() {
 
       URL.revokeObjectURL(downloadUrl)
     } catch (error) {
-      if (
-        error instanceof InvoiceApiError &&
-        error.status === 401
-      ) {
+        if (
+          (
+            error instanceof InvoiceApiError ||
+            error instanceof UserApiError
+          ) &&
+          error.status === 401
+        ) {
         signOut()
 
         navigate('/login', {
@@ -303,6 +337,87 @@ function InvoiceDetailPage() {
       )
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  async function handleEmailSend(): Promise<void> {
+    if (
+      invoice === null ||
+      invoice.status !== 'finalized' ||
+      invoice.pdf_storage_path === null ||
+      recipientEmail === null
+    ) {
+      return
+    }
+
+    const documentLabel =
+      invoice.document_type === 'cancellation'
+        ? 'Stornorechnung'
+        : 'Rechnung'
+
+    const documentNumber =
+      invoice.invoice_number ??
+      `#${invoice.id}`
+
+    const confirmed = window.confirm(
+      `${documentLabel} ${documentNumber} ` +
+        'per E-Mail versenden?\n\n' +
+        'Empfänger:\n' +
+        `${invoice.recipient_name}\n` +
+        recipientEmail,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+
+      navigate('/login', {
+        replace: true,
+      })
+
+      return
+    }
+
+    setEmailErrorMessage(null)
+    setEmailSuccessMessage(null)
+    setIsSendingEmail(true)
+
+    try {
+      const result = await sendInvoiceEmail(
+        accessToken,
+        invoice.id,
+      )
+
+      setEmailSuccessMessage(
+        `Die ${documentLabel} wurde an ` +
+          `${result.recipient_email} gesendet.`,
+      )
+    } catch (error) {
+      if (
+        error instanceof InvoiceApiError &&
+        error.status === 401
+      ) {
+        signOut()
+
+        navigate('/login', {
+          replace: true,
+        })
+
+        return
+      }
+
+      setEmailErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Die Rechnung konnte nicht per E-Mail gesendet werden.',
+      )
+    } finally {
+      setIsSendingEmail(false)
     }
   }
 
@@ -439,6 +554,24 @@ function InvoiceDetailPage() {
           </button>
         )}
 
+        {invoice.status === 'finalized' && (
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={
+              !hasArchivedPdf ||
+              isSendingEmail
+            }
+            onClick={() => {
+              void handleEmailSend()
+            }}
+          >
+            {isSendingEmail
+              ? 'E-Mail wird gesendet …'
+              : 'Per E-Mail senden'}
+          </button>
+        )}
+
         <button
           className="button button-primary"
           type="button"
@@ -500,6 +633,24 @@ function InvoiceDetailPage() {
           role="alert"
         >
           {pdfErrorMessage}
+        </section>
+      )}
+
+      {emailErrorMessage && (
+        <section
+          className="form-error detail-error"
+          role="alert"
+        >
+          {emailErrorMessage}
+        </section>
+      )}
+
+      {emailSuccessMessage && (
+        <section
+          className="form-success detail-error"
+          role="status"
+        >
+          {emailSuccessMessage}
         </section>
       )}
 

@@ -129,10 +129,14 @@ class UserPasswordChange(BaseModel):
 
 
 class UserAdminUpdate(UserProfileUpdate):
+    invoice_delivery_email: bool | None = None
+    invoice_delivery_post: bool | None = None
     active: bool | None = None
     is_admin: bool | None = None
 
     @field_validator(
+        "invoice_delivery_email",
+        "invoice_delivery_post",
         "active",
         "is_admin",
     )

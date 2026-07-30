@@ -23,6 +23,8 @@ export interface UserAdminUpdate {
   first_name?: string
   last_name?: string
   address?: string | null
+  invoice_delivery_email?: boolean
+  invoice_delivery_post?: boolean
   active?: boolean
   is_admin?: boolean
 }
@@ -95,6 +97,29 @@ export async function listUsers(
   }
 
   return (await response.json()) as User[]
+}
+
+export async function getUser(
+  accessToken: string,
+  userId: number,
+  signal?: AbortSignal,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
 }
 
 export async function updateUser(

@@ -29,6 +29,15 @@ from app.schemas.invoice import (
     InvoiceCancellationFinalize,
 )
 
+from app.schemas.invoice import (
+    InvoiceCancellationCreate,
+    InvoiceCancellationFinalize,
+    InvoiceDraftCreate,
+    InvoiceEmailResponse,
+    InvoiceFinalizeRequest,
+    InvoiceResponse,
+)
+
 from app.services.invoice_cancellation import (
     InvoiceAlreadyCancelledError,
     InvoiceCancellationError,
@@ -67,6 +76,15 @@ from app.services.invoice_archive import (
 from app.services.invoice_pdf import (
     InvoiceNotFinalizedError,
     InvoicePdfError,
+)
+
+from app.services.invoice_email import (
+    InvoiceEmailConfigurationError,
+    InvoiceEmailDeliveryError,
+    InvoiceEmailNotFoundError,
+    InvoiceEmailRecipientError,
+    InvoiceEmailStateError,
+    send_invoice_email,
 )
 
 router = APIRouter(
@@ -502,6 +520,61 @@ def finalize_invoice_cancellation(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             ),
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{invoice_id}/send-email",
+    response_model=InvoiceEmailResponse,
+    dependencies=[Depends(require_admin)],
+)
+def send_invoice_by_email(
+    invoice_id: int,
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> InvoiceEmailResponse:
+    try:
+        result = send_invoice_email(
+            db,
+            invoice_id=invoice_id,
+        )
+
+        return InvoiceEmailResponse(
+            recipient_email=(
+                result.recipient_email
+            ),
+            subject=result.subject,
+        )
+
+    except InvoiceEmailNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except (
+        InvoiceEmailStateError,
+        InvoiceEmailRecipientError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    except InvoiceEmailConfigurationError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=str(exc),
+        ) from exc
+
+    except InvoiceEmailDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
 

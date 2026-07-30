@@ -513,6 +513,8 @@ def test_admin_updates_user(
                 "Musterstraße 5\n"
                 "12345 Musterstadt"
             ),
+            "invoice_delivery_email": True,
+            "invoice_delivery_post": True,
             "active": False,
             "is_admin": True,
         },
@@ -533,6 +535,8 @@ def test_admin_updates_user(
     assert target.email == "new@example.com"
     assert target.first_name == "Erika"
     assert target.last_name == "Musterfrau"
+    assert target.invoice_delivery_email is True
+    assert target.invoice_delivery_post is True
     assert target.active is False
     assert target.is_admin is True
 
