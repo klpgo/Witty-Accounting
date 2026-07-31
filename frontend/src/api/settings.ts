@@ -11,6 +11,14 @@ export interface GlobalSettings {
   monthly_base_fee_net: string
   monthly_base_fee_vat_rate: string
   invoice_payment_term_days: number
+  invoice_issuer_name: string | null
+  invoice_issuer_address: string | null
+  invoice_tax_number: string | null
+  invoice_vat_id: string | null
+  invoice_bank_name: string | null
+  invoice_iban: string | null
+  invoice_bic: string | null
+  invoice_number_prefix: string
 }
 
 export interface GlobalSettingsUpdate {
@@ -18,6 +26,14 @@ export interface GlobalSettingsUpdate {
   monthly_base_fee_net?: string
   monthly_base_fee_vat_rate?: string
   invoice_payment_term_days?: number
+  invoice_issuer_name?: string | null
+  invoice_issuer_address?: string | null
+  invoice_tax_number?: string | null
+  invoice_vat_id?: string | null
+  invoice_bank_name?: string | null
+  invoice_iban?: string | null
+  invoice_bic?: string | null
+  invoice_number_prefix?: string
 }
 
 export interface EnergyPrice {

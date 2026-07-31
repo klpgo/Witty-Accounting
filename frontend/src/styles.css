@@ -856,6 +856,33 @@ select {
   align-items: start;
 }
 
+.settings-business-grid {
+  grid-template-columns: repeat(
+    2,
+    minmax(0, 1fr)
+  );
+  align-items: start;
+}
+
+.settings-wide-field {
+  grid-column: 1 / -1;
+}
+
+.settings-form textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+@media (max-width: 800px) {
+  .settings-business-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-wide-field {
+    grid-column: 1;
+  }
+}
+
 .settings-actions {
   display: flex;
   justify-content: flex-start;

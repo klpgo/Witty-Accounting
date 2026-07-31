@@ -60,6 +60,45 @@ function AdminSettingsPage() {
     setInvoicePaymentTermDays,
   ] = useState('')
   const [
+    invoiceIssuerName,
+    setInvoiceIssuerName,
+  ] = useState('')
+
+  const [
+    invoiceIssuerAddress,
+    setInvoiceIssuerAddress,
+  ] = useState('')
+
+  const [
+    invoiceTaxNumber,
+    setInvoiceTaxNumber,
+  ] = useState('')
+
+  const [
+    invoiceVatId,
+    setInvoiceVatId,
+  ] = useState('')
+
+  const [
+    invoiceBankName,
+    setInvoiceBankName,
+  ] = useState('')
+
+  const [
+    invoiceIban,
+    setInvoiceIban,
+  ] = useState('')
+
+  const [
+    invoiceBic,
+    setInvoiceBic,
+  ] = useState('')
+
+  const [
+    invoiceNumberPrefix,
+    setInvoiceNumberPrefix,
+  ] = useState('RE')
+  const [
     currentEnergyPrice,
     setCurrentEnergyPrice,
   ] = useState<EnergyPrice | null>(null)
@@ -195,6 +234,30 @@ function AdminSettingsPage() {
               .invoice_payment_term_days,
           ),
         )
+        setInvoiceIssuerName(
+          loadedSettings.invoice_issuer_name ?? '',
+        )
+        setInvoiceIssuerAddress(
+          loadedSettings.invoice_issuer_address ?? '',
+        )
+        setInvoiceTaxNumber(
+          loadedSettings.invoice_tax_number ?? '',
+        )
+        setInvoiceVatId(
+          loadedSettings.invoice_vat_id ?? '',
+        )
+        setInvoiceBankName(
+          loadedSettings.invoice_bank_name ?? '',
+        )
+        setInvoiceIban(
+          loadedSettings.invoice_iban ?? '',
+        )
+        setInvoiceBic(
+          loadedSettings.invoice_bic ?? '',
+        )
+        setInvoiceNumberPrefix(
+          loadedSettings.invoice_number_prefix,
+        )
         if (loadedEnergyPrice !== null) {
           setCurrentEnergyPrice(
             loadedEnergyPrice,
@@ -252,6 +315,36 @@ function AdminSettingsPage() {
     const paymentTermDays = Number(
       invoicePaymentTermDays,
     )
+    const normalizedIssuerName =
+      invoiceIssuerName.trim()
+    const normalizedIssuerAddress =
+      invoiceIssuerAddress.trim()
+    const normalizedTaxNumber =
+      invoiceTaxNumber.trim()
+    const normalizedVatId =
+      invoiceVatId.trim()
+    const normalizedBankName =
+      invoiceBankName.trim()
+    const normalizedIban = invoiceIban
+      .replace(/\s+/g, '')
+      .toUpperCase()
+    const normalizedBic = invoiceBic
+      .trim()
+      .toUpperCase()
+    const normalizedNumberPrefix =
+      invoiceNumberPrefix
+        .trim()
+        .toUpperCase()
+
+    const hasInvoiceBusinessSettings = [
+      normalizedIssuerName,
+      normalizedIssuerAddress,
+      normalizedTaxNumber,
+      normalizedVatId,
+      normalizedBankName,
+      normalizedIban,
+      normalizedBic,
+    ].some((value) => value.length > 0)
 
     if (!normalizedAppName) {
       setErrorMessage(
@@ -300,6 +393,78 @@ function AdminSettingsPage() {
       return
     }
 
+    if (
+      hasInvoiceBusinessSettings &&
+      !normalizedIssuerName
+    ) {
+      setErrorMessage(
+        'Für den Rechnungsaussteller ist ein Name erforderlich.',
+      )
+      setSuccessMessage(null)
+      return
+    }
+
+    if (
+      hasInvoiceBusinessSettings &&
+      !normalizedIssuerAddress
+    ) {
+      setErrorMessage(
+        'Für den Rechnungsaussteller ist eine Anschrift erforderlich.',
+      )
+      setSuccessMessage(null)
+      return
+    }
+
+    if (
+      hasInvoiceBusinessSettings &&
+      !normalizedTaxNumber &&
+      !normalizedVatId
+    ) {
+      setErrorMessage(
+        'Bitte gib eine Steuernummer oder USt-IdNr. an.',
+      )
+      setSuccessMessage(null)
+      return
+    }
+
+    if (
+      normalizedIban &&
+      !/^[A-Z0-9]{15,34}$/.test(
+        normalizedIban,
+      )
+    ) {
+      setErrorMessage(
+        'Die IBAN muss aus 15 bis 34 Buchstaben und Ziffern bestehen.',
+      )
+      setSuccessMessage(null)
+      return
+    }
+
+    if (
+      normalizedBic &&
+      !/^[A-Z0-9]{8}([A-Z0-9]{3})?$/.test(
+        normalizedBic,
+      )
+    ) {
+      setErrorMessage(
+        'Die BIC muss 8 oder 11 Buchstaben und Ziffern enthalten.',
+      )
+      setSuccessMessage(null)
+      return
+    }
+
+    if (
+      !/^[A-Z0-9]{1,20}$/.test(
+        normalizedNumberPrefix,
+      )
+    ) {
+      setErrorMessage(
+        'Das Rechnungspräfix darf nur aus 1 bis 20 Buchstaben und Ziffern bestehen.',
+      )
+      setSuccessMessage(null)
+      return
+    }
+
     const accessToken = getAccessToken()
 
     if (accessToken === null) {
@@ -328,6 +493,22 @@ function AdminSettingsPage() {
               normalizedVatRate,
             invoice_payment_term_days:
               paymentTermDays,
+            invoice_issuer_name:
+              normalizedIssuerName || null,
+            invoice_issuer_address:
+              normalizedIssuerAddress || null,
+            invoice_tax_number:
+              normalizedTaxNumber || null,
+            invoice_vat_id:
+              normalizedVatId || null,
+            invoice_bank_name:
+              normalizedBankName || null,
+            invoice_iban:
+              normalizedIban || null,
+            invoice_bic:
+              normalizedBic || null,
+            invoice_number_prefix:
+              normalizedNumberPrefix,
           },
         )
 
@@ -344,6 +525,30 @@ function AdminSettingsPage() {
           updatedSettings
             .invoice_payment_term_days,
         ),
+      )
+      setInvoiceIssuerName(
+        updatedSettings.invoice_issuer_name ?? '',
+      )
+      setInvoiceIssuerAddress(
+        updatedSettings.invoice_issuer_address ?? '',
+      )
+      setInvoiceTaxNumber(
+        updatedSettings.invoice_tax_number ?? '',
+      )
+      setInvoiceVatId(
+        updatedSettings.invoice_vat_id ?? '',
+      )
+      setInvoiceBankName(
+        updatedSettings.invoice_bank_name ?? '',
+      )
+      setInvoiceIban(
+        updatedSettings.invoice_iban ?? '',
+      )
+      setInvoiceBic(
+        updatedSettings.invoice_bic ?? '',
+      )
+      setInvoiceNumberPrefix(
+        updatedSettings.invoice_number_prefix,
       )
 
       await refreshSettings()
@@ -582,6 +787,149 @@ function AdminSettingsPage() {
             </label>
           </section>
 
+          <section className="settings-section">
+            <div>
+              <h2>Rechnungsaussteller</h2>
+
+              <p className="muted">
+                Diese Angaben werden bei neuen
+                Rechnungsentwürfen gespeichert und
+                später im Rechnungs-PDF verwendet.
+              </p>
+            </div>
+
+            <div className="form-grid settings-business-grid">
+              <label className="form-field settings-wide-field">
+                <span>Name des Rechnungsausstellers</span>
+
+                <input
+                  type="text"
+                  value={invoiceIssuerName}
+                  maxLength={255}
+                  onChange={(event) => {
+                    setInvoiceIssuerName(
+                      event.target.value,
+                    )
+                  }}
+                />
+              </label>
+
+              <label className="form-field settings-wide-field">
+                <span>Anschrift des Rechnungsausstellers</span>
+
+                <textarea
+                  rows={3}
+                  value={invoiceIssuerAddress}
+                  maxLength={500}
+                  onChange={(event) => {
+                    setInvoiceIssuerAddress(
+                      event.target.value,
+                    )
+                  }}
+                />
+
+                <small className="muted">
+                  Mehrzeilige Anschriften sind möglich.
+                </small>
+              </label>
+
+              <label className="form-field">
+                <span>Steuernummer</span>
+
+                <input
+                  type="text"
+                  value={invoiceTaxNumber}
+                  maxLength={50}
+                  onChange={(event) => {
+                    setInvoiceTaxNumber(
+                      event.target.value,
+                    )
+                  }}
+                />
+              </label>
+
+              <label className="form-field">
+                <span>USt-IdNr.</span>
+
+                <input
+                  type="text"
+                  value={invoiceVatId}
+                  maxLength={50}
+                  onChange={(event) => {
+                    setInvoiceVatId(
+                      event.target.value,
+                    )
+                  }}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <div>
+              <h2>Bankverbindung</h2>
+
+              <p className="muted">
+                Die Bankverbindung wird auf neuen
+                Rechnungen ausgegeben.
+              </p>
+            </div>
+
+            <div className="form-grid settings-business-grid">
+              <label className="form-field settings-wide-field">
+                <span>Bankname</span>
+
+                <input
+                  type="text"
+                  value={invoiceBankName}
+                  maxLength={255}
+                  onChange={(event) => {
+                    setInvoiceBankName(
+                      event.target.value,
+                    )
+                  }}
+                />
+              </label>
+
+              <label className="form-field">
+                <span>IBAN</span>
+
+                <input
+                  type="text"
+                  value={invoiceIban}
+                  maxLength={42}
+                  autoComplete="off"
+                  onChange={(event) => {
+                    setInvoiceIban(
+                      event.target.value,
+                    )
+                  }}
+                />
+
+                <small className="muted">
+                  Leerzeichen werden beim Speichern
+                  automatisch entfernt.
+                </small>
+              </label>
+
+              <label className="form-field">
+                <span>BIC</span>
+
+                <input
+                  type="text"
+                  value={invoiceBic}
+                  maxLength={11}
+                  autoComplete="off"
+                  onChange={(event) => {
+                    setInvoiceBic(
+                      event.target.value,
+                    )
+                  }}
+                />
+              </label>
+            </div>
+          </section>
+
           <h2>Abrechnung</h2>
 
           <div className="form-grid settings-billing-grid">
@@ -630,6 +978,28 @@ function AdminSettingsPage() {
               <span>
                 Zahlungsziel in Tagen
               </span>
+            <label className="form-field">
+              <span>Rechnungsnummer-Präfix</span>
+
+              <input
+                type="text"
+                value={invoiceNumberPrefix}
+                maxLength={20}
+                onChange={(event) => {
+                  setInvoiceNumberPrefix(
+                    event.target.value,
+                  )
+                }}
+                required
+              />
+
+              <small className="muted">
+                Beispiel: RE ergibt
+                RE-2026-000001. Das Jahr und die
+                laufende Nummer werden automatisch
+                ergänzt.
+              </small>
+            </label>
 
               <input
                 type="number"
