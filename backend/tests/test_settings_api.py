@@ -225,6 +225,11 @@ def test_reads_admin_settings(
         "invoice_iban": None,
         "invoice_bic": None,
         "invoice_number_prefix": "RE",
+        "password_min_length": 8,
+        "password_require_uppercase": True,
+        "password_require_lowercase": True,
+        "password_require_digit": True,
+        "password_require_special": True,
     }
 
 
@@ -260,6 +265,11 @@ def test_updates_admin_settings(
         "invoice_iban": None,
         "invoice_bic": None,
         "invoice_number_prefix": "RE",
+        "password_min_length": 8,
+        "password_require_uppercase": True,
+        "password_require_lowercase": True,
+        "password_require_digit": True,
+        "password_require_special": True,
     }
 
     database_session.refresh(global_settings)

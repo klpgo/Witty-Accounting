@@ -11,6 +11,7 @@ from app.auth import create_access_token
 from app.database import Base
 from app.main import app
 from app.models.user import User
+from app.models.global_settings import GlobalSettings
 
 from app.security import (
     hash_password,
@@ -366,7 +367,7 @@ def test_changes_own_password(
         headers=authorization_header(user),
         json={
             "current_password": "old-password",
-            "new_password": "new-password",
+            "new_password": "New-password1!",
         },
     )
 
@@ -376,12 +377,52 @@ def test_changes_own_password(
     database_session.refresh(user)
 
     assert verify_password(
-        "new-password",
+        "New-password1!",
         user.password_hash,
     )
     assert not verify_password(
         "old-password",
         user.password_hash,
+    )
+
+
+def test_change_own_password_rejects_weak_password(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Normal",
+        last_name="User",
+        password="old-password",
+    )
+
+    original_password_hash = user.password_hash
+
+    response = client.post(
+        "/users/me/password",
+        headers=authorization_header(user),
+        json={
+            "current_password": "old-password",
+            "new_password": "abcdefgh",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": (
+            "Das Passwort muss einen "
+            "Großbuchstaben, eine Zahl und "
+            "ein Sonderzeichen enthalten."
+        ),
+    }
+
+    database_session.refresh(user)
+
+    assert (
+        user.password_hash
+        == original_password_hash
     )
 
 
@@ -602,7 +643,7 @@ def test_admin_resets_user_password(
         f"/users/{target.id}/password",
         headers=authorization_header(admin),
         json={
-            "new_password": "new-password",
+            "new_password": "New-password1!",
         },
     )
 
@@ -612,12 +653,102 @@ def test_admin_resets_user_password(
     database_session.refresh(target)
 
     assert verify_password(
-        "new-password",
+        "New-password1!",
         target.password_hash,
     )
     assert not verify_password(
         "old-password",
         target.password_hash,
+    )
+
+
+def test_admin_password_reset_rejects_weak_password(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    target = create_user(
+        database_session,
+        email="target@example.com",
+        first_name="Target",
+        last_name="User",
+        password="old-password",
+    )
+
+    original_password_hash = target.password_hash
+
+    response = client.post(
+        f"/users/{target.id}/password",
+        headers=authorization_header(admin),
+        json={
+            "new_password": "abcdefgh",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": (
+            "Das Passwort muss einen "
+            "Großbuchstaben, eine Zahl und "
+            "ein Sonderzeichen enthalten."
+        ),
+    }
+
+    database_session.refresh(target)
+
+    assert (
+        target.password_hash
+        == original_password_hash
+    )
+
+
+def test_password_change_uses_saved_policy(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            password_min_length=8,
+            password_require_uppercase=False,
+            password_require_lowercase=True,
+            password_require_digit=False,
+            password_require_special=False,
+        )
+    )
+    database_session.commit()
+
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Normal",
+        last_name="User",
+        password="old-password",
+    )
+
+    response = client.post(
+        "/users/me/password",
+        headers=authorization_header(user),
+        json={
+            "current_password": "old-password",
+            "new_password": "abcdefgh",
+        },
+    )
+
+    assert response.status_code == 204
+
+    database_session.refresh(user)
+
+    assert verify_password(
+        "abcdefgh",
+        user.password_hash,
     )
 
 

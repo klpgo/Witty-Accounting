@@ -18,6 +18,7 @@ import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
 import AdminSmtpSettingsForm from './AdminSmtpSettingsForm'
+import AdminPasswordPolicyForm from './AdminPasswordPolicyForm'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
@@ -99,6 +100,7 @@ function AdminSettingsPage() {
     invoiceNumberPrefix,
     setInvoiceNumberPrefix,
   ] = useState('RE')
+
   const [
     currentEnergyPrice,
     setCurrentEnergyPrice,
@@ -1041,9 +1043,6 @@ function AdminSettingsPage() {
         </form>
       )}
       {!isLoading && (
-        <AdminSmtpSettingsForm />
-      )}
-      {!isLoading && (
         <form
           className="card settings-form"
           onSubmit={handleEnergyPriceSubmit}
@@ -1161,6 +1160,12 @@ function AdminSettingsPage() {
             </button>
           </div>
         </form>
+      )}
+      {!isLoading && (
+        <AdminPasswordPolicyForm />
+      )}
+      {!isLoading && (
+        <AdminSmtpSettingsForm />
       )}
     </div>
   )

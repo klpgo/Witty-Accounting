@@ -19,6 +19,11 @@ export interface GlobalSettings {
   invoice_iban: string | null
   invoice_bic: string | null
   invoice_number_prefix: string
+  password_min_length: number
+  password_require_uppercase: boolean
+  password_require_lowercase: boolean
+  password_require_digit: boolean
+  password_require_special: boolean
 }
 
 export interface GlobalSettingsUpdate {
@@ -34,6 +39,11 @@ export interface GlobalSettingsUpdate {
   invoice_iban?: string | null
   invoice_bic?: string | null
   invoice_number_prefix?: string
+  password_min_length?: number
+  password_require_uppercase?: boolean
+  password_require_lowercase?: boolean
+  password_require_digit?: boolean
+  password_require_special?: boolean
 }
 
 export interface SmtpSettings {

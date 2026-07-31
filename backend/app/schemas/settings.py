@@ -93,6 +93,14 @@ InvoiceNumberPrefix = Annotated[
     ),
 ]
 
+PasswordMinLength = Annotated[
+    int,
+    Field(
+        ge=8,
+        le=128,
+    ),
+]
+
 
 class PublicSettingsResponse(BaseModel):
     app_name: str
@@ -115,6 +123,11 @@ class GlobalSettingsResponse(BaseModel):
     invoice_iban: str | None
     invoice_bic: str | None
     invoice_number_prefix: str
+    password_min_length: int
+    password_require_uppercase: bool
+    password_require_lowercase: bool
+    password_require_digit: bool
+    password_require_special: bool
 
 
 class GlobalSettingsUpdate(BaseModel):
@@ -138,6 +151,13 @@ class GlobalSettingsUpdate(BaseModel):
     invoice_number_prefix: (
         InvoiceNumberPrefix | None
     ) = None
+    password_min_length: (
+        PasswordMinLength | None
+    ) = None
+    password_require_uppercase: bool | None = None
+    password_require_lowercase: bool | None = None
+    password_require_digit: bool | None = None
+    password_require_special: bool | None = None
 
     @field_validator(
         "app_name",
@@ -145,6 +165,11 @@ class GlobalSettingsUpdate(BaseModel):
         "monthly_base_fee_vat_rate",
         "invoice_payment_term_days",
         "invoice_number_prefix",
+        "password_min_length",
+        "password_require_uppercase",
+        "password_require_lowercase",
+        "password_require_digit",
+        "password_require_special",
         mode="before",
     )
     @classmethod

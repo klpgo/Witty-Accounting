@@ -29,6 +29,12 @@ from app.security import (
     verify_password,
 )
 
+from app.services.password_policy import (
+    PasswordPolicyError,
+    load_password_policy,
+    validate_password,
+)
+
 router = APIRouter(
     prefix="/users",
     tags=["users"],
@@ -78,6 +84,26 @@ def get_user_or_404(
         )
 
     return user
+
+
+def validate_new_password(
+    db: Session,
+    password: str,
+) -> None:
+    policy = load_password_policy(db)
+
+    try:
+        validate_password(
+            password,
+            policy,
+        )
+    except PasswordPolicyError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_CONTENT
+            ),
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(
@@ -202,6 +228,11 @@ def change_own_password(
                 "nicht korrekt."
             ),
         )
+
+    validate_new_password(
+        db,
+        payload.new_password,
+    )
 
     current_user.password_hash = hash_password(
         payload.new_password
@@ -360,6 +391,11 @@ def reset_user_password(
     user = get_user_or_404(
         db,
         user_id,
+    )
+
+    validate_new_password(
+        db,
+        payload.new_password,
     )
 
     user.password_hash = hash_password(

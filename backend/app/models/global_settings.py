@@ -115,6 +115,49 @@ class GlobalSettings(Base):
         server_default="RE",
     )
 
+    password_min_length: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=8,
+        server_default="8",
+    )
+
+    password_require_uppercase: Mapped[
+        bool
+    ] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    password_require_lowercase: Mapped[
+        bool
+    ] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    password_require_digit: Mapped[
+        bool
+    ] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    password_require_special: Mapped[
+        bool
+    ] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
     smtp_use_database_settings: Mapped[
         bool
     ] = mapped_column(
