@@ -978,28 +978,6 @@ function AdminSettingsPage() {
               <span>
                 Zahlungsziel in Tagen
               </span>
-            <label className="form-field">
-              <span>Rechnungsnummer-Präfix</span>
-
-              <input
-                type="text"
-                value={invoiceNumberPrefix}
-                maxLength={20}
-                onChange={(event) => {
-                  setInvoiceNumberPrefix(
-                    event.target.value,
-                  )
-                }}
-                required
-              />
-
-              <small className="muted">
-                Beispiel: RE ergibt
-                RE-2026-000001. Das Jahr und die
-                laufende Nummer werden automatisch
-                ergänzt.
-              </small>
-            </label>
 
               <input
                 type="number"
@@ -1021,6 +999,31 @@ function AdminSettingsPage() {
                 addiert.
               </small>
             </label>
+
+            <label className="form-field">
+                <span>
+                  Rechnungsnummer-Präfix
+                </span>
+
+                <input
+                  type="text"
+                  value={invoiceNumberPrefix}
+                  maxLength={20}
+                  onChange={(event) => {
+                    setInvoiceNumberPrefix(
+                      event.target.value,
+                    )
+                  }}
+                  required
+                />
+
+                <small className="muted">
+                  Beispiel: RE ergibt
+                  RE-2026-000001. Das Jahr und die
+                  laufende Nummer werden automatisch
+                  ergänzt.
+                </small>
+              </label>
           </div>
 
           <div className="settings-actions">
