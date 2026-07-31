@@ -75,6 +75,27 @@ class Invoice(Base):
         nullable=True,
     )
 
+    issuer_bank_name: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    issuer_iban: Mapped[
+        str | None
+    ] = mapped_column(
+        String(34),
+        nullable=True,
+    )
+
+    issuer_bic: Mapped[
+        str | None
+    ] = mapped_column(
+        String(11),
+        nullable=True,
+    )
+
     recipient_name: Mapped[str] = mapped_column(
         String(255),
         nullable=False,

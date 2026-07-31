@@ -23,6 +23,9 @@ def create_finalized_invoice() -> Invoice:
         ),
         issuer_tax_number="123/456/78901",
         issuer_vat_id=None,
+        issuer_bank_name="Musterbank",
+        issuer_iban="DE89370400440532013000",
+        issuer_bic="COBADEFFXXX",
         recipient_name="Max Mustermann",
         recipient_address=(
             "Musterweg 5\n54321 Musterstadt"
@@ -151,6 +154,13 @@ def test_builds_readable_invoice_pdf() -> None:
         "Zahlbar bis 19.07.2026"
         in extracted_text
     )
+    assert "Bankverbindung" in extracted_text
+    assert "Musterbank" in extracted_text
+    assert (
+        "DE89370400440532013000"
+        in extracted_text
+    )
+    assert "COBADEFFXXX" in extracted_text
 
 
 def test_builds_monthly_base_fee_invoice_pdf() -> None:

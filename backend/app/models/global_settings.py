@@ -57,6 +57,62 @@ class GlobalSettings(Base):
         )
     )
 
+    invoice_issuer_name: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    invoice_issuer_address: Mapped[
+        str | None
+    ] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    invoice_tax_number: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    invoice_vat_id: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    invoice_bank_name: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    invoice_iban: Mapped[
+        str | None
+    ] = mapped_column(
+        String(34),
+        nullable=True,
+    )
+
+    invoice_bic: Mapped[
+        str | None
+    ] = mapped_column(
+        String(11),
+        nullable=True,
+    )
+
+    invoice_number_prefix: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="RE",
+        server_default="RE",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

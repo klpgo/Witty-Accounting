@@ -101,6 +101,11 @@ def create_cancellation_draft(
         issuer_vat_id=(
             original_invoice.issuer_vat_id
         ),
+        issuer_bank_name=(
+            original_invoice.issuer_bank_name
+        ),
+        issuer_iban=original_invoice.issuer_iban,
+        issuer_bic=original_invoice.issuer_bic,
         recipient_name=(
             original_invoice.recipient_name
         ),

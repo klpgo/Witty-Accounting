@@ -24,14 +24,11 @@ from reportlab.pdfgen import canvas as pdf_canvas
 
 from app.models.invoice import Invoice
 
-
 class InvoicePdfError(Exception):
     """Base exception for invoice PDF generation."""
 
-
 class InvoiceNotFinalizedError(InvoicePdfError):
     """Raised when a draft invoice is rendered."""
-
 
 class IncompleteInvoicePdfDataError(
     InvoicePdfError
@@ -301,6 +298,32 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
     )
 
     issuer_identifiers: list[str] = []
+
+    if invoice.document_type != "cancellation":
+        bank_details: list[str] = []
+
+        if invoice.issuer_bank_name:
+            bank_details.append(
+                escape(invoice.issuer_bank_name)
+            )
+
+        if invoice.issuer_iban:
+            bank_details.append(
+                "IBAN: "
+                + escape(invoice.issuer_iban)
+            )
+
+        if invoice.issuer_bic:
+            bank_details.append(
+                "BIC: "
+                + escape(invoice.issuer_bic)
+            )
+
+        if bank_details:
+            issuer_identifiers.append(
+                "<b>Bankverbindung:</b> "
+                + " | ".join(bank_details)
+            )
 
     if invoice.issuer_tax_number:
         issuer_identifiers.append(

@@ -42,6 +42,17 @@ MONTH_NAMES_DE = (
 )
 
 
+def normalize_optional_text(
+    value: str | None,
+) -> str | None:
+    if value is None:
+        return None
+
+    normalized = value.strip()
+
+    return normalized or None
+
+
 @dataclass(frozen=True)
 class MonthlyBaseFeeCandidate:
     assignment: RFIDCardAssignment
@@ -583,8 +594,78 @@ def create_invoice_draft(
             "keine Anschrift hinterlegt."
         )
 
-    issuer_tax_number = settings.invoice_tax_number
-    issuer_vat_id = settings.invoice_vat_id
+    global_settings = db.get(
+        GlobalSettings,
+        1,
+    )
+
+    database_business_settings_configured = (
+        global_settings is not None
+        and any(
+            normalize_optional_text(value)
+            is not None
+            for value in (
+                global_settings.invoice_issuer_name,
+                global_settings.invoice_issuer_address,
+                global_settings.invoice_tax_number,
+                global_settings.invoice_vat_id,
+                global_settings.invoice_bank_name,
+                global_settings.invoice_iban,
+                global_settings.invoice_bic,
+            )
+        )
+    )
+
+    if database_business_settings_configured:
+        issuer_name = normalize_optional_text(
+            global_settings.invoice_issuer_name
+        )
+        issuer_address = normalize_optional_text(
+            global_settings.invoice_issuer_address
+        )
+        issuer_tax_number = normalize_optional_text(
+            global_settings.invoice_tax_number
+        )
+        issuer_vat_id = normalize_optional_text(
+            global_settings.invoice_vat_id
+        )
+        issuer_bank_name = normalize_optional_text(
+            global_settings.invoice_bank_name
+        )
+        issuer_iban = normalize_optional_text(
+            global_settings.invoice_iban
+        )
+        issuer_bic = normalize_optional_text(
+            global_settings.invoice_bic
+        )
+    else:
+        issuer_name = normalize_optional_text(
+            settings.invoice_issuer_name
+        )
+        issuer_address = normalize_optional_text(
+            settings.invoice_issuer_address
+        )
+        issuer_tax_number = normalize_optional_text(
+            settings.invoice_tax_number
+        )
+        issuer_vat_id = normalize_optional_text(
+            settings.invoice_vat_id
+        )
+        issuer_bank_name = None
+        issuer_iban = None
+        issuer_bic = None
+
+    if issuer_name is None:
+        raise InvoiceDraftError(
+            "Für den Rechnungsaussteller ist "
+            "kein Name konfiguriert."
+        )
+
+    if issuer_address is None:
+        raise InvoiceDraftError(
+            "Für den Rechnungsaussteller ist "
+            "keine Anschrift konfiguriert."
+        )
 
     if not issuer_tax_number and not issuer_vat_id:
         raise InvoiceDraftError(
@@ -600,10 +681,13 @@ def create_invoice_draft(
         cancellation_reason=None,
         cancelled_at=None,
         user_id=user_id,
-        issuer_name=settings.invoice_issuer_name,
-        issuer_address=settings.invoice_issuer_address,
+        issuer_name=issuer_name,
+        issuer_address=issuer_address,
         issuer_tax_number=issuer_tax_number,
         issuer_vat_id=issuer_vat_id,
+        issuer_bank_name=issuer_bank_name,
+        issuer_iban=issuer_iban,
+        issuer_bic=issuer_bic,
         recipient_name=recipient_name,
         recipient_address=user.address,
         status="draft",
@@ -963,9 +1047,18 @@ def finalize_invoice(
             "dem Rechnungsdatum liegen."
         )
 
+    invoice_number_prefix = (
+        normalize_optional_text(
+            global_settings.invoice_number_prefix
+        )
+        if global_settings is not None
+        else None
+    ) or "RE"
+
     try:
         invoice.invoice_number = (
-            f"RE-{final_issue_date.year}-"
+            f"{invoice_number_prefix}-"
+            f"{final_issue_date.year}-"
             f"{invoice.id:06d}"
         )
         invoice.issue_date = final_issue_date

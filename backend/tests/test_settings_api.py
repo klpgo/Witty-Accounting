@@ -86,6 +86,14 @@ def add_global_settings(
         "19.00"
     ),
     invoice_payment_term_days: int = 0,
+    invoice_issuer_name: str | None = None,
+    invoice_issuer_address: str | None = None,
+    invoice_tax_number: str | None = None,
+    invoice_vat_id: str | None = None,
+    invoice_bank_name: str | None = None,
+    invoice_iban: str | None = None,
+    invoice_bic: str | None = None,
+    invoice_number_prefix: str = "RE",
 ) -> GlobalSettings:
     global_settings = GlobalSettings(
         id=1,
@@ -97,6 +105,14 @@ def add_global_settings(
         invoice_payment_term_days=(
             invoice_payment_term_days
         ),
+        invoice_issuer_name=invoice_issuer_name,
+        invoice_issuer_address=invoice_issuer_address,
+        invoice_tax_number=invoice_tax_number,
+        invoice_vat_id=invoice_vat_id,
+        invoice_bank_name=invoice_bank_name,
+        invoice_iban=invoice_iban,
+        invoice_bic=invoice_bic,
+        invoice_number_prefix=invoice_number_prefix,
     )
 
     db.add(global_settings)
@@ -162,6 +178,14 @@ def test_reads_admin_settings(
         "monthly_base_fee_net": "12.5000",
         "monthly_base_fee_vat_rate": "19.00",
         "invoice_payment_term_days": 14,
+        "invoice_issuer_name": None,
+        "invoice_issuer_address": None,
+        "invoice_tax_number": None,
+        "invoice_vat_id": None,
+        "invoice_bank_name": None,
+        "invoice_iban": None,
+        "invoice_bic": None,
+        "invoice_number_prefix": "RE",
     }
 
 
@@ -189,6 +213,14 @@ def test_updates_admin_settings(
         "monthly_base_fee_net": "9.9900",
         "monthly_base_fee_vat_rate": "7.00",
         "invoice_payment_term_days": 21,
+        "invoice_issuer_name": None,
+        "invoice_issuer_address": None,
+        "invoice_tax_number": None,
+        "invoice_vat_id": None,
+        "invoice_bank_name": None,
+        "invoice_iban": None,
+        "invoice_bic": None,
+        "invoice_number_prefix": "RE",
     }
 
     database_session.refresh(global_settings)
@@ -274,3 +306,176 @@ def test_admin_settings_require_authentication(
 
     assert get_response.status_code == 401
     assert patch_response.status_code == 401
+
+
+def test_updates_invoice_business_settings(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+    )
+
+    response = admin_client.patch(
+        "/settings",
+        json={
+            "invoice_issuer_name": (
+                "  Klaus Gottschalk  "
+            ),
+            "invoice_issuer_address": (
+                "  Musterstraße 1\n"
+                "12345 Musterstadt  "
+            ),
+            "invoice_tax_number": (
+                "  123/456/78901  "
+            ),
+            "invoice_vat_id": (
+                "  DE123456789  "
+            ),
+            "invoice_bank_name": (
+                "  Musterbank  "
+            ),
+            "invoice_iban": (
+                "de89 3704 0044 0532 0130 00"
+            ),
+            "invoice_bic": "cobadeffxxx",
+            "invoice_number_prefix": " re ",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["invoice_issuer_name"] == (
+        "Klaus Gottschalk"
+    )
+    assert body["invoice_issuer_address"] == (
+        "Musterstraße 1\n12345 Musterstadt"
+    )
+    assert body["invoice_tax_number"] == (
+        "123/456/78901"
+    )
+    assert body["invoice_vat_id"] == (
+        "DE123456789"
+    )
+    assert body["invoice_bank_name"] == (
+        "Musterbank"
+    )
+    assert body["invoice_iban"] == (
+        "DE89370400440532013000"
+    )
+    assert body["invoice_bic"] == (
+        "COBADEFFXXX"
+    )
+    assert body["invoice_number_prefix"] == "RE"
+
+    database_session.refresh(global_settings)
+
+    assert global_settings.invoice_iban == (
+        "DE89370400440532013000"
+    )
+    assert global_settings.invoice_bic == (
+        "COBADEFFXXX"
+    )
+    assert (
+        global_settings.invoice_number_prefix
+        == "RE"
+    )
+
+
+def test_clears_optional_invoice_business_settings(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+        invoice_issuer_name="Klaus Gottschalk",
+        invoice_issuer_address=(
+            "Musterstraße 1\n12345 Musterstadt"
+        ),
+        invoice_tax_number="123/456/78901",
+        invoice_vat_id="DE123456789",
+        invoice_bank_name="Musterbank",
+        invoice_iban="DE89370400440532013000",
+        invoice_bic="COBADEFFXXX",
+    )
+
+    response = admin_client.patch(
+        "/settings",
+        json={
+            "invoice_issuer_name": None,
+            "invoice_issuer_address": None,
+            "invoice_tax_number": None,
+            "invoice_vat_id": None,
+            "invoice_bank_name": None,
+            "invoice_iban": None,
+            "invoice_bic": None,
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["invoice_issuer_name"] is None
+    assert body["invoice_issuer_address"] is None
+    assert body["invoice_tax_number"] is None
+    assert body["invoice_vat_id"] is None
+    assert body["invoice_bank_name"] is None
+    assert body["invoice_iban"] is None
+    assert body["invoice_bic"] is None
+    assert body["invoice_number_prefix"] == "RE"
+
+    database_session.refresh(global_settings)
+
+    assert global_settings.invoice_issuer_name is None
+    assert global_settings.invoice_iban is None
+    assert global_settings.invoice_bic is None
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        (
+            "invoice_iban",
+            "DE12",
+        ),
+        (
+            "invoice_iban",
+            "DE89-3704-0044",
+        ),
+        (
+            "invoice_bic",
+            "ABC",
+        ),
+        (
+            "invoice_bic",
+            "ABCDEFGHIJ",
+        ),
+        (
+            "invoice_number_prefix",
+            "RE-2026",
+        ),
+        (
+            "invoice_number_prefix",
+            None,
+        ),
+    ],
+)
+def test_rejects_invalid_invoice_business_settings(
+    admin_client: TestClient,
+    database_session: Session,
+    field_name: str,
+    value: object,
+) -> None:
+    add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/settings",
+        json={
+            field_name: value,
+        },
+    )
+
+    assert response.status_code == 422

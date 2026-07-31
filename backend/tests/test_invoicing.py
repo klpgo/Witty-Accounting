@@ -207,6 +207,69 @@ def test_creates_invoice_draft(
     assert item.gross_amount == Decimal("2.62")
 
 
+def test_uses_global_invoice_business_settings(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            invoice_issuer_name=(
+                "Klaus Gottschalk"
+            ),
+            invoice_issuer_address=(
+                "Musterstraße 1\n"
+                "12345 Musterstadt"
+            ),
+            invoice_tax_number=None,
+            invoice_vat_id="DE123456789",
+            invoice_bank_name="Musterbank",
+            invoice_iban=(
+                "DE89370400440532013000"
+            ),
+            invoice_bic="COBADEFFXXX",
+            invoice_number_prefix="RG",
+        )
+    )
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    assert invoice.issuer_name == (
+        "Klaus Gottschalk"
+    )
+    assert invoice.issuer_address == (
+        "Musterstraße 1\n12345 Musterstadt"
+    )
+    assert invoice.issuer_tax_number is None
+    assert invoice.issuer_vat_id == (
+        "DE123456789"
+    )
+    assert invoice.issuer_bank_name == (
+        "Musterbank"
+    )
+    assert invoice.issuer_iban == (
+        "DE89370400440532013000"
+    )
+    assert invoice.issuer_bic == (
+        "COBADEFFXXX"
+    )
+
+
 def test_places_monthly_base_fee_before_charging_session(
     database_session: Session,
 ) -> None:
@@ -728,6 +791,46 @@ def test_finalizes_invoice_and_locks_session(
     assert charging_session.invoice_id == invoice.id
 
 
+def test_uses_configured_invoice_number_prefix(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            invoice_number_prefix="RG",
+        )
+    )
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    finalized_invoice = finalize_invoice(
+        database_session,
+        invoice_id=invoice.id,
+        issue_date=date(2026, 7, 5),
+        due_date=date(2026, 7, 19),
+    )
+
+    assert finalized_invoice.invoice_number == (
+        f"RG-2026-{invoice.id:06d}"
+    )
+
+
 def test_uses_global_payment_term_for_due_date(
     database_session: Session,
 ) -> None:
@@ -872,6 +975,17 @@ def test_creates_cancellation_draft(
         ),
     )
 
+    original_invoice.issuer_bank_name = (
+        "Musterbank"
+    )
+    original_invoice.issuer_iban = (
+        "DE89370400440532013000"
+    )
+    original_invoice.issuer_bic = (
+        "COBADEFFXXX"
+    )
+    database_session.commit()
+
     original_invoice = finalize_invoice(
         database_session,
         invoice_id=original_invoice.id,
@@ -955,6 +1069,15 @@ def test_creates_cancellation_draft(
     )
     assert cancellation_item.gross_amount == (
         -original_item.gross_amount
+    )
+    assert cancellation.issuer_bank_name == (
+        original_invoice.issuer_bank_name
+    )
+    assert cancellation.issuer_iban == (
+        original_invoice.issuer_iban
+    )
+    assert cancellation.issuer_bic == (
+        original_invoice.issuer_bic
     )
 
 
