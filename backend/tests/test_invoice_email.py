@@ -5,6 +5,8 @@ from email.message import EmailMessage
 from pathlib import Path
 import smtplib
 import ssl
+from cryptography.fernet import Fernet
+from pydantic import SecretStr
 
 import pytest
 from sqlalchemy import create_engine
@@ -22,14 +24,20 @@ from app.models.user import User
 from app.services.invoice_archive import (
     archive_invoice_pdf,
 )
+from app.models.global_settings import GlobalSettings
+
 from app.services.invoice_email import (
     InvoiceEmailConfigurationError,
     InvoiceEmailDeliveryError,
     InvoiceEmailRecipientError,
     InvoiceEmailStateError,
     send_invoice_email,
+    send_smtp_test_email,
 )
 from app.services.smime import SmimeSigningError
+from app.services.smtp_secret import (
+    encrypt_smtp_password,
+)
 
 
 class FakeSMTP:
@@ -44,6 +52,8 @@ class FakeSMTP:
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.login_username: str | None = None
+        self.login_password: str | None = None
         self.ehlo_calls = 0
         self.starttls_called = False
         self.starttls_context: (
@@ -79,6 +89,15 @@ class FakeSMTP:
         self.starttls_called = True
         self.starttls_context = context
         return 220, b"Ready to start TLS"
+
+    def login(
+        self,
+        user: str,
+        password: str,
+    ) -> tuple[int, bytes]:
+        self.login_username = user
+        self.login_password = password
+        return 235, b"Authentication successful"
 
     def send_message(
         self,
@@ -156,6 +175,13 @@ def configure_mail_settings(
 
     monkeypatch.setattr(
         settings,
+        "smtp_settings_encryption_key",
+        SecretStr(
+            Fernet.generate_key().decode("ascii")
+        ),
+    )
+    monkeypatch.setattr(
+        settings,
         "invoice_pdf_archive_dir",
         tmp_path,
     )
@@ -168,6 +194,16 @@ def configure_mail_settings(
         settings,
         "smtp_port",
         2525,
+    )
+    monkeypatch.setattr(
+        settings,
+        "smtp_username",
+        None,
+    )
+    monkeypatch.setattr(
+        settings,
+        "smtp_password",
+        None,
     )
     monkeypatch.setattr(
         settings,
@@ -419,6 +455,8 @@ def test_sends_archived_invoice_pdf(
     assert smtp.timeout == 7.5
     assert smtp.ehlo_calls == 1
     assert smtp.starttls_called is False
+    assert smtp.login_username is None
+    assert smtp.login_password is None
 
     message = smtp.message
 
@@ -473,6 +511,89 @@ def test_sends_archived_invoice_pdf(
 
     assert pdf_data is not None
     assert pdf_data.startswith(b"%PDF")
+
+def test_uses_database_smtp_settings_and_login(
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice = create_finalized_invoice(
+        database_session
+    )
+    archive_invoice(
+        database_session,
+        invoice,
+        tmp_path,
+    )
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            smtp_use_database_settings=True,
+            mail_sending_enabled=True,
+            smtp_host="smtp.database.test",
+            smtp_port=587,
+            smtp_timeout_seconds=Decimal("12.50"),
+            smtp_starttls=True,
+            smtp_username="database-user",
+            smtp_password_encrypted=(
+                encrypt_smtp_password(
+                    "database-password"
+                )
+            ),
+            mail_from_address=(
+                "database-sender@example.test"
+            ),
+            mail_from_name="Database Sender",
+        )
+    )
+    database_session.commit()
+
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FakeSMTP,
+    )
+
+    result = send_invoice_email(
+        database_session,
+        invoice_id=invoice.id,
+    )
+
+    assert result.recipient_email == (
+        "recipient@example.test"
+    )
+
+    assert len(FakeSMTP.instances) == 1
+
+    smtp = FakeSMTP.instances[0]
+
+    assert smtp.host == "smtp.database.test"
+    assert smtp.port == 587
+    assert smtp.timeout == 12.5
+    assert smtp.starttls_called is True
+    assert smtp.ehlo_calls == 2
+    assert smtp.login_username == "database-user"
+    assert smtp.login_password == (
+        "database-password"
+    )
+
+    message = smtp.message
+
+    assert message is not None
+    assert message["From"] == (
+        "Database Sender "
+        "<database-sender@example.test>"
+    )
+
+    plain_body = message.get_body(
+        preferencelist=("plain",)
+    )
+
+    assert plain_body is not None
+    assert plain_body.get_content().endswith(
+        "Mit freundlichen Grüßen\n"
+        "Database Sender\n"
+    )
 
 
 def test_rejects_draft_invoice(
@@ -914,3 +1035,57 @@ def test_wraps_signed_smtp_delivery_error(
             database_session,
             invoice_id=invoice.id,
         )
+
+
+def test_sends_smtp_test_email(
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FakeSMTP,
+    )
+
+    result = send_smtp_test_email(
+        database_session,
+        recipient_email=(
+            "  admin@example.test  "
+        ),
+    )
+
+    assert result.recipient_email == (
+        "admin@example.test"
+    )
+    assert result.subject == (
+        "Witty-Accounting Mailserver-Test"
+    )
+
+    assert len(FakeSMTP.instances) == 1
+
+    smtp = FakeSMTP.instances[0]
+
+    assert smtp.host == "smtp.example.test"
+    assert smtp.port == 2525
+    assert smtp.timeout == 7.5
+
+    message = smtp.message
+
+    assert message is not None
+    assert message["To"] == "admin@example.test"
+    assert message["From"] == (
+        "Klaus Gottschalk "
+        "<rechnung@example.test>"
+    )
+    assert message["Subject"] == (
+        "Witty-Accounting Mailserver-Test"
+    )
+
+    plain_body = message.get_body(
+        preferencelist=("plain",)
+    )
+
+    assert plain_body is not None
+    assert (
+        "Mailserver-Einstellungen funktionieren"
+        in plain_body.get_content()
+    )

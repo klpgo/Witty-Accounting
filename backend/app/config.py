@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     mail_smime_pkcs12_password_file: (
         Path | None
     ) = None
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+
+    smtp_settings_encryption_key: (
+        SecretStr | None
+    ) = None
 
 
 settings = Settings()

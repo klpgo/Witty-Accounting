@@ -36,6 +36,38 @@ export interface GlobalSettingsUpdate {
   invoice_number_prefix?: string
 }
 
+export interface SmtpSettings {
+  smtp_use_database_settings: boolean
+  mail_sending_enabled: boolean
+  smtp_host: string
+  smtp_port: number
+  smtp_timeout_seconds: string
+  smtp_starttls: boolean
+  smtp_username: string | null
+  smtp_password_configured: boolean
+  mail_from_address: string
+  mail_from_name: string
+}
+
+export interface SmtpSettingsUpdate {
+  smtp_use_database_settings?: boolean
+  mail_sending_enabled?: boolean
+  smtp_host?: string
+  smtp_port?: number
+  smtp_timeout_seconds?: string
+  smtp_starttls?: boolean
+  smtp_username?: string | null
+  smtp_password?: string
+  clear_smtp_password?: boolean
+  mail_from_address?: string
+  mail_from_name?: string
+}
+
+export interface SmtpTestEmailResponse {
+  recipient_email: string
+  subject: string
+}
+
 export interface EnergyPrice {
   id: number
   valid_from: string
@@ -157,6 +189,81 @@ export async function getGlobalSettings(
   return (
     await response.json()
   ) as GlobalSettings
+}
+
+export async function getSmtpSettings(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<SmtpSettings> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/smtp`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as SmtpSettings
+}
+
+export async function updateSmtpSettings(
+  accessToken: string,
+  payload: SmtpSettingsUpdate,
+): Promise<SmtpSettings> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/smtp`,
+    {
+      method: 'PATCH',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as SmtpSettings
+}
+
+export async function testSmtpSettings(
+  accessToken: string,
+): Promise<SmtpTestEmailResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/smtp/test`,
+    {
+      method: 'POST',
+      headers: createHeaders(accessToken),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as SmtpTestEmailResponse
 }
 
 export async function updateGlobalSettings(

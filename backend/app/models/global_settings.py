@@ -6,6 +6,8 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Boolean,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -111,6 +113,80 @@ class GlobalSettings(Base):
         nullable=False,
         default="RE",
         server_default="RE",
+    )
+
+    smtp_use_database_settings: Mapped[
+        bool
+    ] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+
+    mail_sending_enabled: Mapped[
+        bool
+    ] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    smtp_host: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    smtp_port: Mapped[
+        int | None
+    ] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    smtp_timeout_seconds: Mapped[
+        Decimal | None
+    ] = mapped_column(
+        Numeric(8, 2),
+        nullable=True,
+    )
+
+    smtp_starttls: Mapped[
+        bool | None
+    ] = mapped_column(
+        Boolean,
+        nullable=True,
+    )
+
+    smtp_username: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    smtp_password_encrypted: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    mail_from_address: Mapped[
+        str | None
+    ] = mapped_column(
+        String(320),
+        nullable=True,
+    )
+
+    mail_from_name: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
