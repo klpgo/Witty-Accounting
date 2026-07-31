@@ -112,6 +112,7 @@ class GlobalSettingsResponse(BaseModel):
     )
 
     app_name: str
+    maintenance_mode: bool
     monthly_base_fee_net: Decimal
     monthly_base_fee_vat_rate: Decimal
     invoice_payment_term_days: int
@@ -136,6 +137,7 @@ class GlobalSettingsUpdate(BaseModel):
     )
 
     app_name: AppName | None = None
+    maintenance_mode: bool | None = None
     monthly_base_fee_net: BaseFeeDecimal | None = None
     monthly_base_fee_vat_rate: VatDecimal | None = None
     invoice_payment_term_days: (
@@ -200,6 +202,7 @@ class GlobalSettingsUpdate(BaseModel):
         return normalized
 
     @field_validator(
+        "maintenance_mode",
         "invoice_issuer_name",
         "invoice_issuer_address",
         "invoice_tax_number",

@@ -48,12 +48,6 @@ export function AuthProvider({
         const currentUser =
           await getCurrentUser(accessToken)
 
-        if (!currentUser.is_admin) {
-          throw new Error(
-            'Administratorrechte erforderlich.',
-          )
-        }
-
         if (!isCancelled) {
           setUser(currentUser)
           setStatus('authenticated')
@@ -87,12 +81,6 @@ export function AuthProvider({
     const currentUser = await getCurrentUser(
       token.access_token,
     )
-
-    if (!currentUser.is_admin) {
-      throw new Error(
-        'Für das Web-Interface sind Administratorrechte erforderlich.',
-      )
-    }
 
     setAccessToken(token.access_token)
     setUser(currentUser)

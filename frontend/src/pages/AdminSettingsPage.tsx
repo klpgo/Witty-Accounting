@@ -19,6 +19,7 @@ import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
 import AdminSmtpSettingsForm from './AdminSmtpSettingsForm'
 import AdminPasswordPolicyForm from './AdminPasswordPolicyForm'
+import AdminAccessSettingsForm from './AdminAccessSettingsForm'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
@@ -1160,6 +1161,9 @@ function AdminSettingsPage() {
             </button>
           </div>
         </form>
+      )}
+      {!isLoading && (
+        <AdminAccessSettingsForm />
       )}
       {!isLoading && (
         <AdminPasswordPolicyForm />

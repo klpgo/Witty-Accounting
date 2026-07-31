@@ -11,6 +11,7 @@ from app.auth import create_access_token
 from app.database import Base
 from app.main import app
 from app.models.user import User
+from app.models.global_settings import GlobalSettings
 from app.security import hash_password
 
 
@@ -300,3 +301,91 @@ def test_me_requires_authentication(
     assert response.headers[
         "www-authenticate"
     ] == "Bearer"
+
+
+def test_normal_user_can_login_without_maintenance_mode(
+    unauthenticated_client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        is_admin=False,
+    )
+
+    response = unauthenticated_client.post(
+        "/auth/token",
+        data={
+            "username": user.email,
+            "password": TEST_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["token_type"] == "bearer"
+
+
+def test_maintenance_mode_rejects_normal_user_login(
+    unauthenticated_client: TestClient,
+    database_session: Session,
+) -> None:
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            maintenance_mode=True,
+        )
+    )
+    database_session.commit()
+
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        is_admin=False,
+    )
+
+    response = unauthenticated_client.post(
+        "/auth/token",
+        data={
+            "username": user.email,
+            "password": TEST_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": (
+            "Der Wartungsmodus ist aktiv. "
+            "Die Anmeldung ist derzeit nur für "
+            "Administratoren möglich."
+        ),
+    }
+
+
+def test_maintenance_mode_allows_admin_login(
+    unauthenticated_client: TestClient,
+    database_session: Session,
+) -> None:
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            maintenance_mode=True,
+        )
+    )
+    database_session.commit()
+
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        is_admin=True,
+    )
+
+    response = unauthenticated_client.post(
+        "/auth/token",
+        data={
+            "username": admin.email,
+            "password": TEST_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["token_type"] == "bearer"

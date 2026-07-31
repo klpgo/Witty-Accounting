@@ -115,6 +115,13 @@ class GlobalSettings(Base):
         server_default="RE",
     )
 
+    maintenance_mode: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+
     password_min_length: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
