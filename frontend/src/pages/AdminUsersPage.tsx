@@ -42,10 +42,24 @@ function sortUsers(users: User[]): User[] {
 function AdminUsersPage() {
   const navigate = useNavigate()
   const { user: currentUser, signOut } = useAuth()
+  const [
+    hideInactiveUsers,
+    setHideInactiveUsers,
+  ] = useState(true)
 
   const [users, setUsers] = useState<User[]>([])
   const [selectedUserId, setSelectedUserId] =
     useState<number | null>(null)
+  const visibleUsers = useMemo(
+    () =>
+      hideInactiveUsers
+        ? users.filter(
+            (managedUser) =>
+              managedUser.active,
+          )
+        : users,
+    [hideInactiveUsers, users],
+  )
   const [isCreating, setIsCreating] =
     useState(false)
 
@@ -90,6 +104,29 @@ function AdminUsersPage() {
       ) ?? null,
     [selectedUserId, users],
   )
+
+  useEffect(() => {
+    if (
+      isCreating ||
+      !hideInactiveUsers ||
+      selectedUser === null ||
+      selectedUser.active
+    ) {
+      return
+    }
+
+    setSelectedUserId(
+      users.find(
+        (managedUser) =>
+          managedUser.active,
+      )?.id ?? null,
+    )
+  }, [
+    hideInactiveUsers,
+    isCreating,
+    selectedUser,
+    users,
+  ])
 
   const isOwnAccount =
     selectedUser !== null &&
@@ -504,6 +541,24 @@ function AdminUsersPage() {
       )}
 
       {!isLoading && users.length > 0 && (
+        <section className="card">
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={hideInactiveUsers}
+              onChange={(event) =>
+                setHideInactiveUsers(
+                  event.target.checked,
+                )
+              }
+            />
+
+            Inaktive Benutzer ausblenden
+          </label>
+        </section>
+      )}
+
+      {!isLoading && users.length > 0 && (
         <div className="admin-layout">
           <section className="card table-card">
             <div className="table-scroll">
@@ -519,7 +574,7 @@ function AdminUsersPage() {
                 </thead>
 
                 <tbody>
-                  {users.map((managedUser) => (
+                  {visibleUsers.map((managedUser) => (
                     <tr
                       key={managedUser.id}
                       className={
