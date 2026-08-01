@@ -15,6 +15,8 @@ import AdminUsersPage from './pages/AdminUsersPage'
 import AdminRFIDCardsPage from './pages/AdminRFIDCardsPage'
 import AdminSettingsPage from './pages/AdminSettingsPage'
 import AdminImportPage from './pages/AdminImportPage'
+import AdminRoute from './router/AdminRoute'
+import ProfilePage from './pages/ProfilePage'
 
 function App() {
   return (
@@ -30,27 +32,31 @@ function App() {
             index
             element={<DashboardPage />}
           />
-
           <Route
-            path="admin/users"
-            element={<AdminUsersPage />}
+            path="profile"
+            element={<ProfilePage />}
           />
+          <Route element={<AdminRoute />}>
+            <Route
+              path="admin/users"
+              element={<AdminUsersPage />}
+            />
 
-          <Route
-            path="admin/rfid-cards"
-            element={<AdminRFIDCardsPage />}
-          />
+            <Route
+              path="admin/rfid-cards"
+              element={<AdminRFIDCardsPage />}
+            />
 
-          <Route
-            path="admin/import"
-            element={<AdminImportPage />}
-          />
+            <Route
+              path="admin/import"
+              element={<AdminImportPage />}
+            />
 
-          <Route
-            path="admin/settings"
-            element={<AdminSettingsPage />}
-          />
-
+            <Route
+              path="admin/settings"
+              element={<AdminSettingsPage />}
+            />
+          </Route>
           <Route
             path="invoices"
             element={<InvoicesPage />}

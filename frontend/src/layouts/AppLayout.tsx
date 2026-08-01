@@ -68,6 +68,16 @@ function AppLayout() {
               Dashboard
             </NavLink>
             <NavLink
+              to="/profile"
+              className={({ isActive }) =>
+                isActive
+                  ? 'nav-link nav-link-active'
+                  : 'nav-link'
+              }
+            >
+              Meine Daten
+            </NavLink>
+            <NavLink
               to="/invoices"
               className={({ isActive }) =>
                   isActive
@@ -77,46 +87,50 @@ function AppLayout() {
             >
               Rechnungen
             </NavLink>
-            <NavLink
-              to="/admin/users"
-              className={({ isActive }) =>
-                isActive
-                  ? 'nav-link nav-link-active'
-                  : 'nav-link'
-              }
-            >
-              Benutzer
-            </NavLink>
-            <NavLink
-              to="/admin/rfid-cards"
-              className={({ isActive }) =>
-                isActive
-                  ? 'nav-link nav-link-active'
-                  : 'nav-link'
-              }
-            >
-              RFID-Karten
-            </NavLink>
-            <NavLink
-              to="/admin/import"
-              className={({ isActive }) =>
-                isActive
-                  ? 'nav-link nav-link-active'
-                  : 'nav-link'
-              }
-            >
-              XLSX-Import
-            </NavLink>
-            <NavLink
-              to="/admin/settings"
-              className={({ isActive }) =>
-                isActive
-                  ? 'nav-link nav-link-active'
-                  : 'nav-link'
-              }
-            >
-              Einstellungen
-            </NavLink>
+            {user?.is_admin && (
+              <>
+                <NavLink
+                  to="/admin/users"
+                  className={({ isActive }) =>
+                    isActive
+                      ? 'nav-link nav-link-active'
+                      : 'nav-link'
+                  }
+                >
+                  Benutzer
+                </NavLink>
+                <NavLink
+                  to="/admin/rfid-cards"
+                  className={({ isActive }) =>
+                    isActive
+                      ? 'nav-link nav-link-active'
+                      : 'nav-link'
+                  }
+                >
+                  RFID-Karten
+                </NavLink>
+                <NavLink
+                  to="/admin/import"
+                  className={({ isActive }) =>
+                    isActive
+                      ? 'nav-link nav-link-active'
+                      : 'nav-link'
+                  }
+                >
+                  XLSX-Import
+                </NavLink>
+                <NavLink
+                  to="/admin/settings"
+                  className={({ isActive }) =>
+                    isActive
+                      ? 'nav-link nav-link-active'
+                      : 'nav-link'
+                  }
+                >
+                  Einstellungen
+                </NavLink>
+              </>
+            )}
           </nav>
 
           <div className="user-menu">

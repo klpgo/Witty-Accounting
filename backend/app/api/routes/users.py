@@ -19,6 +19,7 @@ from app.auth import (
 from app.models.user import User
 from app.schemas.user import (
     UserAdminUpdate,
+    UserCreate,
     UserPasswordChange,
     UserPasswordReset,
     UserProfileUpdate,
@@ -45,14 +46,20 @@ def ensure_email_available(
     db: Session,
     *,
     email: str,
-    current_user_id: int,
+    current_user_id: int | None = None,
 ) -> None:
-    existing_user = db.scalar(
-        select(User).where(
-            func.lower(User.email)
-            == email.lower(),
-            User.id != current_user_id,
+    conditions = [
+        func.lower(User.email)
+        == email.lower(),
+    ]
+
+    if current_user_id is not None:
+        conditions.append(
+            User.id != current_user_id
         )
+
+    existing_user = db.scalar(
+        select(User).where(*conditions)
     )
 
     if existing_user is not None:
@@ -145,6 +152,9 @@ def update_own_profile(
 
         current_user.email = payload.email
 
+    if "salutation" in payload.model_fields_set:
+        current_user.salutation = payload.salutation
+
     if "first_name" in payload.model_fields_set:
         assert payload.first_name is not None
         current_user.first_name = (
@@ -160,6 +170,9 @@ def update_own_profile(
     if "address" in payload.model_fields_set:
         current_user.address = payload.address
 
+    if "phone" in payload.model_fields_set:
+        current_user.phone = payload.phone
+
     if (
         "invoice_delivery_email"
         in payload.model_fields_set
@@ -168,7 +181,7 @@ def update_own_profile(
             payload.invoice_delivery_email
             is not None
         )
-        user.invoice_delivery_email = (
+        current_user.invoice_delivery_email = (
             payload.invoice_delivery_email
         )
 
@@ -180,7 +193,7 @@ def update_own_profile(
             payload.invoice_delivery_post
             is not None
         )
-        user.invoice_delivery_post = (
+        current_user.invoice_delivery_post = (
             payload.invoice_delivery_post
         )
 
@@ -267,6 +280,68 @@ def list_users(
     )
 
 
+@router.post(
+    "",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
+def create_new_user(
+    payload: UserCreate,
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> User:
+    ensure_email_available(
+        db,
+        email=payload.email,
+    )
+
+    validate_new_password(
+        db,
+        payload.password,
+    )
+
+    user = User(
+        email=payload.email,
+        password_hash=hash_password(
+            payload.password
+        ),
+        salutation=payload.salutation,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        address=payload.address,
+        phone=payload.phone,
+        invoice_delivery_email=(
+            payload.invoice_delivery_email
+        ),
+        invoice_delivery_post=(
+            payload.invoice_delivery_post
+        ),
+        active=payload.active,
+        is_admin=payload.is_admin,
+    )
+
+    db.add(user)
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Diese E-Mail-Adresse wird "
+                "bereits verwendet."
+            ),
+        ) from exc
+
+    db.refresh(user)
+
+    return user
+
 @router.get(
     "/{user_id}",
     response_model=UserResponse,
@@ -314,6 +389,9 @@ def update_user(
 
         user.email = payload.email
 
+    if "salutation" in payload.model_fields_set:
+        user.salutation = payload.salutation
+
     if "first_name" in payload.model_fields_set:
         assert payload.first_name is not None
         user.first_name = payload.first_name
@@ -324,6 +402,9 @@ def update_user(
 
     if "address" in payload.model_fields_set:
         user.address = payload.address
+
+    if "phone" in payload.model_fields_set:
+        user.phone = payload.phone
 
     if (
         "invoice_delivery_email"

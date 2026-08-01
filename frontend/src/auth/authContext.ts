@@ -15,6 +15,9 @@ export interface AuthContextValue {
     password: string,
   ) => Promise<void>
   signOut: () => void
+  updateAuthenticatedUser: (
+    user: AuthenticatedUser,
+  ) => void
 }
 
 export const AuthContext =

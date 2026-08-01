@@ -87,6 +87,12 @@ export function AuthProvider({
     setStatus('authenticated')
   }
 
+  function updateAuthenticatedUser(
+    updatedUser: AuthenticatedUser,
+  ): void {
+    setUser(updatedUser)
+  }
+
   function signOut(): void {
     clearAccessToken()
     setUser(null)
@@ -100,6 +106,7 @@ export function AuthProvider({
         status,
         signIn,
         signOut,
+        updateAuthenticatedUser,
       }}
     >
       {children}

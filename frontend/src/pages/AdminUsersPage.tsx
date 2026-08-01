@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 
 import {
+  createUser,
   listUsers,
   resetUserPassword,
   updateUser,
@@ -45,6 +46,8 @@ function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [selectedUserId, setSelectedUserId] =
     useState<number | null>(null)
+  const [isCreating, setIsCreating] =
+    useState(false)
 
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -186,6 +189,21 @@ function AdminUsersPage() {
   }, [handleRequestError, navigate, signOut])
 
   useEffect(() => {
+    if (isCreating) {
+      setEmail('')
+      setFirstName('')
+      setLastName('')
+      setAddress('')
+      setInvoiceDeliveryEmail(true)
+      setInvoiceDeliveryPost(false)
+      setActive(true)
+      setIsAdmin(false)
+      setNewPassword('')
+      setConfirmPassword('')
+
+      return
+    }
+
     if (selectedUser === null) {
       setEmail('')
       setFirstName('')
@@ -195,6 +213,8 @@ function AdminUsersPage() {
       setInvoiceDeliveryPost(false)
       setActive(false)
       setIsAdmin(false)
+      setNewPassword('')
+      setConfirmPassword('')
 
       return
     }
@@ -211,13 +231,20 @@ function AdminUsersPage() {
     )
     setActive(selectedUser.active)
     setIsAdmin(selectedUser.is_admin)
-
     setNewPassword('')
     setConfirmPassword('')
-  }, [selectedUser])
+  }, [isCreating, selectedUser])
 
   function selectUser(userId: number): void {
+    setIsCreating(false)
     setSelectedUserId(userId)
+    setErrorMessage(null)
+    setSuccessMessage(null)
+  }
+
+  function startCreatingUser(): void {
+    setIsCreating(true)
+    setSelectedUserId(null)
     setErrorMessage(null)
     setSuccessMessage(null)
   }
@@ -227,8 +254,27 @@ function AdminUsersPage() {
   ): Promise<void> {
     event.preventDefault()
 
-    if (selectedUser === null) {
+    if (!isCreating && selectedUser === null) {
       return
+    }
+
+    if (isCreating) {
+      if (newPassword.length < 8) {
+        setErrorMessage(
+          'Das initiale Passwort muss mindestens ' +
+            '8 Zeichen lang sein.',
+        )
+
+        return
+      }
+
+      if (newPassword !== confirmPassword) {
+        setErrorMessage(
+          'Die beiden Passwörter stimmen nicht überein.',
+        )
+
+        return
+      }
     }
 
     const accessToken = getAccessToken()
@@ -248,6 +294,46 @@ function AdminUsersPage() {
     setSuccessMessage(null)
 
     try {
+      if (isCreating) {
+        const createdUser = await createUser(
+          accessToken,
+          {
+            email,
+            first_name: firstName,
+            last_name: lastName,
+            address: address.trim() || null,
+            password: newPassword,
+            invoice_delivery_email:
+              invoiceDeliveryEmail,
+            invoice_delivery_post:
+              invoiceDeliveryPost,
+            active,
+            is_admin: isAdmin,
+          },
+        )
+
+        setUsers((currentUsers) =>
+          sortUsers([
+            ...currentUsers,
+            createdUser,
+          ]),
+        )
+
+        setIsCreating(false)
+        setSelectedUserId(createdUser.id)
+
+        setSuccessMessage(
+          `Benutzer ${createdUser.first_name} ` +
+            `${createdUser.last_name} wurde angelegt.`,
+        )
+
+        return
+      }
+
+      if (selectedUser === null) {
+        return
+      }
+
       const updatedUser = await updateUser(
         accessToken,
         selectedUser.id,
@@ -282,7 +368,9 @@ function AdminUsersPage() {
     } catch (error) {
       handleRequestError(
         error,
-        'Der Benutzer konnte nicht gespeichert werden.',
+        isCreating
+          ? 'Der Benutzer konnte nicht angelegt werden.'
+          : 'Der Benutzer konnte nicht gespeichert werden.',
       )
     } finally {
       setIsSaving(false)
@@ -370,6 +458,13 @@ function AdminUsersPage() {
             Administratorrechte verwalten.
           </p>
         </div>
+        <button
+          className="button button-primary"
+          type="button"
+          onClick={startCreatingUser}
+        >
+          Neuer Benutzer
+        </button>
       </header>
 
       {isLoading && (
@@ -481,16 +576,20 @@ function AdminUsersPage() {
             </div>
           </section>
 
-          {selectedUser !== null && (
+          {(isCreating ||
+            selectedUser !== null) && (
             <section className="card admin-editor">
               <div>
                 <p className="eyebrow">
-                  Benutzer #{selectedUser.id}
+                  {isCreating
+                    ? 'Neuanlage'
+                    : `Benutzer #${selectedUser?.id}`}
                 </p>
 
                 <h2>
-                  {selectedUser.first_name}{' '}
-                  {selectedUser.last_name}
+                  {isCreating
+                    ? 'Neuer Benutzer'
+                    : `${selectedUser?.first_name} ${selectedUser?.last_name}`}
                 </h2>
               </div>
 
@@ -554,6 +653,44 @@ function AdminUsersPage() {
                     }
                   />
                 </label>
+
+                {isCreating && (
+                  <div className="form-grid">
+                    <label className="form-field">
+                      Initiales Passwort
+                      <input
+                        type="password"
+                        value={newPassword}
+                        required
+                        minLength={8}
+                        maxLength={1024}
+                        autoComplete="new-password"
+                        onChange={(event) =>
+                          setNewPassword(
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </label>
+
+                    <label className="form-field">
+                      Passwort wiederholen
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        required
+                        minLength={8}
+                        maxLength={1024}
+                        autoComplete="new-password"
+                        onChange={(event) =>
+                          setConfirmPassword(
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </label>
+                  </div>
+                )}
 
                 <div className="checkbox-group">
                   <label className="checkbox-field">
@@ -631,71 +768,81 @@ function AdminUsersPage() {
                     disabled={isSaving}
                   >
                     {isSaving
-                      ? 'Wird gespeichert …'
-                      : 'Benutzer speichern'}
+                      ? isCreating
+                        ? 'Wird angelegt …'
+                        : 'Wird gespeichert …'
+                      : isCreating
+                        ? 'Benutzer anlegen'
+                        : 'Benutzer speichern'}
                   </button>
                 </div>
               </form>
 
-              <div className="admin-divider" />
+              {!isCreating &&
+                selectedUser !== null && (
+                  <>
 
-              <div>
-                <h2>Passwort zurücksetzen</h2>
+                   <div className="admin-divider" />
 
-                <p className="muted">
-                  Das neue Passwort muss mindestens
-                  acht Zeichen lang sein.
-                </p>
-              </div>
+                   <div>
+                     <h2>Passwort zurücksetzen</h2>
 
-              <form
-                className="admin-form"
-                onSubmit={handlePasswordReset}
-              >
-                <label className="form-field">
-                  Neues Passwort
-                  <input
-                    type="password"
-                    value={newPassword}
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    onChange={(event) =>
-                      setNewPassword(
-                        event.target.value,
-                      )
-                    }
-                  />
-                </label>
+                     <p className="muted">
+                       Das neue Passwort muss mindestens
+                       acht Zeichen lang sein.
+                     </p>
+                   </div>
 
-                <label className="form-field">
-                  Passwort wiederholen
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    onChange={(event) =>
-                      setConfirmPassword(
-                        event.target.value,
-                      )
-                    }
-                  />
-                </label>
+                   <form
+                     className="admin-form"
+                     onSubmit={handlePasswordReset}
+                   >
+                     <label className="form-field">
+                       Neues Passwort
+                       <input
+                         type="password"
+                         value={newPassword}
+                         required
+                         minLength={8}
+                         autoComplete="new-password"
+                         onChange={(event) =>
+                           setNewPassword(
+                             event.target.value,
+                           )
+                         }
+                       />
+                     </label>
 
-                <div className="form-actions">
-                  <button
-                    className="button button-secondary"
-                    type="submit"
-                    disabled={isResettingPassword}
-                  >
-                    {isResettingPassword
-                      ? 'Wird zurückgesetzt …'
-                      : 'Passwort zurücksetzen'}
-                  </button>
-                </div>
-              </form>
+                     <label className="form-field">
+                       Passwort wiederholen
+                       <input
+                         type="password"
+                         value={confirmPassword}
+                         required
+                         minLength={8}
+                         autoComplete="new-password"
+                         onChange={(event) =>
+                           setConfirmPassword(
+                             event.target.value,
+                           )
+                         }
+                       />
+                     </label>
+
+                     <div className="form-actions">
+                       <button
+                         className="button button-secondary"
+                         type="submit"
+                         disabled={isResettingPassword}
+                       >
+                         {isResettingPassword
+                           ? 'Wird zurückgesetzt …'
+                           : 'Passwort zurücksetzen'}
+                       </button>
+                     </div>
+                   </form>
+                </>
+              )}
             </section>
           )}
         </div>

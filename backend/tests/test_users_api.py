@@ -144,6 +144,103 @@ def test_list_users_rejects_non_admin(
     }
 
 
+def test_create_user_requires_authentication(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/users",
+        json={
+            "email": "new@example.com",
+            "first_name": "Neue",
+            "last_name": "Person",
+            "password": "StrongPass1!",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_create_user_rejects_non_admin(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="user@example.com",
+        first_name="Normal",
+        last_name="User",
+    )
+
+    response = client.post(
+        "/users",
+        headers=authorization_header(user),
+        json={
+            "email": "new@example.com",
+            "first_name": "Neue",
+            "last_name": "Person",
+            "password": "StrongPass1!",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_creates_user(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    response = client.post(
+        "/users",
+        headers=authorization_header(admin),
+        json={
+            "email": " NEW@example.com ",
+            "salutation": " Frau ",
+            "first_name": " Erika ",
+            "last_name": " Musterfrau ",
+            "address": " Musterstraße 1 ",
+            "phone": " +49 123 456 ",
+            "password": "StrongPass1!",
+            "invoice_delivery_email": True,
+            "invoice_delivery_post": False,
+            "active": True,
+            "is_admin": False,
+        },
+    )
+
+    assert response.status_code == 201
+
+    body = response.json()
+
+    assert body["email"] == "new@example.com"
+    assert body["salutation"] == "Frau"
+    assert body["first_name"] == "Erika"
+    assert body["last_name"] == "Musterfrau"
+    assert body["address"] == "Musterstraße 1"
+    assert body["phone"] == "+49 123 456"
+    assert body["active"] is True
+    assert body["is_admin"] is False
+    assert "password_hash" not in body
+
+    created_user = database_session.get(
+        User,
+        body["id"],
+    )
+
+    assert created_user is not None
+    assert verify_password(
+        "StrongPass1!",
+        created_user.password_hash,
+    )
+
+
 def test_list_users_returns_sorted_users(
     client: TestClient,
     database_session: Session,
@@ -259,12 +356,16 @@ def test_updates_own_profile(
         headers=authorization_header(user),
         json={
             "email": "NEW@example.com",
+            "salutation": " Frau ",
             "first_name": " Erika ",
             "last_name": " Musterfrau ",
             "address": (
                 "Musterstraße 2\n"
                 "12345 Musterstadt"
             ),
+            "phone": " +49 123 456 ",
+            "invoice_delivery_email": True,
+            "invoice_delivery_post": True,
         },
     )
 
@@ -279,12 +380,20 @@ def test_updates_own_profile(
         "Musterstraße 2\n"
         "12345 Musterstadt"
     )
+    assert body["salutation"] == "Frau"
+    assert body["phone"] == "+49 123 456"
+    assert body["invoice_delivery_email"] is True
+    assert body["invoice_delivery_post"] is True
 
     database_session.refresh(user)
 
     assert user.email == "new@example.com"
     assert user.first_name == "Erika"
     assert user.last_name == "Musterfrau"
+    assert user.salutation == "Frau"
+    assert user.phone == "+49 123 456"
+    assert user.invoice_delivery_email is True
+    assert user.invoice_delivery_post is True
 
 
 def test_update_own_profile_rejects_duplicate_email(

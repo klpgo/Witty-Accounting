@@ -18,15 +18,29 @@ export interface User {
   updated_at: string
 }
 
-export interface UserAdminUpdate {
+export interface UserProfileUpdate {
   email?: string
+  salutation?: string | null
   first_name?: string
   last_name?: string
   address?: string | null
+  phone?: string | null
   invoice_delivery_email?: boolean
   invoice_delivery_post?: boolean
+}
+
+export interface UserAdminUpdate
+  extends UserProfileUpdate {
   active?: boolean
   is_admin?: boolean
+}
+
+export interface UserCreate
+  extends UserAdminUpdate {
+  email: string
+  first_name: string
+  last_name: string
+  password: string
 }
 
 interface ApiErrorResponse {
@@ -77,6 +91,82 @@ function createHeaders(
   }
 }
 
+export async function getOwnProfile(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/me`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
+}
+
+export async function updateOwnProfile(
+  accessToken: string,
+  payload: UserProfileUpdate,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/me`,
+    {
+      method: 'PATCH',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
+}
+
+export async function changeOwnPassword(
+  accessToken: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/me/password`,
+    {
+      method: 'POST',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+}
+
 export async function listUsers(
   accessToken: string,
   signal?: AbortSignal,
@@ -109,6 +199,32 @@ export async function getUser(
     {
       headers: createHeaders(accessToken),
       signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
+}
+
+export async function createUser(
+  accessToken: string,
+  payload: UserCreate,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users`,
+    {
+      method: 'POST',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
     },
   )
 

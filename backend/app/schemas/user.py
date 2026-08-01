@@ -27,7 +27,6 @@ class UserResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-
 class UserProfileUpdate(BaseModel):
     model_config = ConfigDict(
         extra="forbid"
@@ -36,6 +35,10 @@ class UserProfileUpdate(BaseModel):
     email: str | None = Field(
         default=None,
         max_length=255,
+    )
+    salutation: str | None = Field(
+        default=None,
+        max_length=50,
     )
     first_name: str | None = Field(
         default=None,
@@ -49,6 +52,12 @@ class UserProfileUpdate(BaseModel):
         default=None,
         max_length=500,
     )
+    phone: str | None = Field(
+        default=None,
+        max_length=50,
+    )
+    invoice_delivery_email: bool | None = None
+    invoice_delivery_post: bool | None = None
 
     @field_validator(
         "first_name",
@@ -99,9 +108,13 @@ class UserProfileUpdate(BaseModel):
 
         return normalized
 
-    @field_validator("address")
+    @field_validator(
+        "salutation",
+        "address",
+        "phone",
+    )
     @classmethod
-    def normalize_address(
+    def normalize_optional_text(
         cls,
         value: str | None,
     ) -> str | None:
@@ -112,6 +125,21 @@ class UserProfileUpdate(BaseModel):
 
         return normalized or None
 
+    @field_validator(
+        "invoice_delivery_email",
+        "invoice_delivery_post",
+    )
+    @classmethod
+    def validate_delivery_flag(
+        cls,
+        value: bool | None,
+    ) -> bool:
+        if value is None:
+            raise ValueError(
+                "Der Wert darf nicht leer sein."
+            )
+
+        return value
 
 class UserPasswordChange(BaseModel):
     model_config = ConfigDict(
@@ -129,14 +157,10 @@ class UserPasswordChange(BaseModel):
 
 
 class UserAdminUpdate(UserProfileUpdate):
-    invoice_delivery_email: bool | None = None
-    invoice_delivery_post: bool | None = None
     active: bool | None = None
     is_admin: bool | None = None
 
     @field_validator(
-        "invoice_delivery_email",
-        "invoice_delivery_post",
         "active",
         "is_admin",
     )
@@ -151,6 +175,26 @@ class UserAdminUpdate(UserProfileUpdate):
             )
 
         return value
+
+
+class UserCreate(UserAdminUpdate):
+    email: str = Field(
+        max_length=255,
+    )
+    first_name: str = Field(
+        max_length=100,
+    )
+    last_name: str = Field(
+        max_length=100,
+    )
+    password: str = Field(
+        min_length=8,
+        max_length=1024,
+    )
+    invoice_delivery_email: bool = True
+    invoice_delivery_post: bool = False
+    active: bool = True
+    is_admin: bool = False
 
 
 class UserPasswordReset(BaseModel):

@@ -536,6 +536,10 @@ h2 {
   gap: 20px;
 }
 
+.profile-salutation-field {
+  grid-column: 1 / -1;
+}
+
 .form-actions {
   display: flex;
   align-items: center;
