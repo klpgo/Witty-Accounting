@@ -11,6 +11,9 @@ from app.models.invoice import (
 from app.models.monthly_base_fee_charge import (
     MonthlyBaseFeeCharge,
 )
+from app.models.password_reset_token import (
+    PasswordResetToken,
+)
 from app.models.rfid_card import RFIDCard
 from app.models.rfid_card_assignment import (
     RFIDCardAssignment,
@@ -26,6 +29,7 @@ __all__ = [
     "Invoice",
     "InvoiceItem",
     "MonthlyBaseFeeCharge",
+    "PasswordResetToken",
     "RFIDCard",
     "RFIDCardAssignment",
     "User",

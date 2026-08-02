@@ -1,5 +1,9 @@
 from app.database import Base, DATABASE_URL
-from app.models import import_state, invoice
+from app.models import (
+    import_state,
+    invoice,
+    password_reset_token,
+)
 
 from logging.config import fileConfig
 

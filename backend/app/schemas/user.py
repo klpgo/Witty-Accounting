@@ -187,10 +187,6 @@ class UserCreate(UserAdminUpdate):
     last_name: str = Field(
         max_length=100,
     )
-    password: str = Field(
-        min_length=8,
-        max_length=1024,
-    )
     invoice_delivery_email: bool = True
     invoice_delivery_post: bool = False
     active: bool = True

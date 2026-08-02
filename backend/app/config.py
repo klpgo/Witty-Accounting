@@ -30,6 +30,9 @@ class Settings(BaseSettings):
 
     jwt_secret_key: SecretStr
 
+    frontend_base_url: str = "http://localhost:5173"
+    password_reset_token_expire_minutes: int = 60
+
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",

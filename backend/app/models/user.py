@@ -97,3 +97,9 @@ class User(Base):
         "Invoice",
         back_populates="user",
     )
+
+    password_reset_tokens = relationship(
+        "PasswordResetToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

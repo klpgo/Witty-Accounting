@@ -3,8 +3,10 @@ import {
   useState,
 } from 'react'
 import {
+  Link,
   Navigate,
   useNavigate,
+  useSearchParams,
 } from 'react-router-dom'
 
 import { useAuth } from '../auth/useAuth'
@@ -13,6 +15,7 @@ import { useAppSettings } from '../settings/useAppSettings'
 function LoginPage() {
   const { appName } = useAppSettings()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const {
     signIn,
     status,
@@ -97,9 +100,17 @@ function LoginPage() {
         <h1>Anmeldung</h1>
 
         <p className="login-intro">
-           Bitte melde dich mit deiner E-Mail-Adresse
+          Bitte melde dich mit deiner E-Mail-Adresse
           und deinem Passwort an.
         </p>
+
+        {searchParams.get('passwordReset') ===
+          'success' && (
+          <p className="form-success" role="status">
+            Dein Passwort wurde gespeichert. Du kannst
+            dich jetzt anmelden.
+          </p>
+        )}
 
         <form
           className="login-form"
@@ -132,6 +143,12 @@ function LoginPage() {
               required
             />
           </label>
+
+          <p className="login-link-row">
+            <Link to="/forgot-password">
+              Passwort vergessen?
+            </Link>
+          </p>
 
           {errorMessage && (
             <p

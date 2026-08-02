@@ -16,6 +16,10 @@ export interface AuthenticatedUser {
   active: boolean
 }
 
+interface PasswordResetRequestResponse {
+  message: string
+}
+
 interface ApiErrorResponse {
   detail?: string
 }
@@ -88,4 +92,55 @@ export async function getCurrentUser(
   return (
     await response.json()
   ) as AuthenticatedUser
+}
+
+export async function requestPasswordReset(
+  email: string,
+): Promise<string> {
+  const response = await fetch(
+    `${API_BASE_URL}/auth/password-reset/request`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(response),
+    )
+  }
+
+  const body =
+    (await response.json()) as PasswordResetRequestResponse
+
+  return body.message
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/auth/password-reset/confirm`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token,
+        new_password: newPassword,
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(response),
+    )
+  }
 }

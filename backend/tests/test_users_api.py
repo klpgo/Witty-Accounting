@@ -2,7 +2,7 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -16,6 +16,9 @@ from app.models.global_settings import GlobalSettings
 from app.security import (
     hash_password,
     verify_password,
+)
+from app.services.password_reset import (
+    PasswordResetEmailError,
 )
 
 @pytest.fixture
@@ -188,7 +191,24 @@ def test_create_user_rejects_non_admin(
 def test_admin_creates_user(
     client: TestClient,
     database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    invitations: list[tuple[int, str]] = []
+
+    def fake_issue_password_reset(
+        db: Session,
+        *,
+        user: User,
+        purpose: str,
+    ) -> None:
+        del db
+        invitations.append((user.id, purpose))
+
+    monkeypatch.setattr(
+        "app.api.routes.users.issue_password_reset",
+        fake_issue_password_reset,
+    )
+
     admin = create_user(
         database_session,
         email="admin@example.com",
@@ -207,7 +227,6 @@ def test_admin_creates_user(
             "last_name": " Musterfrau ",
             "address": " Musterstraße 1 ",
             "phone": " +49 123 456 ",
-            "password": "StrongPass1!",
             "invoice_delivery_email": True,
             "invoice_delivery_post": False,
             "active": True,
@@ -235,10 +254,61 @@ def test_admin_creates_user(
     )
 
     assert created_user is not None
-    assert verify_password(
+    assert created_user.password_hash != "not-used"
+    assert not verify_password(
         "StrongPass1!",
         created_user.password_hash,
     )
+    assert invitations == [
+        (created_user.id, "invitation"),
+    ]
+
+
+def test_user_creation_rolls_back_if_invitation_fails(
+    client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    def fail_invitation(
+        db: Session,
+        *,
+        user: User,
+        purpose: str,
+    ) -> None:
+        del db, user, purpose
+        raise PasswordResetEmailError(
+            "SMTP unavailable"
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.users.issue_password_reset",
+        fail_invitation,
+    )
+
+    response = client.post(
+        "/users",
+        headers=authorization_header(admin),
+        json={
+            "email": "new@example.com",
+            "first_name": "Neue",
+            "last_name": "Person",
+        },
+    )
+
+    assert response.status_code == 503
+    assert database_session.scalar(
+        select(User).where(
+            User.email == "new@example.com"
+        )
+    ) is None
 
 
 def test_list_users_returns_sorted_users(

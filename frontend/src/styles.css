@@ -140,6 +140,18 @@ h2 {
   gap: 20px;
 }
 
+.login-link-row {
+  margin: -8px 0 0;
+  color: #3659d9;
+  font-size: 0.92rem;
+  font-weight: 650;
+  text-align: right;
+}
+
+.login-link-row a:hover {
+  color: #2949bd;
+}
+
 .form-field {
   display: grid;
   gap: 8px;

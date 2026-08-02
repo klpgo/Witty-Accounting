@@ -35,6 +35,11 @@ from app.services.password_policy import (
     load_password_policy,
     validate_password,
 )
+from app.services.password_reset import (
+    PasswordResetEmailError,
+    generate_temporary_password,
+    issue_password_reset,
+)
 
 router = APIRouter(
     prefix="/users",
@@ -298,15 +303,17 @@ def create_new_user(
         email=payload.email,
     )
 
-    validate_new_password(
-        db,
-        payload.password,
+    password_policy = load_password_policy(db)
+    temporary_password = (
+        generate_temporary_password(
+            password_policy
+        )
     )
 
     user = User(
         email=payload.email,
         password_hash=hash_password(
-            payload.password
+            temporary_password
         ),
         salutation=payload.salutation,
         first_name=payload.first_name,
@@ -326,7 +333,28 @@ def create_new_user(
     db.add(user)
 
     try:
+        db.flush()
+
+        issue_password_reset(
+            db,
+            user=user,
+            purpose="invitation",
+        )
+
         db.commit()
+    except PasswordResetEmailError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=(
+                "Der Benutzer konnte nicht angelegt "
+                "werden, weil die Einladungsmail "
+                "nicht versendet werden konnte."
+            ),
+        ) from exc
     except IntegrityError as exc:
         db.rollback()
 

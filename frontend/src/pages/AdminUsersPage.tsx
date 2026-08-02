@@ -295,25 +295,6 @@ function AdminUsersPage() {
       return
     }
 
-    if (isCreating) {
-      if (newPassword.length < 8) {
-        setErrorMessage(
-          'Das initiale Passwort muss mindestens ' +
-            '8 Zeichen lang sein.',
-        )
-
-        return
-      }
-
-      if (newPassword !== confirmPassword) {
-        setErrorMessage(
-          'Die beiden Passwörter stimmen nicht überein.',
-        )
-
-        return
-      }
-    }
-
     const accessToken = getAccessToken()
 
     if (accessToken === null) {
@@ -339,7 +320,6 @@ function AdminUsersPage() {
             first_name: firstName,
             last_name: lastName,
             address: address.trim() || null,
-            password: newPassword,
             invoice_delivery_email:
               invoiceDeliveryEmail,
             invoice_delivery_post:
@@ -361,7 +341,8 @@ function AdminUsersPage() {
 
         setSuccessMessage(
           `Benutzer ${createdUser.first_name} ` +
-            `${createdUser.last_name} wurde angelegt.`,
+            `${createdUser.last_name} wurde angelegt. ` +
+            'Die Einladungsmail wurde versendet.',
         )
 
         return
@@ -710,41 +691,12 @@ function AdminUsersPage() {
                 </label>
 
                 {isCreating && (
-                  <div className="form-grid">
-                    <label className="form-field">
-                      Initiales Passwort
-                      <input
-                        type="password"
-                        value={newPassword}
-                        required
-                        minLength={8}
-                        maxLength={1024}
-                        autoComplete="new-password"
-                        onChange={(event) =>
-                          setNewPassword(
-                            event.target.value,
-                          )
-                        }
-                      />
-                    </label>
-
-                    <label className="form-field">
-                      Passwort wiederholen
-                      <input
-                        type="password"
-                        value={confirmPassword}
-                        required
-                        minLength={8}
-                        maxLength={1024}
-                        autoComplete="new-password"
-                        onChange={(event) =>
-                          setConfirmPassword(
-                            event.target.value,
-                          )
-                        }
-                      />
-                    </label>
-                  </div>
+                  <p className="form-hint">
+                    Nach dem Anlegen erhält der Benutzer
+                    eine signierte E-Mail mit einem
+                    einmaligen Link, über den er sein
+                    persönliches Passwort festlegt.
+                  </p>
                 )}
 
                 <div className="checkbox-group">
