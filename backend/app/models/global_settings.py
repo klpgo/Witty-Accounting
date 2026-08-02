@@ -122,6 +122,13 @@ class GlobalSettings(Base):
         server_default="0",
     )
 
+    dashboard_note: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     password_min_length: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

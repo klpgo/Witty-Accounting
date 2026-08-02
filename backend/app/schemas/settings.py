@@ -101,6 +101,13 @@ PasswordMinLength = Annotated[
     ),
 ]
 
+DashboardNote = Annotated[
+    str,
+    Field(
+        max_length=4000,
+    ),
+]
+
 
 class PublicSettingsResponse(BaseModel):
     app_name: str
@@ -113,6 +120,7 @@ class GlobalSettingsResponse(BaseModel):
 
     app_name: str
     maintenance_mode: bool
+    dashboard_note: str | None
     monthly_base_fee_net: Decimal
     monthly_base_fee_vat_rate: Decimal
     invoice_payment_term_days: int
@@ -138,6 +146,7 @@ class GlobalSettingsUpdate(BaseModel):
 
     app_name: AppName | None = None
     maintenance_mode: bool | None = None
+    dashboard_note: DashboardNote | None = None
     monthly_base_fee_net: BaseFeeDecimal | None = None
     monthly_base_fee_vat_rate: VatDecimal | None = None
     invoice_payment_term_days: (
@@ -203,6 +212,7 @@ class GlobalSettingsUpdate(BaseModel):
 
     @field_validator(
         "maintenance_mode",
+        "dashboard_note",
         "invoice_issuer_name",
         "invoice_issuer_address",
         "invoice_tax_number",

@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useCallback,
   useEffect,
   useState,
 } from 'react'
@@ -22,6 +23,9 @@ function AdminAccessSettingsForm() {
     setMaintenanceMode,
   ] = useState(false)
 
+  const [dashboardNote, setDashboardNote] =
+    useState('')
+
   const [isLoading, setIsLoading] =
     useState(true)
   const [isSaving, setIsSaving] =
@@ -36,13 +40,13 @@ function AdminAccessSettingsForm() {
     setSuccessMessage,
   ] = useState<string | null>(null)
 
-  function handleUnauthorized(): void {
+  const handleUnauthorized = useCallback((): void => {
     signOut()
 
     navigate('/login', {
       replace: true,
     })
-  }
+  }, [navigate, signOut])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -67,6 +71,9 @@ function AdminAccessSettingsForm() {
 
         setMaintenanceMode(
           loadedSettings.maintenance_mode,
+        )
+        setDashboardNote(
+          loadedSettings.dashboard_note ?? '',
         )
       } catch (error) {
         if (
@@ -101,7 +108,7 @@ function AdminAccessSettingsForm() {
     return () => {
       controller.abort()
     }
-  }, [navigate, signOut])
+  }, [handleUnauthorized])
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -126,11 +133,16 @@ function AdminAccessSettingsForm() {
           {
             maintenance_mode:
               maintenanceMode,
+            dashboard_note:
+              dashboardNote.trim() || null,
           },
         )
 
       setMaintenanceMode(
         updatedSettings.maintenance_mode,
+      )
+      setDashboardNote(
+        updatedSettings.dashboard_note ?? '',
       )
 
       setSuccessMessage(
@@ -172,12 +184,12 @@ function AdminAccessSettingsForm() {
     >
       <section className="settings-section">
         <div>
-          <h2>Zugriff</h2>
+          <h2>Dashboard und Zugriff</h2>
 
           <p className="muted">
-            Im Wartungsmodus können sich nur
-            Administratoren neu anmelden.
-            Bereits bestehende Sitzungen bleiben bestehen.
+            Die Notiz wird allen angemeldeten Benutzern
+            auf dem Dashboard angezeigt. Im Wartungsmodus
+            können sich nur Administratoren neu anmelden.
           </p>
         </div>
 
@@ -216,6 +228,26 @@ function AdminAccessSettingsForm() {
             Anmeldung nur für Administratoren erlauben
           </span>
         </label>
+
+        <label className="form-field">
+          Notiz an die Benutzer
+          <textarea
+            value={dashboardNote}
+            maxLength={4000}
+            rows={6}
+            placeholder="Zum Beispiel: Die nächste Abrechnung erfolgt am 15. August."
+            onChange={(event) => {
+              setDashboardNote(
+                event.target.value,
+              )
+            }}
+          />
+
+          <span className="form-hint">
+            Leer lassen, wenn derzeit keine Mitteilung
+            angezeigt werden soll.
+          </span>
+        </label>
       </section>
 
       <div className="settings-actions">
@@ -225,8 +257,8 @@ function AdminAccessSettingsForm() {
           disabled={isSaving}
         >
           {isSaving
-            ? 'Zugriff wird gespeichert …'
-            : 'Zugriff speichern'}
+            ? 'Dashboard wird gespeichert …'
+            : 'Dashboard und Zugriff speichern'}
         </button>
       </div>
     </form>

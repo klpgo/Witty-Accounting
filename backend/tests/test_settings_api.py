@@ -133,6 +133,7 @@ def add_global_settings(
     invoice_iban: str | None = None,
     invoice_bic: str | None = None,
     invoice_number_prefix: str = "RE",
+    dashboard_note: str | None = None,
 ) -> GlobalSettings:
     global_settings = GlobalSettings(
         id=1,
@@ -152,6 +153,7 @@ def add_global_settings(
         invoice_iban=invoice_iban,
         invoice_bic=invoice_bic,
         invoice_number_prefix=invoice_number_prefix,
+        dashboard_note=dashboard_note,
     )
 
     db.add(global_settings)
@@ -215,6 +217,7 @@ def test_reads_admin_settings(
     assert response.json() == {
         "app_name": "Wallbox Verwaltung",
         "maintenance_mode": False,
+        "dashboard_note": None,
         "monthly_base_fee_net": "12.5000",
         "monthly_base_fee_vat_rate": "19.00",
         "invoice_payment_term_days": 14,
@@ -249,6 +252,7 @@ def test_updates_admin_settings(
             "monthly_base_fee_net": "9.9900",
             "monthly_base_fee_vat_rate": "7.00",
             "invoice_payment_term_days": 21,
+            "dashboard_note": "  Wartung am Freitag  ",
         },
     )
 
@@ -256,6 +260,7 @@ def test_updates_admin_settings(
     assert response.json() == {
         "app_name": "Neue Abrechnung",
         "maintenance_mode": False,
+        "dashboard_note": "Wartung am Freitag",
         "monthly_base_fee_net": "9.9900",
         "monthly_base_fee_vat_rate": "7.00",
         "invoice_payment_term_days": 21,
@@ -279,6 +284,9 @@ def test_updates_admin_settings(
     assert global_settings.id == 1
     assert global_settings.app_name == (
         "Neue Abrechnung"
+    )
+    assert global_settings.dashboard_note == (
+        "Wartung am Freitag"
     )
     assert global_settings.monthly_base_fee_net == (
         Decimal("9.9900")
@@ -311,6 +319,9 @@ def test_rejects_invalid_admin_settings(
         },
         {
             "app_name": None,
+        },
+        {
+            "dashboard_note": "x" * 4001,
         },
     ]
 

@@ -16,6 +16,9 @@ from app.api.routes.rfid_cards import (
 from app.api.routes.charging_sessions import (
     router as charging_sessions_router,
 )
+from app.api.routes.dashboard import (
+    router as dashboard_router,
+)
 from app.api.routes.imports import router as imports_router
 from app.api.routes.invoices import (
     router as invoices_router,
@@ -33,6 +36,7 @@ from app.scheduler import (
     start_scheduler,
     stop_scheduler,
 )
+from app.version import BACKEND_VERSION
 
 
 setup_logging()
@@ -52,6 +56,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Witty Accounting",
+    version=BACKEND_VERSION,
     lifespan=lifespan,
 )
 
@@ -72,6 +77,7 @@ app.include_router(users_router)
 app.include_router(rfid_cards_router)
 app.include_router(settings_router)
 app.include_router(charging_sessions_router)
+app.include_router(dashboard_router)
 
 @app.get("/")
 def root() -> dict[str, str]:

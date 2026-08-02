@@ -9,6 +9,7 @@ export interface PublicSettings {
 export interface GlobalSettings {
   app_name: string
   maintenance_mode: boolean
+  dashboard_note: string | null
   monthly_base_fee_net: string
   monthly_base_fee_vat_rate: string
   invoice_payment_term_days: number
@@ -30,6 +31,7 @@ export interface GlobalSettings {
 export interface GlobalSettingsUpdate {
   app_name?: string
   maintenance_mode?: boolean
+  dashboard_note?: string | null
   monthly_base_fee_net?: string
   monthly_base_fee_vat_rate?: string
   invoice_payment_term_days?: number
