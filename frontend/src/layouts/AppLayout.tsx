@@ -75,6 +75,16 @@ function AppLayout() {
               </NavLink>
             )}
             <NavLink
+              to="/charging-sessions"
+              className={({ isActive }) =>
+                isActive
+                  ? 'nav-link nav-link-active'
+                  : 'nav-link'
+              }
+            >
+              Ladevorgänge
+            </NavLink>
+            <NavLink
               to="/invoices"
               className={({ isActive }) =>
                   isActive

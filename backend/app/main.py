@@ -13,6 +13,9 @@ from app.api.routes.rfid_cards import (
     assignment_router,
     router as rfid_cards_router,
 )
+from app.api.routes.charging_sessions import (
+    router as charging_sessions_router,
+)
 from app.api.routes.imports import router as imports_router
 from app.api.routes.invoices import (
     router as invoices_router,
@@ -68,6 +71,7 @@ app.include_router(invoices_router)
 app.include_router(users_router)
 app.include_router(rfid_cards_router)
 app.include_router(settings_router)
+app.include_router(charging_sessions_router)
 
 @app.get("/")
 def root() -> dict[str, str]:

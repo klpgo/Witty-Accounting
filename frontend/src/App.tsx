@@ -17,6 +17,7 @@ import AdminSettingsPage from './pages/AdminSettingsPage'
 import AdminImportPage from './pages/AdminImportPage'
 import AdminRoute from './router/AdminRoute'
 import ProfilePage from './pages/ProfilePage'
+import ChargingSessionsPage from './pages/ChargingSessionsPage'
 
 function App() {
   return (
@@ -62,6 +63,10 @@ function App() {
               element={<InvoiceDraftCreatePage />}
             />
           </Route>
+          <Route
+            path="charging-sessions"
+            element={<ChargingSessionsPage />}
+          />
           <Route
             path="invoices"
             element={<InvoicesPage />}
