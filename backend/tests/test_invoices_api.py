@@ -18,7 +18,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies import get_db
-from app.auth import require_admin
+from app.auth import (
+    get_current_user,
+    require_admin,
+)
 from app.database import Base
 from app.main import app
 from app.models.global_settings import GlobalSettings
@@ -70,7 +73,6 @@ def database_session() -> Generator[
     Base.metadata.drop_all(engine)
     engine.dispose()
 
-
 @pytest.fixture
 def client(
     database_session: Session,
@@ -85,12 +87,33 @@ def client(
     def override_require_admin() -> None:
         return None
 
+    def override_get_current_user() -> User:
+        return User(
+            id=0,
+            email="admin@example.com",
+            password_hash="not-used",
+            salutation=None,
+            first_name="Admin",
+            last_name="Test",
+            address=None,
+            phone=None,
+            invoice_delivery_email=False,
+            invoice_delivery_post=False,
+            active=True,
+            is_admin=True,
+        )
+
+    app.dependency_overrides.clear()
+
     app.dependency_overrides[get_db] = (
         override_get_db
     )
     app.dependency_overrides[
         require_admin
     ] = override_require_admin
+    app.dependency_overrides[
+        get_current_user
+    ] = override_get_current_user
 
     try:
         with TestClient(app) as test_client:
@@ -101,23 +124,40 @@ def client(
 
 def create_billable_session(
     db: Session,
+    *,
+    suffix: str = "",
+    user: User | None = None,
 ) -> tuple[User, ChargingSession]:
-    user = User(
-        email="billing@example.com",
-        password_hash="not-used",
-        salutation=None,
-        first_name="Billing",
-        last_name="User",
-        address="Teststraße 1, 12345 Teststadt",
-        phone=None,
-        invoice_delivery_email=True,
-        invoice_delivery_post=False,
-        active=True,
-        is_admin=False,
-    )
+    if user is None:
+        email = (
+            "billing@example.com"
+            if suffix == ""
+            else f"billing{suffix}@example.com"
+        )
+
+        user = User(
+            email=email,
+            password_hash="not-used",
+            salutation=None,
+            first_name="Billing",
+            last_name="User",
+            address=(
+                "Teststraße 1, "
+                "12345 Teststadt"
+            ),
+            phone=None,
+            invoice_delivery_email=True,
+            invoice_delivery_post=False,
+            active=True,
+            is_admin=False,
+        )
 
     card = RFIDCard(
-        rfid_number="BILLING-CARD",
+        rfid_number=(
+            "BILLING-CARD"
+            if suffix == ""
+            else f"BILLING-CARD{suffix}"
+        ),
         description="Rechnungstest",
         active=True,
     )
@@ -159,18 +199,33 @@ def create_billable_session(
         vat_rate=Decimal("19.00"),
         invoiced=False,
         invoice_id=None,
-        import_hash="k" * 64,
+        import_hash=(
+            "k" * 64
+            if suffix == ""
+            else sha256(
+                f"billing-session{suffix}".encode()
+            ).hexdigest()
+        ),
         source="xlsx",
     )
 
-    db.add(
-        EnergyPrice(
-            valid_from=datetime(2026, 1, 1),
-            grid_price_net=Decimal("0.3000"),
-            pv_price_net=Decimal("0.1000"),
-            vat_rate=Decimal("19.00"),
+    with db.no_autoflush:
+        energy_price = db.scalar(
+            select(EnergyPrice).where(
+                EnergyPrice.valid_from
+                == datetime(2026, 1, 1)
+            )
         )
-    )
+
+    if energy_price is None:
+        db.add(
+            EnergyPrice(
+                valid_from=datetime(2026, 1, 1),
+                grid_price_net=Decimal("0.3000"),
+                pv_price_net=Decimal("0.1000"),
+                vat_rate=Decimal("19.00"),
+            )
+        )
     db.add_all(
         [
             user,
@@ -440,6 +495,152 @@ def test_lists_and_reads_invoices(
 
     assert detail_response.status_code == 200
     assert detail_response.json()["id"] == invoice_id
+
+
+def test_regular_user_reads_only_own_finalized_invoices(
+    client: TestClient,
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+
+    own_user, _ = create_billable_session(
+        database_session,
+        suffix="-own",
+    )
+
+    own_draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": own_user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert own_draft_response.status_code == 201
+
+    own_invoice_id = own_draft_response.json()["id"]
+
+    own_finalize_response = client.post(
+        f"/invoices/{own_invoice_id}/finalize",
+        json={
+            "issue_date": "2026-07-05",
+            "due_date": "2026-07-19",
+        },
+    )
+
+    assert own_finalize_response.status_code == 200
+
+    create_billable_session(
+        database_session,
+        suffix="-own-draft",
+        user=own_user,
+    )
+
+    hidden_draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": own_user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert hidden_draft_response.status_code == 201
+
+    hidden_draft_id = hidden_draft_response.json()["id"]
+
+    foreign_user, _ = create_billable_session(
+        database_session,
+        suffix="-foreign",
+    )
+
+    foreign_draft_response = client.post(
+        "/invoices/drafts",
+        json={
+            "user_id": foreign_user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert foreign_draft_response.status_code == 201
+
+    foreign_invoice_id = (
+        foreign_draft_response.json()["id"]
+    )
+
+    foreign_finalize_response = client.post(
+        f"/invoices/{foreign_invoice_id}/finalize",
+        json={
+            "issue_date": "2026-07-05",
+            "due_date": "2026-07-19",
+        },
+    )
+
+    assert foreign_finalize_response.status_code == 200
+
+    def override_regular_user() -> User:
+        return own_user
+
+    app.dependency_overrides[
+        get_current_user
+    ] = override_regular_user
+
+    list_response = client.get("/invoices")
+
+    assert list_response.status_code == 200
+    assert [
+        invoice["id"]
+        for invoice in list_response.json()
+    ] == [own_invoice_id]
+
+    own_detail_response = client.get(
+        f"/invoices/{own_invoice_id}"
+    )
+    hidden_draft_detail_response = client.get(
+        f"/invoices/{hidden_draft_id}"
+    )
+    foreign_detail_response = client.get(
+        f"/invoices/{foreign_invoice_id}"
+    )
+
+    assert own_detail_response.status_code == 200
+    assert (
+        own_detail_response.json()["id"]
+        == own_invoice_id
+    )
+    assert hidden_draft_detail_response.status_code == 404
+    assert foreign_detail_response.status_code == 404
+
+    own_pdf_response = client.get(
+        f"/invoices/{own_invoice_id}/pdf"
+    )
+    foreign_pdf_response = client.get(
+        f"/invoices/{foreign_invoice_id}/pdf"
+    )
+
+    assert own_pdf_response.status_code == 200
+    assert own_pdf_response.content.startswith(b"%PDF-")
+    assert foreign_pdf_response.status_code == 404
 
 
 def test_rejects_unknown_invoice_user(

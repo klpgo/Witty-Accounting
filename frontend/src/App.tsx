@@ -56,15 +56,15 @@ function App() {
               path="admin/settings"
               element={<AdminSettingsPage />}
             />
+
+            <Route
+              path="invoices/new"
+              element={<InvoiceDraftCreatePage />}
+            />
           </Route>
           <Route
             path="invoices"
             element={<InvoicesPage />}
-          />
-
-          <Route
-            path="invoices/new"
-            element={<InvoiceDraftCreatePage />}
           />
 
           <Route

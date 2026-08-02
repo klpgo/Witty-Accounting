@@ -16,8 +16,12 @@ from sqlalchemy.orm import (
 )
 
 from app.api.dependencies import get_db
-from app.auth import require_admin
+from app.auth import (
+    get_current_user,
+    require_admin,
+)
 from app.models.invoice import Invoice
+from app.models.user import User
 from app.models.monthly_base_fee_charge import (
     MonthlyBaseFeeCharge,
 )
@@ -93,28 +97,75 @@ router = APIRouter(
 )
 
 
+def get_readable_invoice_or_404(
+    db: Session,
+    *,
+    invoice_id: int,
+    current_user: User,
+    include_items: bool = False,
+) -> Invoice:
+    statement = select(Invoice).where(
+        Invoice.id == invoice_id
+    )
+
+    if include_items:
+        statement = statement.options(
+            selectinload(Invoice.items)
+        )
+
+    if not current_user.is_admin:
+        statement = statement.where(
+            Invoice.user_id == current_user.id,
+            Invoice.status == "finalized",
+        )
+
+    invoice = db.scalar(statement)
+
+    if invoice is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Rechnung {invoice_id} "
+                "wurde nicht gefunden."
+            ),
+        )
+
+    return invoice
+
+
 @router.get(
     "",
     response_model=list[InvoiceResponse],
-    dependencies=[Depends(require_admin)],
 )
 def list_invoices(
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
     db: Annotated[
         Session,
         Depends(get_db),
     ],
 ) -> list[Invoice]:
+    statement = (
+        select(Invoice)
+        .options(
+            selectinload(Invoice.items)
+        )
+        .order_by(
+            Invoice.created_at.desc(),
+            Invoice.id.desc(),
+        )
+    )
+
+    if not current_user.is_admin:
+        statement = statement.where(
+            Invoice.user_id == current_user.id,
+            Invoice.status == "finalized",
+        )
+
     return list(
-        db.scalars(
-            select(Invoice)
-            .options(
-                selectinload(Invoice.items)
-            )
-            .order_by(
-                Invoice.created_at.desc(),
-                Invoice.id.desc(),
-            )
-        ).all()
+        db.scalars(statement).all()
     )
 
 
@@ -371,15 +422,23 @@ def delete_invoice_draft(
 @router.get(
     "/{invoice_id}/pdf",
     response_class=FileResponse,
-    dependencies=[Depends(require_admin)],
 )
 def download_invoice_pdf(
     invoice_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
     db: Annotated[
         Session,
         Depends(get_db),
     ],
 ) -> FileResponse:
+    get_readable_invoice_or_404(
+        db,
+        invoice_id=invoice_id,
+        current_user=current_user,
+    )
     try:
         archived_pdf = get_archived_invoice_pdf(
             db,
@@ -582,30 +641,22 @@ def send_invoice_by_email(
 @router.get(
     "/{invoice_id}",
     response_model=InvoiceResponse,
-    dependencies=[Depends(require_admin)],
 )
 def get_invoice(
     invoice_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
     db: Annotated[
         Session,
         Depends(get_db),
     ],
 ) -> Invoice:
-    invoice = db.scalar(
-        select(Invoice)
-        .options(
-            selectinload(Invoice.items)
-        )
-        .where(Invoice.id == invoice_id)
+
+    return get_readable_invoice_or_404(
+        db,
+        invoice_id=invoice_id,
+        current_user=current_user,
+        include_items=True,
     )
-
-    if invoice is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"Rechnung {invoice_id} "
-                "wurde nicht gefunden."
-            ),
-        )
-
-    return invoice

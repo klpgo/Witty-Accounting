@@ -83,7 +83,8 @@ function getDocumentTypeLabel(
 
 function InvoicesPage() {
   const navigate = useNavigate()
-  const { signOut } = useAuth()
+  const { user, signOut } = useAuth()
+  const isAdmin = user?.is_admin === true
 
   const [invoices, setInvoices] =
     useState<Invoice[]>([])
@@ -170,16 +171,19 @@ function InvoicesPage() {
           <h1>Rechnungen</h1>
 
           <p className="muted">
-            Entwürfe, finalisierte Rechnungen
-            und Stornobelege.
+            {isAdmin
+              ? 'Entwürfe, finalisierte Rechnungen und Stornobelege.'
+              : 'Ihre finalisierten Rechnungen und Stornobelege.'}
           </p>
         </div>
-        <Link
-          className="button button-primary"
-          to="/invoices/new"
-        >
-          Entwurf erstellen
-        </Link>
+        {isAdmin && (
+          <Link
+            className="button button-primary"
+            to="/invoices/new"
+          >
+            Entwurf erstellen
+          </Link>
+        )}
       </header>
 
       {isLoading && (
@@ -206,8 +210,9 @@ function InvoicesPage() {
             <h2>Keine Rechnungen vorhanden</h2>
 
             <p className="muted">
-              Es wurden noch keine
-              Rechnungsentwürfe erstellt.
+              {isAdmin
+                ? 'Es wurden noch keine Rechnungsentwürfe erstellt.'
+                : 'Für Sie liegen noch keine finalisierten Rechnungen vor.'}
             </p>
           </section>
         )}

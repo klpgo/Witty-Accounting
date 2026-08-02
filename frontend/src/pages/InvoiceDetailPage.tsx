@@ -125,7 +125,8 @@ function getDocumentTypeLabel(
 function InvoiceDetailPage() {
   const navigate = useNavigate()
   const { invoiceId } = useParams()
-  const { signOut } = useAuth()
+  const { user, signOut } = useAuth()
+  const isAdmin = user?.is_admin === true
 
   const numericInvoiceId = Number(invoiceId)
 
@@ -210,15 +211,19 @@ function InvoiceDetailPage() {
           numericInvoiceId,
           controller.signal,
         )
+        setInvoice(loadedInvoice)
 
+        if (isAdmin) {
         const loadedRecipient = await getUser(
           token,
           loadedInvoice.user_id,
           controller.signal,
         )
 
-        setInvoice(loadedInvoice)
-        setRecipientEmail(loadedRecipient.email)
+          setRecipientEmail(loadedRecipient.email)
+        } else {
+          setRecipientEmail(null)
+        }
       } catch (error) {
         if (
           error instanceof Error &&
@@ -258,6 +263,7 @@ function InvoiceDetailPage() {
       controller.abort()
     }
   }, [
+    isAdmin,
     navigate,
     numericInvoiceId,
     signOut,
@@ -342,6 +348,7 @@ function InvoiceDetailPage() {
 
   async function handleEmailSend(): Promise<void> {
     if (
+      !isAdmin ||
       invoice === null ||
       invoice.status !== 'finalized' ||
       invoice.pdf_storage_path === null ||
@@ -423,6 +430,7 @@ function InvoiceDetailPage() {
 
   async function handleDeleteDraft(): Promise<void> {
     if (
+      !isAdmin ||
       invoice === null ||
       invoice.status !== 'draft'
     ) {
@@ -539,7 +547,7 @@ function InvoiceDetailPage() {
           ← Zurück zu den Rechnungen
         </Link>
 
-        {invoice.status === 'draft' && (
+        {isAdmin && invoice.status === 'draft' && (
           <button
             className="button button-danger"
             type="button"
@@ -554,7 +562,7 @@ function InvoiceDetailPage() {
           </button>
         )}
 
-        {invoice.status === 'finalized' && (
+        {isAdmin && invoice.status === 'finalized' && (
           <button
             className="button button-secondary"
             type="button"
@@ -754,21 +762,23 @@ function InvoiceDetailPage() {
         </article>
       </section>
 
-      {invoice.status === 'draft' &&
+      {isAdmin &&
+        invoice.status === 'draft' &&
         invoice.document_type === 'invoice' && (
-        <InvoiceFinalizeForm
-          invoiceId={invoice.id}
-          onFinalized={setInvoice}
-        />
+          <InvoiceFinalizeForm
+            invoiceId={invoice.id}
+            onFinalized={setInvoice}
+          />
       )}
 
-      {invoice.status === 'draft' &&
+      {isAdmin &&
+        invoice.status === 'draft' &&
         invoice.document_type ===
           'cancellation' && (
-        <InvoiceCancellationFinalizeForm
-          cancellationId={invoice.id}
-          onFinalized={setInvoice}
-        />
+          <InvoiceCancellationFinalizeForm
+            cancellationId={invoice.id}
+            onFinalized={setInvoice}
+          />
       )}
 
       {invoice.document_type ===
@@ -901,11 +911,12 @@ function InvoiceDetailPage() {
           </table>
         </div>
       </section>
-      {invoice.status === 'finalized' &&
-          invoice.document_type === 'invoice' &&
-          invoice.cancelled_at === null && (
+      {isAdmin &&
+        invoice.status === 'finalized' &&
+        invoice.document_type === 'invoice' &&
+        invoice.cancelled_at === null && (
           <InvoiceCancellationCreateForm
-          invoiceId={invoice.id}
+            invoiceId={invoice.id}
           />
       )}
     </div>
