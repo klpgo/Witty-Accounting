@@ -38,7 +38,12 @@ function AppLayout() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-content">
-          <div className="app-brand">
+          <NavLink
+            to="/"
+            end
+            className="app-brand"
+            aria-label="Zum Dashboard"
+          >
             <span className="app-brand-mark">
               {brandMark}
             </span>
@@ -50,33 +55,25 @@ function AppLayout() {
                 Verwaltungsoberfläche
               </span>
             </div>
-          </div>
+          </NavLink>
 
           <nav
             className="app-nav"
             aria-label="Hauptnavigation"
           >
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                isActive
-                  ? 'nav-link nav-link-active'
-                  : 'nav-link'
-              }
-            >
-              Dashboard
-            </NavLink>
-            <NavLink
-              to="/profile"
-              className={({ isActive }) =>
-                isActive
-                  ? 'nav-link nav-link-active'
-                  : 'nav-link'
-              }
-            >
-              Meine Daten
-            </NavLink>
+
+            {!user?.is_admin && (
+              <NavLink
+                to="/profile"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                Meine Daten
+              </NavLink>
+            )}
             <NavLink
               to="/invoices"
               className={({ isActive }) =>
@@ -87,48 +84,49 @@ function AppLayout() {
             >
               Rechnungen
             </NavLink>
+
             {user?.is_admin && (
               <>
-                <NavLink
-                  to="/admin/users"
-                  className={({ isActive }) =>
-                    isActive
-                      ? 'nav-link nav-link-active'
-                      : 'nav-link'
-                  }
-                >
-                  Benutzer
-                </NavLink>
-                <NavLink
-                  to="/admin/rfid-cards"
-                  className={({ isActive }) =>
-                    isActive
-                      ? 'nav-link nav-link-active'
-                      : 'nav-link'
-                  }
-                >
-                  RFID-Karten
-                </NavLink>
-                <NavLink
-                  to="/admin/import"
-                  className={({ isActive }) =>
-                    isActive
-                      ? 'nav-link nav-link-active'
-                      : 'nav-link'
-                  }
-                >
-                  XLSX-Import
-                </NavLink>
-                <NavLink
-                  to="/admin/settings"
-                  className={({ isActive }) =>
-                    isActive
-                      ? 'nav-link nav-link-active'
-                      : 'nav-link'
-                  }
-                >
-                  Einstellungen
-                </NavLink>
+              <NavLink
+                to="/admin/users"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                Benutzer
+              </NavLink>
+              <NavLink
+                to="/admin/rfid-cards"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                Ladekarten
+              </NavLink>
+              <NavLink
+                to="/admin/import"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                Datenimport
+              </NavLink>
+              <NavLink
+                to="/admin/settings"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                Einstellungen
+              </NavLink>
               </>
             )}
           </nav>
