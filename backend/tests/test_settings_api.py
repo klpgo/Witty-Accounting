@@ -133,6 +133,7 @@ def add_global_settings(
     invoice_iban: str | None = None,
     invoice_bic: str | None = None,
     invoice_number_prefix: str = "RE",
+    invoice_pdf_format: str = "standard",
     dashboard_note: str | None = None,
 ) -> GlobalSettings:
     global_settings = GlobalSettings(
@@ -153,6 +154,7 @@ def add_global_settings(
         invoice_iban=invoice_iban,
         invoice_bic=invoice_bic,
         invoice_number_prefix=invoice_number_prefix,
+        invoice_pdf_format=invoice_pdf_format,
         dashboard_note=dashboard_note,
     )
 
@@ -229,6 +231,7 @@ def test_reads_admin_settings(
         "invoice_iban": None,
         "invoice_bic": None,
         "invoice_number_prefix": "RE",
+        "invoice_pdf_format": "standard",
         "password_min_length": 8,
         "password_require_uppercase": True,
         "password_require_lowercase": True,
@@ -272,6 +275,7 @@ def test_updates_admin_settings(
         "invoice_iban": None,
         "invoice_bic": None,
         "invoice_number_prefix": "RE",
+        "invoice_pdf_format": "standard",
         "password_min_length": 8,
         "password_require_uppercase": True,
         "password_require_lowercase": True,
@@ -402,6 +406,7 @@ def test_updates_invoice_business_settings(
             ),
             "invoice_bic": "cobadeffxxx",
             "invoice_number_prefix": " re ",
+            "invoice_pdf_format": "pdfa-2b",
         },
     )
 
@@ -431,6 +436,7 @@ def test_updates_invoice_business_settings(
         "COBADEFFXXX"
     )
     assert body["invoice_number_prefix"] == "RE"
+    assert body["invoice_pdf_format"] == "pdfa-2b"
 
     database_session.refresh(global_settings)
 
@@ -443,6 +449,10 @@ def test_updates_invoice_business_settings(
     assert (
         global_settings.invoice_number_prefix
         == "RE"
+    )
+    assert (
+        global_settings.invoice_pdf_format
+        == "pdfa-2b"
     )
 
 
@@ -521,6 +531,14 @@ def test_clears_optional_invoice_business_settings(
         ),
         (
             "invoice_number_prefix",
+            None,
+        ),
+        (
+            "invoice_pdf_format",
+            "pdfa-3b",
+        ),
+        (
+            "invoice_pdf_format",
             None,
         ),
     ],

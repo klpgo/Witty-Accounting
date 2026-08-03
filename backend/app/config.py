@@ -48,6 +48,12 @@ class Settings(BaseSettings):
         "data/invoices"
     )
 
+    ghostscript_executable: str = "gs"
+    pdfa_icc_profile_path: Path = Path(
+        "/usr/share/color/icc/ghostscript/srgb.icc"
+    )
+    pdfa_conversion_timeout_seconds: float = 30.0
+
     smtp_host: str = "host.docker.internal"
     smtp_port: int = 25
     smtp_timeout_seconds: float = 10.0

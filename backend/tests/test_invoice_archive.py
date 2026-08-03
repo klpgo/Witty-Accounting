@@ -2,9 +2,11 @@ from collections.abc import Generator
 from datetime import date, datetime
 from decimal import Decimal
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from pypdf import PdfReader
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -14,6 +16,7 @@ from app.models.charging_session import (
     ChargingSession,
 )
 from app.models.invoice import Invoice, InvoiceItem
+from app.models.global_settings import GlobalSettings
 from app.models.rfid_card import RFIDCard
 from app.models.user import User
 from app.services.invoice_archive import (
@@ -241,6 +244,46 @@ def test_archives_invoice_pdf(
         result.size_bytes
     )
     assert invoice.pdf_created_at is not None
+
+
+def test_archives_invoice_as_pdfa_2b(
+    database_session: Session,
+    tmp_path: Path,
+) -> None:
+    global_settings = GlobalSettings(
+        id=1,
+        invoice_pdf_format="pdfa-2b",
+    )
+    database_session.add(global_settings)
+    database_session.commit()
+
+    invoice = create_finalized_invoice(
+        database_session
+    )
+
+    result = archive_invoice_pdf(
+        database_session,
+        invoice_id=invoice.id,
+        archive_root=tmp_path,
+    )
+
+    pdf_bytes = result.absolute_path.read_bytes()
+    reader = PdfReader(BytesIO(pdf_bytes))
+    root = reader.trailer["/Root"]
+
+    assert root.get("/OutputIntents")
+
+    metadata = (
+        root["/Metadata"]
+        .get_object()
+        .get_data()
+    )
+
+    assert b"pdfaid:part='2'" in metadata
+    assert b"pdfaid:conformance='B'" in metadata
+    assert result.sha256 == sha256(
+        pdf_bytes
+    ).hexdigest()
 
 
 def test_archiving_is_idempotent(

@@ -103,6 +103,13 @@ function AdminSettingsPage() {
   ] = useState('RE')
 
   const [
+    invoicePdfFormat,
+    setInvoicePdfFormat,
+  ] = useState<'standard' | 'pdfa-2b'>(
+    'standard',
+  )
+
+  const [
     currentEnergyPrice,
     setCurrentEnergyPrice,
   ] = useState<EnergyPrice | null>(null)
@@ -261,6 +268,9 @@ function AdminSettingsPage() {
         )
         setInvoiceNumberPrefix(
           loadedSettings.invoice_number_prefix,
+        )
+        setInvoicePdfFormat(
+          loadedSettings.invoice_pdf_format,
         )
         if (loadedEnergyPrice !== null) {
           setCurrentEnergyPrice(
@@ -513,6 +523,8 @@ function AdminSettingsPage() {
               normalizedBic || null,
             invoice_number_prefix:
               normalizedNumberPrefix,
+            invoice_pdf_format:
+              invoicePdfFormat,
           },
         )
 
@@ -553,6 +565,9 @@ function AdminSettingsPage() {
       )
       setInvoiceNumberPrefix(
         updatedSettings.invoice_number_prefix,
+      )
+      setInvoicePdfFormat(
+        updatedSettings.invoice_pdf_format,
       )
 
       await refreshSettings()
@@ -937,7 +952,7 @@ function AdminSettingsPage() {
           <h2>Abrechnung</h2>
 
           <div className="form-grid settings-billing-grid">
-            <label className="form-field">
+              <label className="form-field">
               <span>
                 Monatliche Grundgebühr netto
               </span>
@@ -958,7 +973,7 @@ function AdminSettingsPage() {
                 Betrag je zugeordneter
                 RFID-Karte und Monat.
               </small>
-            </label>
+              </label>
 
             <label className="form-field">
               <span>
@@ -1004,7 +1019,7 @@ function AdminSettingsPage() {
               </small>
             </label>
 
-            <label className="form-field">
+              <label className="form-field">
                 <span>
                   Rechnungsnummer-Präfix
                 </span>
@@ -1026,6 +1041,36 @@ function AdminSettingsPage() {
                   RE-2026-000001. Das Jahr und die
                   laufende Nummer werden automatisch
                   ergänzt.
+                </small>
+              </label>
+
+              <label className="form-field">
+                <span>Rechnungsformat</span>
+
+                <select
+                  value={invoicePdfFormat}
+                  onChange={(event) => {
+                    setInvoicePdfFormat(
+                      event.target.value as
+                        | 'standard'
+                        | 'pdfa-2b',
+                    )
+                  }}
+                >
+                  <option value="standard">
+                    Standard-PDF
+                  </option>
+
+                  <option value="pdfa-2b">
+                    PDF/A-2b
+                  </option>
+                </select>
+
+                <small className="muted">
+                  Gilt für neu archivierte Rechnungen
+                  und Stornorechnungen. Bereits
+                  archivierte Dateien bleiben
+                  unverändert.
                 </small>
               </label>
           </div>

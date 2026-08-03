@@ -10,8 +10,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
+from app.models.global_settings import GlobalSettings
 from app.models.invoice import Invoice
 from app.services.invoice_pdf import build_invoice_pdf
+from app.services.invoice_pdfa import (
+    InvoicePdfAError,
+    PDF_FORMAT_PDFA_2B,
+    PDF_FORMAT_STANDARD,
+    SUPPORTED_PDF_FORMATS,
+    convert_to_pdfa_2b,
+)
 from app.utils.utc import utc_now
 
 
@@ -291,7 +299,33 @@ def archive_invoice_pdf(
             resolved_root,
         )
 
+    global_settings = db.get(
+        GlobalSettings,
+        1,
+    )
+    pdf_format = (
+        global_settings.invoice_pdf_format
+        if global_settings is not None
+        else PDF_FORMAT_STANDARD
+    )
+
+    if pdf_format not in SUPPORTED_PDF_FORMATS:
+        raise InvoiceArchiveMetadataError(
+            "Das konfigurierte Rechnungsformat ist "
+            "ungültig."
+        )
+
     pdf_bytes = build_invoice_pdf(invoice)
+
+    if pdf_format == PDF_FORMAT_PDFA_2B:
+        try:
+            pdf_bytes = convert_to_pdfa_2b(
+                pdf_bytes
+            )
+        except InvoicePdfAError as exc:
+            raise InvoiceArchiveError(
+                str(exc)
+            ) from exc
     pdf_sha256 = calculate_sha256(pdf_bytes)
     pdf_size_bytes = len(pdf_bytes)
 

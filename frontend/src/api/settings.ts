@@ -21,6 +21,7 @@ export interface GlobalSettings {
   invoice_iban: string | null
   invoice_bic: string | null
   invoice_number_prefix: string
+  invoice_pdf_format: 'standard' | 'pdfa-2b'
   password_min_length: number
   password_require_uppercase: boolean
   password_require_lowercase: boolean
@@ -43,6 +44,7 @@ export interface GlobalSettingsUpdate {
   invoice_iban?: string | null
   invoice_bic?: string | null
   invoice_number_prefix?: string
+  invoice_pdf_format?: 'standard' | 'pdfa-2b'
   password_min_length?: number
   password_require_uppercase?: boolean
   password_require_lowercase?: boolean

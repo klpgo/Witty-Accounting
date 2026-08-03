@@ -1301,6 +1301,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
+    { name = "pypdf" },
     { name = "pymysql" },
     { name = "python-multipart" },
     { name = "reportlab" },
@@ -1312,7 +1313,6 @@ dependencies = [
 dev = [
     { name = "httpx" },
     { name = "httpx2" },
-    { name = "pypdf" },
     { name = "pytest" },
 ]
 
@@ -1327,6 +1327,7 @@ requires-dist = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyjwt", specifier = ">=2.13.0" },
+    { name = "pypdf", specifier = ">=6.14.2" },
     { name = "pymysql" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "reportlab", specifier = ">=5.0.0" },
@@ -1338,6 +1339,5 @@ requires-dist = [
 dev = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "httpx2", specifier = ">=2.7.0" },
-    { name = "pypdf", specifier = ">=6.14.2" },
     { name = "pytest", specifier = ">=9.1.1" },
 ]

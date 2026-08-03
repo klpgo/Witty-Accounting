@@ -115,6 +115,13 @@ class GlobalSettings(Base):
         server_default="RE",
     )
 
+    invoice_pdf_format: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="standard",
+        server_default="standard",
+    )
+
     maintenance_mode: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

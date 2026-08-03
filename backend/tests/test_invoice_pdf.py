@@ -10,6 +10,11 @@ from app.services.invoice_pdf import (
     InvoiceNotFinalizedError,
     build_invoice_pdf,
 )
+from app.services.invoice_pdfa import (
+    InvoicePdfAError,
+    convert_to_pdfa_2b,
+    validate_pdfa_2b_structure,
+)
 
 
 def create_finalized_invoice() -> Invoice:
@@ -231,6 +236,47 @@ def test_builds_monthly_base_fee_invoice_pdf() -> None:
     assert "10,00" in extracted_text
     assert "19,00" in extracted_text
     assert "11,90" in extracted_text
+
+
+def test_converts_invoice_to_pdfa_2b() -> None:
+    invoice = create_finalized_invoice()
+
+    pdf_bytes = convert_to_pdfa_2b(
+        build_invoice_pdf(invoice)
+    )
+
+    validate_pdfa_2b_structure(pdf_bytes)
+
+    reader = PdfReader(BytesIO(pdf_bytes))
+    root = reader.trailer["/Root"]
+
+    assert root.get("/OutputIntents")
+
+    metadata = (
+        root["/Metadata"]
+        .get_object()
+        .get_data()
+    )
+
+    assert b"pdfaid:part='2'" in metadata
+    assert b"pdfaid:conformance='B'" in metadata
+
+    extracted_text = "\n".join(
+        page.extract_text() or ""
+        for page in reader.pages
+    )
+
+    assert "RE-2026-000001" in extracted_text
+    assert "Max Mustermann" in extracted_text
+
+
+def test_rejects_standard_pdf_as_pdfa_2b() -> None:
+    invoice = create_finalized_invoice()
+
+    with pytest.raises(InvoicePdfAError):
+        validate_pdfa_2b_structure(
+            build_invoice_pdf(invoice)
+        )
 
 
 def test_rejects_draft_invoice() -> None:

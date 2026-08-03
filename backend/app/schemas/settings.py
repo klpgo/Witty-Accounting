@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import (
     BaseModel,
@@ -108,6 +108,11 @@ DashboardNote = Annotated[
     ),
 ]
 
+InvoicePdfFormat = Literal[
+    "standard",
+    "pdfa-2b",
+]
+
 
 class PublicSettingsResponse(BaseModel):
     app_name: str
@@ -132,6 +137,7 @@ class GlobalSettingsResponse(BaseModel):
     invoice_iban: str | None
     invoice_bic: str | None
     invoice_number_prefix: str
+    invoice_pdf_format: InvoicePdfFormat
     password_min_length: int
     password_require_uppercase: bool
     password_require_lowercase: bool
@@ -162,6 +168,7 @@ class GlobalSettingsUpdate(BaseModel):
     invoice_number_prefix: (
         InvoiceNumberPrefix | None
     ) = None
+    invoice_pdf_format: InvoicePdfFormat | None = None
     password_min_length: (
         PasswordMinLength | None
     ) = None
@@ -176,6 +183,7 @@ class GlobalSettingsUpdate(BaseModel):
         "monthly_base_fee_vat_rate",
         "invoice_payment_term_days",
         "invoice_number_prefix",
+        "invoice_pdf_format",
         "password_min_length",
         "password_require_uppercase",
         "password_require_lowercase",
