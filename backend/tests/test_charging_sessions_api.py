@@ -221,7 +221,7 @@ def authorization_header(
 def test_rejects_unauthenticated_access(
     client: TestClient,
 ) -> None:
-    response = client.get("/charging-sessions")
+    response = client.get("/api/charging-sessions")
 
     assert response.status_code == 401
 
@@ -305,7 +305,7 @@ def test_admin_reads_all_charging_sessions(
     )
 
     response = client.get(
-        "/charging-sessions",
+        "/api/charging-sessions",
         headers=authorization_header(admin),
     )
 
@@ -423,7 +423,7 @@ def test_user_reads_only_own_charging_sessions(
     )
 
     response = client.get(
-        "/charging-sessions",
+        "/api/charging-sessions",
         headers=authorization_header(own_user),
     )
 

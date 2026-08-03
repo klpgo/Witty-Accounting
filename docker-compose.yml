@@ -1,46 +1,55 @@
-services:
+name: witty-accounting
 
+services:
   db:
     image: mariadb:11
     container_name: witty-accounting-db
-
     restart: unless-stopped
 
     environment:
-      MYSQL_DATABASE: witty_accounting
-      MYSQL_USER: witty
-      MYSQL_PASSWORD: changeme
-      MYSQL_ROOT_PASSWORD: rootpassword
-
-    ports:
-      - "3306:3306"
+      MARIADB_DATABASE: "${DB_NAME:?DB_NAME muss in .env gesetzt sein}"
+      MARIADB_USER: "${DB_USER:?DB_USER muss in .env gesetzt sein}"
+      MARIADB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD muss in .env gesetzt sein}"
+      MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD muss in .env gesetzt sein}"
 
     volumes:
       - mariadb_data:/var/lib/mysql
 
-  backend:
-    build:
-      context: ./backend
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
-    extra_hosts:
-      - "host.docker.internal=172.18.0.1"
-
-    container_name: witty-accounting-backend
-
+  witty:
+    image: witty-accounting:local
+    container_name: witty-accounting
     restart: unless-stopped
+    init: true
+
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
 
     env_file:
       - .env
 
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
     ports:
-      - "8000:8000"
+      - "${WITTY_BIND_ADDRESS:-0.0.0.0}:${WITTY_PORT:-8000}:8000"
 
     volumes:
-      - ./uploads/logs:/app/logs
-      - ./uploads/invoices:/app/data/invoices
+      - "${WITTY_DATA_DIR:-./uploads}/logs:/app/logs"
+      - "${WITTY_DATA_DIR:-./uploads}/invoices:/app/data/invoices"
 
     secrets:
       - source: invoice_mail_signing_pkcs12
@@ -48,10 +57,22 @@ services:
       - source: invoice_mail_signing_password
         target: invoice-mail-signing-password
 
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 secrets:
   invoice_mail_signing_pkcs12:
     file: ./secrets/invoice-mail-signing.p12
-
   invoice_mail_signing_password:
     file: ./secrets/invoice-mail-signing-password
 

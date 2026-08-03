@@ -126,11 +126,11 @@ def test_password_reset_request_is_neutral(
     )
 
     known_response = client.post(
-        "/auth/password-reset/request",
+        "/api/auth/password-reset/request",
         json={"email": " USER@example.com "},
     )
     unknown_response = client.post(
-        "/auth/password-reset/request",
+        "/api/auth/password-reset/request",
         json={"email": "unknown@example.com"},
     )
 
@@ -161,7 +161,7 @@ def test_inactive_user_does_not_receive_reset(
     )
 
     response = client.post(
-        "/auth/password-reset/request",
+        "/api/auth/password-reset/request",
         json={"email": "user@example.com"},
     )
 
@@ -190,7 +190,7 @@ def test_reset_token_is_hashed_and_single_use(
     assert raw_token not in stored_token.token_hash
 
     response = client.post(
-        "/auth/password-reset/confirm",
+        "/api/auth/password-reset/confirm",
         json={
             "token": raw_token,
             "new_password": "New-password2!",
@@ -207,7 +207,7 @@ def test_reset_token_is_hashed_and_single_use(
     assert stored_token.used_at is not None
 
     reused_response = client.post(
-        "/auth/password-reset/confirm",
+        "/api/auth/password-reset/confirm",
         json={
             "token": raw_token,
             "new_password": "Another-password3!",
@@ -274,7 +274,7 @@ def test_expired_reset_token_is_rejected(
     database_session.commit()
 
     response = client.post(
-        "/auth/password-reset/confirm",
+        "/api/auth/password-reset/confirm",
         json={
             "token": raw_token,
             "new_password": "New-password2!",
@@ -301,7 +301,7 @@ def test_reset_enforces_password_policy(
     database_session.commit()
 
     response = client.post(
-        "/auth/password-reset/confirm",
+        "/api/auth/password-reset/confirm",
         json={
             "token": raw_token,
             "new_password": "abcdefgh",

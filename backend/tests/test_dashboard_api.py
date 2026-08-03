@@ -149,7 +149,7 @@ def test_dashboard_reports_operational_data(
     database_session.commit()
 
     response = client.get(
-        "/dashboard",
+        "/api/dashboard",
         headers=authorization_header(user),
     )
 
@@ -176,7 +176,7 @@ def test_dashboard_handles_missing_operational_data(
     user = create_user(database_session)
 
     response = client.get(
-        "/dashboard",
+        "/api/dashboard",
         headers=authorization_header(user),
     )
 
@@ -193,6 +193,6 @@ def test_dashboard_handles_missing_operational_data(
 def test_dashboard_requires_authentication(
     client: TestClient,
 ) -> None:
-    response = client.get("/dashboard")
+    response = client.get("/api/dashboard")
 
     assert response.status_code == 401

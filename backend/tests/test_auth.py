@@ -115,7 +115,7 @@ def test_login_returns_access_token(
     )
 
     response = unauthenticated_client.post(
-        "/auth/token",
+        "/api/auth/token",
         data={
             "username": "ADMIN@EXAMPLE.COM",
             "password": TEST_PASSWORD,
@@ -145,7 +145,7 @@ def test_login_rejects_wrong_password(
     )
 
     response = unauthenticated_client.post(
-        "/auth/token",
+        "/api/auth/token",
         data={
             "username": "admin@example.com",
             "password": "wrong-password",
@@ -168,7 +168,7 @@ def test_reprice_requires_authentication(
     unauthenticated_client: TestClient,
 ) -> None:
     response = unauthenticated_client.post(
-        "/energy-prices/reprice"
+        "/api/energy-prices/reprice"
     )
 
     assert response.status_code == 401
@@ -181,7 +181,7 @@ def test_reprice_rejects_invalid_token(
     unauthenticated_client: TestClient,
 ) -> None:
     response = unauthenticated_client.post(
-        "/energy-prices/reprice",
+        "/api/energy-prices/reprice",
         headers={
             "Authorization": (
                 "Bearer definitely-invalid"
@@ -212,7 +212,7 @@ def test_reprice_rejects_non_admin_user(
     )
 
     response = unauthenticated_client.post(
-        "/energy-prices/reprice",
+        "/api/energy-prices/reprice",
         headers=authorization_header(user),
     )
 
@@ -235,7 +235,7 @@ def test_reprice_accepts_admin_user(
     )
 
     response = unauthenticated_client.post(
-        "/energy-prices/reprice",
+        "/api/energy-prices/reprice",
         headers=authorization_header(admin),
     )
 
@@ -253,7 +253,7 @@ def test_create_energy_price_requires_authentication(
     unauthenticated_client: TestClient,
 ) -> None:
     response = unauthenticated_client.post(
-        "/energy-prices",
+        "/api/energy-prices",
         json={
             "valid_from": "2026-01-01T00:00:00",
             "grid_price_net": "0.3000",
@@ -275,7 +275,7 @@ def test_me_returns_authenticated_user(
     )
 
     response = unauthenticated_client.get(
-        "/auth/me",
+        "/api/auth/me",
         headers=authorization_header(admin),
     )
 
@@ -294,7 +294,7 @@ def test_me_requires_authentication(
     unauthenticated_client: TestClient,
 ) -> None:
     response = unauthenticated_client.get(
-        "/auth/me"
+        "/api/auth/me"
     )
 
     assert response.status_code == 401
@@ -314,7 +314,7 @@ def test_normal_user_can_login_without_maintenance_mode(
     )
 
     response = unauthenticated_client.post(
-        "/auth/token",
+        "/api/auth/token",
         data={
             "username": user.email,
             "password": TEST_PASSWORD,
@@ -344,7 +344,7 @@ def test_maintenance_mode_rejects_normal_user_login(
     )
 
     response = unauthenticated_client.post(
-        "/auth/token",
+        "/api/auth/token",
         data={
             "username": user.email,
             "password": TEST_PASSWORD,
@@ -380,7 +380,7 @@ def test_maintenance_mode_allows_admin_login(
     )
 
     response = unauthenticated_client.post(
-        "/auth/token",
+        "/api/auth/token",
         data={
             "username": admin.email,
             "password": TEST_PASSWORD,

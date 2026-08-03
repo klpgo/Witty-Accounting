@@ -175,7 +175,7 @@ def create_charging_session(
 def test_list_rfid_cards_requires_authentication(
     client: TestClient,
 ) -> None:
-    response = client.get("/rfid-cards")
+    response = client.get("/api/rfid-cards")
 
     assert response.status_code == 401
 
@@ -191,7 +191,7 @@ def test_list_rfid_cards_requires_admin(
     )
 
     response = client.get(
-        "/rfid-cards",
+        "/api/rfid-cards",
         headers=authorization_header(user),
     )
 
@@ -222,7 +222,7 @@ def test_admin_lists_rfid_cards(
     )
 
     response = client.get(
-        "/rfid-cards",
+        "/api/rfid-cards",
         headers=authorization_header(admin),
     )
 
@@ -300,7 +300,7 @@ def test_admin_lists_assignment_history(
     database_session.commit()
 
     response = client.get(
-        f"/rfid-cards/{card.id}/assignments",
+        f"/api/rfid-cards/{card.id}/assignments",
         headers=authorization_header(admin),
     )
 
@@ -327,7 +327,7 @@ def test_assignment_history_returns_not_found(
     )
 
     response = client.get(
-        "/rfid-cards/999999/assignments",
+        "/api/rfid-cards/999999/assignments",
         headers=authorization_header(admin),
     )
 
@@ -352,7 +352,7 @@ def test_admin_creates_rfid_card(
     )
 
     response = client.post(
-        "/rfid-cards",
+        "/api/rfid-cards",
         headers=authorization_header(admin),
         json={
             "rfid_number": " abc123 ",
@@ -391,7 +391,7 @@ def test_create_rfid_card_requires_admin(
     )
 
     response = client.post(
-        "/rfid-cards",
+        "/api/rfid-cards",
         headers=authorization_header(user),
         json={
             "rfid_number": "ABC123",
@@ -419,7 +419,7 @@ def test_create_rfid_card_rejects_duplicate_number(
     )
 
     response = client.post(
-        "/rfid-cards",
+        "/api/rfid-cards",
         headers=authorization_header(admin),
         json={
             "rfid_number": "abc123",
@@ -453,7 +453,7 @@ def test_admin_updates_rfid_card(
     )
 
     response = client.patch(
-        f"/rfid-cards/{card.id}",
+        f"/api/rfid-cards/{card.id}",
         headers=authorization_header(admin),
         json={
             "rfid_number": " new123 ",
@@ -499,7 +499,7 @@ def test_admin_removes_rfid_description(
     database_session.refresh(card)
 
     response = client.patch(
-        f"/rfid-cards/{card.id}",
+        f"/api/rfid-cards/{card.id}",
         headers=authorization_header(admin),
         json={
             "description": None,
@@ -534,7 +534,7 @@ def test_update_rfid_card_rejects_duplicate_number(
     )
 
     response = client.patch(
-        f"/rfid-cards/{second_card.id}",
+        f"/api/rfid-cards/{second_card.id}",
         headers=authorization_header(admin),
         json={
             "rfid_number": "first1",
@@ -561,7 +561,7 @@ def test_update_rfid_card_returns_not_found(
     )
 
     response = client.patch(
-        "/rfid-cards/999999",
+        "/api/rfid-cards/999999",
         headers=authorization_header(admin),
         json={
             "active": False,
@@ -601,7 +601,7 @@ def test_admin_creates_rfid_assignment(
     )
 
     response = client.post(
-        f"/rfid-cards/{card.id}/assignments",
+        f"/api/rfid-cards/{card.id}/assignments",
         headers=authorization_header(admin),
         json={
             "user_id": target.id,
@@ -641,7 +641,7 @@ def test_create_assignment_requires_admin(
     )
 
     response = client.post(
-        f"/rfid-cards/{card.id}/assignments",
+        f"/api/rfid-cards/{card.id}/assignments",
         headers=authorization_header(user),
         json={
             "user_id": user.id,
@@ -692,7 +692,7 @@ def test_create_assignment_rejects_overlap(
     database_session.commit()
 
     response = client.post(
-        f"/rfid-cards/{card.id}/assignments",
+        f"/api/rfid-cards/{card.id}/assignments",
         headers=authorization_header(admin),
         json={
             "user_id": target.id,
@@ -763,7 +763,7 @@ def test_create_assignment_allows_adjacent_period(
     database_session.commit()
 
     response = client.post(
-        f"/rfid-cards/{card.id}/assignments",
+        f"/api/rfid-cards/{card.id}/assignments",
         headers=authorization_header(admin),
         json={
             "user_id": second_user.id,
@@ -799,7 +799,7 @@ def test_create_assignment_rejects_invalid_period(
     )
 
     response = client.post(
-        f"/rfid-cards/{card.id}/assignments",
+        f"/api/rfid-cards/{card.id}/assignments",
         headers=authorization_header(admin),
         json={
             "user_id": admin.id,
@@ -849,7 +849,7 @@ def test_admin_updates_unused_assignment(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(admin),
@@ -911,7 +911,7 @@ def test_admin_opens_assignment_period(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(admin),
@@ -950,7 +950,7 @@ def test_update_assignment_requires_admin(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(user),
@@ -974,7 +974,7 @@ def test_update_assignment_returns_404(
     )
 
     response = client.patch(
-        "/rfid-card-assignments/999999",
+        "/api/rfid-card-assignments/999999",
         headers=authorization_header(admin),
         json={
             "valid_to": "2026-02-01T00:00:00",
@@ -1015,7 +1015,7 @@ def test_update_assignment_returns_404_for_unknown_user(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(admin),
@@ -1062,7 +1062,7 @@ def test_update_assignment_rejects_overlap(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{first_assignment.id}"
         ),
         headers=authorization_header(admin),
@@ -1102,7 +1102,7 @@ def test_update_assignment_rejects_invalid_period(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(admin),
@@ -1157,7 +1157,7 @@ def test_used_assignment_rejects_user_change(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(admin),
@@ -1204,7 +1204,7 @@ def test_used_assignment_rejects_start_change(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(admin),
@@ -1258,7 +1258,7 @@ def test_used_assignment_rejects_end_excluding_session(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(admin),
@@ -1306,7 +1306,7 @@ def test_used_assignment_allows_safe_end_change(
 
     response = client.patch(
         (
-            "/rfid-card-assignments/"
+            "/api/rfid-card-assignments/"
             f"{assignment.id}"
         ),
         headers=authorization_header(admin),

@@ -185,7 +185,7 @@ def test_reads_public_application_name(
     )
 
     response = client.get(
-        "/settings/public"
+        "/api/settings/public"
     )
 
     assert response.status_code == 200
@@ -198,7 +198,7 @@ def test_public_settings_uses_configuration_fallback(
     client: TestClient,
 ) -> None:
     response = client.get(
-        "/settings/public"
+        "/api/settings/public"
     )
 
     assert response.status_code == 200
@@ -220,7 +220,7 @@ def test_reads_admin_settings(
     )
 
     response = admin_client.get(
-        "/settings"
+        "/api/settings"
     )
 
     assert response.status_code == 200
@@ -261,7 +261,7 @@ def test_updates_admin_settings(
     )
 
     response = admin_client.patch(
-        "/settings",
+        "/api/settings",
         json={
             "app_name": "  Neue Abrechnung  ",
             "monthly_base_fee_net": "9.9900",
@@ -373,7 +373,7 @@ def test_rejects_invalid_admin_settings(
 
     for payload in invalid_payloads:
         response = admin_client.patch(
-            "/settings",
+            "/api/settings",
             json=payload,
         )
 
@@ -387,7 +387,7 @@ def test_rejects_blank_application_name(
     add_global_settings(database_session)
 
     response = admin_client.patch(
-        "/settings",
+        "/api/settings",
         json={
             "app_name": "   ",
         },
@@ -403,10 +403,10 @@ def test_admin_settings_require_authentication(
     add_global_settings(database_session)
 
     get_response = client.get(
-        "/settings"
+        "/api/settings"
     )
     patch_response = client.patch(
-        "/settings",
+        "/api/settings",
         json={
             "app_name": "Nicht erlaubt",
         },
@@ -425,7 +425,7 @@ def test_updates_invoice_business_settings(
     )
 
     response = admin_client.patch(
-        "/settings",
+        "/api/settings",
         json={
             "invoice_issuer_name": (
                 "  Klaus Gottschalk  "
@@ -516,7 +516,7 @@ def test_clears_optional_invoice_business_settings(
     )
 
     response = admin_client.patch(
-        "/settings",
+        "/api/settings",
         json={
             "invoice_issuer_name": None,
             "invoice_issuer_address": None,
@@ -594,7 +594,7 @@ def test_rejects_invalid_invoice_business_settings(
     add_global_settings(database_session)
 
     response = admin_client.patch(
-        "/settings",
+        "/api/settings",
         json={
             field_name: value,
         },
@@ -615,7 +615,7 @@ def test_updates_smtp_settings_and_encrypts_password(
     )
 
     response = admin_client.patch(
-        "/settings/smtp",
+        "/api/settings/smtp",
         json={
             "smtp_use_database_settings": True,
             "mail_sending_enabled": True,
@@ -676,7 +676,7 @@ def test_keeps_existing_smtp_password(
     )
 
     initial_response = admin_client.patch(
-        "/settings/smtp",
+        "/api/settings/smtp",
         json={
             "smtp_use_database_settings": True,
             "smtp_host": "smtp.example.com",
@@ -698,7 +698,7 @@ def test_keeps_existing_smtp_password(
     )
 
     response = admin_client.patch(
-        "/settings/smtp",
+        "/api/settings/smtp",
         json={
             "smtp_host": "smtp2.example.com",
             "smtp_password": "",
@@ -731,7 +731,7 @@ def test_clears_existing_smtp_password(
     )
 
     initial_response = admin_client.patch(
-        "/settings/smtp",
+        "/api/settings/smtp",
         json={
             "smtp_use_database_settings": True,
             "smtp_host": "smtp.example.com",
@@ -747,7 +747,7 @@ def test_clears_existing_smtp_password(
     assert initial_response.status_code == 200
 
     response = admin_client.patch(
-        "/settings/smtp",
+        "/api/settings/smtp",
         json={
             "clear_smtp_password": True,
         },
@@ -798,7 +798,7 @@ def test_sends_smtp_test_email_to_admin(
     )
 
     response = admin_client.post(
-        "/settings/smtp/test"
+        "/api/settings/smtp/test"
     )
 
     assert response.status_code == 200
@@ -833,7 +833,7 @@ def test_smtp_test_reports_configuration_error(
     )
 
     response = admin_client.post(
-        "/settings/smtp/test"
+        "/api/settings/smtp/test"
     )
 
     assert response.status_code == 422
@@ -865,7 +865,7 @@ def test_smtp_test_reports_delivery_error(
     )
 
     response = admin_client.post(
-        "/settings/smtp/test"
+        "/api/settings/smtp/test"
     )
 
     assert response.status_code == 502
@@ -886,7 +886,7 @@ def test_updates_maintenance_mode(
     )
 
     response = admin_client.patch(
-        "/settings",
+        "/api/settings",
         json={
             "maintenance_mode": True,
         },

@@ -73,7 +73,7 @@ def client(
 def test_list_energy_prices_is_initially_empty(
     client: TestClient,
 ) -> None:
-    response = client.get("/energy-prices")
+    response = client.get("/api/energy-prices")
 
     assert response.status_code == 200
     assert response.json() == []
@@ -84,7 +84,7 @@ def test_create_energy_price(
     database_session: Session,
 ) -> None:
     response = client.post(
-        "/energy-prices",
+        "/api/energy-prices",
         json={
             "valid_from": "2026-01-01T00:00:00",
             "grid_price_net": "0.3000",
@@ -124,7 +124,7 @@ def test_list_energy_prices_newest_first(
     client: TestClient,
 ) -> None:
     first_response = client.post(
-        "/energy-prices",
+        "/api/energy-prices",
         json={
             "valid_from": "2026-01-01T00:00:00",
             "grid_price_net": "0.3000",
@@ -134,7 +134,7 @@ def test_list_energy_prices_newest_first(
     )
 
     second_response = client.post(
-        "/energy-prices",
+        "/api/energy-prices",
         json={
             "valid_from": "2026-07-01T00:00:00",
             "grid_price_net": "0.3500",
@@ -146,7 +146,7 @@ def test_list_energy_prices_newest_first(
     assert first_response.status_code == 201
     assert second_response.status_code == 201
 
-    response = client.get("/energy-prices")
+    response = client.get("/api/energy-prices")
 
     assert response.status_code == 200
 
@@ -172,12 +172,12 @@ def test_rejects_duplicate_valid_from(
     }
 
     first_response = client.post(
-        "/energy-prices",
+        "/api/energy-prices",
         json=payload,
     )
 
     second_response = client.post(
-        "/energy-prices",
+        "/api/energy-prices",
         json=payload,
     )
 
@@ -215,7 +215,7 @@ def test_rejects_invalid_values(
     payload[field] = value
 
     response = client.post(
-        "/energy-prices",
+        "/api/energy-prices",
         json=payload,
     )
 
@@ -278,7 +278,7 @@ def test_reprice_only_updates_uninvoiced_sessions(
     database_session.commit()
 
     response = client.post(
-        "/energy-prices/reprice"
+        "/api/energy-prices/reprice"
     )
 
     assert response.status_code == 200
@@ -347,7 +347,7 @@ def test_current_energy_price_uses_latest_valid_tariff(
     database_session.commit()
 
     response = client.get(
-        "/energy-prices/current"
+        "/api/energy-prices/current"
     )
 
     assert response.status_code == 200
@@ -369,7 +369,7 @@ def test_current_energy_price_returns_not_found(
     )
 
     response = client.get(
-        "/energy-prices/current"
+        "/api/energy-prices/current"
     )
 
     assert response.status_code == 404
@@ -402,7 +402,7 @@ def test_unchanged_current_energy_price_is_not_duplicated(
     database_session.refresh(energy_price)
 
     response = client.put(
-        "/energy-prices/current",
+        "/api/energy-prices/current",
         json={
             "grid_price_net": "0.3000",
             "pv_price_net": "0.1000",
@@ -441,7 +441,7 @@ def test_changed_energy_price_creates_today_tariff(
     database_session.commit()
 
     response = client.put(
-        "/energy-prices/current",
+        "/api/energy-prices/current",
         json={
             "grid_price_net": "0.3500",
             "pv_price_net": "0.1200",
@@ -491,7 +491,7 @@ def test_reset_today_to_previous_price_removes_today_tariff(
     database_session.refresh(previous_price)
 
     changed_response = client.put(
-        "/energy-prices/current",
+        "/api/energy-prices/current",
         json={
             "grid_price_net": "0.3500",
             "pv_price_net": "0.1200",
@@ -505,7 +505,7 @@ def test_reset_today_to_previous_price_removes_today_tariff(
     )
 
     reset_response = client.put(
-        "/energy-prices/current",
+        "/api/energy-prices/current",
         json={
             "grid_price_net": "0.3000",
             "pv_price_net": "0.1000",
@@ -548,7 +548,7 @@ def test_first_energy_price_starts_today(
     )
 
     response = client.put(
-        "/energy-prices/current",
+        "/api/energy-prices/current",
         json={
             "grid_price_net": "0.3500",
             "pv_price_net": "0.1200",
@@ -607,7 +607,7 @@ def test_second_change_today_updates_existing_tariff(
     database_session.refresh(future_price)
 
     response = client.put(
-        "/energy-prices/current",
+        "/api/energy-prices/current",
         json={
             "grid_price_net": "0.3700",
             "pv_price_net": "0.1300",

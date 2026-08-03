@@ -91,7 +91,7 @@ def test_upload_xlsx_returns_import_result(
     )
 
     response = client.post(
-        "/imports/xlsx",
+        "/api/imports/xlsx",
         files={
             "file": (
                 "hager-export.xlsx",
@@ -122,7 +122,7 @@ def test_upload_rejects_non_xlsx_file(
     client: TestClient,
 ) -> None:
     response = client.post(
-        "/imports/xlsx",
+        "/api/imports/xlsx",
         files={
             "file": (
                 "export.csv",
@@ -143,7 +143,7 @@ def test_upload_rejects_empty_xlsx(
     client: TestClient,
 ) -> None:
     response = client.post(
-        "/imports/xlsx",
+        "/api/imports/xlsx",
         files={
             "file": (
                 "empty.xlsx",
@@ -172,7 +172,7 @@ def test_upload_rejects_oversized_file(
     )
 
     response = client.post(
-        "/imports/xlsx",
+        "/api/imports/xlsx",
         files={
             "file": (
                 "large.xlsx",
@@ -198,7 +198,7 @@ def test_upload_rejects_corrupt_xlsx(
     client: TestClient,
 ) -> None:
     response = client.post(
-        "/imports/xlsx",
+        "/api/imports/xlsx",
         files={
             "file": (
                 "corrupt.xlsx",

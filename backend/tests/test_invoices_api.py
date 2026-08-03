@@ -250,7 +250,7 @@ def test_creates_invoice_draft(
     )
 
     response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -295,7 +295,7 @@ def test_creates_base_fee_only_draft_via_api(
     database_session.commit()
 
     response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -354,7 +354,7 @@ def test_create_draft_rejects_missing_recipient_address(
     database_session.commit()
 
     response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -394,7 +394,7 @@ def test_finalizes_invoice(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -409,7 +409,7 @@ def test_finalizes_invoice(
     invoice_id = draft_response.json()["id"]
 
     response = client.post(
-        f"/invoices/{invoice_id}/finalize",
+        f"/api/invoices/{invoice_id}/finalize",
         json={
             "issue_date": "2026-07-05",
         },
@@ -471,7 +471,7 @@ def test_lists_and_reads_invoices(
     )
 
     create_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -485,9 +485,9 @@ def test_lists_and_reads_invoices(
 
     invoice_id = create_response.json()["id"]
 
-    list_response = client.get("/invoices")
+    list_response = client.get("/api/invoices")
     detail_response = client.get(
-        f"/invoices/{invoice_id}"
+        f"/api/invoices/{invoice_id}"
     )
 
     assert list_response.status_code == 200
@@ -515,7 +515,7 @@ def test_regular_user_reads_only_own_finalized_invoices(
     )
 
     own_draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": own_user.id,
             "service_period_start": (
@@ -532,7 +532,7 @@ def test_regular_user_reads_only_own_finalized_invoices(
     own_invoice_id = own_draft_response.json()["id"]
 
     own_finalize_response = client.post(
-        f"/invoices/{own_invoice_id}/finalize",
+        f"/api/invoices/{own_invoice_id}/finalize",
         json={
             "issue_date": "2026-07-05",
             "due_date": "2026-07-19",
@@ -548,7 +548,7 @@ def test_regular_user_reads_only_own_finalized_invoices(
     )
 
     hidden_draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": own_user.id,
             "service_period_start": (
@@ -570,7 +570,7 @@ def test_regular_user_reads_only_own_finalized_invoices(
     )
 
     foreign_draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": foreign_user.id,
             "service_period_start": (
@@ -589,7 +589,7 @@ def test_regular_user_reads_only_own_finalized_invoices(
     )
 
     foreign_finalize_response = client.post(
-        f"/invoices/{foreign_invoice_id}/finalize",
+        f"/api/invoices/{foreign_invoice_id}/finalize",
         json={
             "issue_date": "2026-07-05",
             "due_date": "2026-07-19",
@@ -605,7 +605,7 @@ def test_regular_user_reads_only_own_finalized_invoices(
         get_current_user
     ] = override_regular_user
 
-    list_response = client.get("/invoices")
+    list_response = client.get("/api/invoices")
 
     assert list_response.status_code == 200
     assert [
@@ -614,13 +614,13 @@ def test_regular_user_reads_only_own_finalized_invoices(
     ] == [own_invoice_id]
 
     own_detail_response = client.get(
-        f"/invoices/{own_invoice_id}"
+        f"/api/invoices/{own_invoice_id}"
     )
     hidden_draft_detail_response = client.get(
-        f"/invoices/{hidden_draft_id}"
+        f"/api/invoices/{hidden_draft_id}"
     )
     foreign_detail_response = client.get(
-        f"/invoices/{foreign_invoice_id}"
+        f"/api/invoices/{foreign_invoice_id}"
     )
 
     assert own_detail_response.status_code == 200
@@ -632,10 +632,10 @@ def test_regular_user_reads_only_own_finalized_invoices(
     assert foreign_detail_response.status_code == 404
 
     own_pdf_response = client.get(
-        f"/invoices/{own_invoice_id}/pdf"
+        f"/api/invoices/{own_invoice_id}/pdf"
     )
     foreign_pdf_response = client.get(
-        f"/invoices/{foreign_invoice_id}/pdf"
+        f"/api/invoices/{foreign_invoice_id}/pdf"
     )
 
     assert own_pdf_response.status_code == 200
@@ -647,7 +647,7 @@ def test_rejects_unknown_invoice_user(
     client: TestClient,
 ) -> None:
     response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": 999999,
             "service_period_start": (
@@ -679,7 +679,7 @@ def test_downloads_archived_invoice_pdf(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -694,7 +694,7 @@ def test_downloads_archived_invoice_pdf(
     invoice_id = draft_response.json()["id"]
 
     finalize_response = client.post(
-        f"/invoices/{invoice_id}/finalize",
+        f"/api/invoices/{invoice_id}/finalize",
         json={
             "issue_date": "2026-07-05",
             "due_date": "2026-07-19",
@@ -704,7 +704,7 @@ def test_downloads_archived_invoice_pdf(
     assert finalize_response.status_code == 200
 
     response = client.get(
-        f"/invoices/{invoice_id}/pdf"
+        f"/api/invoices/{invoice_id}/pdf"
     )
 
     assert response.status_code == 200
@@ -736,7 +736,7 @@ def test_pdf_download_rejects_unarchived_draft(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -751,7 +751,7 @@ def test_pdf_download_rejects_unarchived_draft(
     invoice_id = draft_response.json()["id"]
 
     response = client.get(
-        f"/invoices/{invoice_id}/pdf"
+        f"/api/invoices/{invoice_id}/pdf"
     )
 
     assert response.status_code == 409
@@ -774,7 +774,7 @@ def test_creates_cancellation_draft(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -794,7 +794,7 @@ def test_creates_cancellation_draft(
 
     finalize_response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/finalize"
         ),
         json={
@@ -808,7 +808,7 @@ def test_creates_cancellation_draft(
 
     response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/cancellations"
         ),
         json={
@@ -870,7 +870,7 @@ def test_rejects_second_cancellation_draft(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -890,7 +890,7 @@ def test_rejects_second_cancellation_draft(
 
     finalize_response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/finalize"
         ),
         json={
@@ -902,7 +902,7 @@ def test_rejects_second_cancellation_draft(
 
     first_response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/cancellations"
         ),
         json={
@@ -914,7 +914,7 @@ def test_rejects_second_cancellation_draft(
 
     second_response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/cancellations"
         ),
         json={
@@ -937,7 +937,7 @@ def test_rejects_cancellation_of_draft_invoice(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -957,7 +957,7 @@ def test_rejects_cancellation_of_draft_invoice(
     invoice_id = draft_response.json()["id"]
 
     response = client.post(
-        f"/invoices/{invoice_id}/cancellations",
+        f"/api/invoices/{invoice_id}/cancellations",
         json={
             "reason": "Unzulässiger Stornoversuch",
         },
@@ -972,7 +972,7 @@ def test_rejects_cancellation_for_missing_invoice(
     client: TestClient,
 ) -> None:
     response = client.post(
-        "/invoices/999999/cancellations",
+        "/api/invoices/999999/cancellations",
         json={
             "reason": "Nicht vorhandene Rechnung",
         },
@@ -1003,7 +1003,7 @@ def test_finalizes_cancellation_draft(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -1026,7 +1026,7 @@ def test_finalizes_cancellation_draft(
 
     original_finalize_response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/finalize"
         ),
         json={
@@ -1038,7 +1038,7 @@ def test_finalizes_cancellation_draft(
 
     cancellation_response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/cancellations"
         ),
         json={
@@ -1054,7 +1054,7 @@ def test_finalizes_cancellation_draft(
 
     response = client.post(
         (
-            f"/invoices/{cancellation_id}"
+            f"/api/invoices/{cancellation_id}"
             "/cancellation/finalize"
         ),
         json={
@@ -1115,7 +1115,7 @@ def test_finalizes_cancellation_draft(
     )
 
     original_response = client.get(
-        f"/invoices/{original_invoice_id}"
+        f"/api/invoices/{original_invoice_id}"
     )
 
     assert original_response.status_code == 200
@@ -1179,7 +1179,7 @@ def test_rebills_session_after_finalized_cancellation(
     )
 
     original_draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -1206,7 +1206,7 @@ def test_rebills_session_after_finalized_cancellation(
 
     original_finalize_response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/finalize"
         ),
         json={
@@ -1221,7 +1221,7 @@ def test_rebills_session_after_finalized_cancellation(
 
     cancellation_response = client.post(
         (
-            f"/invoices/{original_invoice_id}"
+            f"/api/invoices/{original_invoice_id}"
             "/cancellations"
         ),
         json={
@@ -1237,7 +1237,7 @@ def test_rebills_session_after_finalized_cancellation(
 
     cancellation_finalize_response = client.post(
         (
-            f"/invoices/{cancellation_id}"
+            f"/api/invoices/{cancellation_id}"
             "/cancellation/finalize"
         ),
         json={
@@ -1258,7 +1258,7 @@ def test_rebills_session_after_finalized_cancellation(
     assert charging_session.invoice_id is None
 
     rebill_draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -1299,7 +1299,7 @@ def test_rebills_session_after_finalized_cancellation(
 
     rebill_finalize_response = client.post(
         (
-            f"/invoices/{rebill_invoice_id}"
+            f"/api/invoices/{rebill_invoice_id}"
             "/finalize"
         ),
         json={
@@ -1323,10 +1323,10 @@ def test_rebills_session_after_finalized_cancellation(
     )
 
     original_response = client.get(
-        f"/invoices/{original_invoice_id}"
+        f"/api/invoices/{original_invoice_id}"
     )
     cancellation_response = client.get(
-        f"/invoices/{cancellation_id}"
+        f"/api/invoices/{cancellation_id}"
     )
 
     assert original_response.status_code == 200
@@ -1350,7 +1350,7 @@ def test_deletes_invoice_draft(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -1367,7 +1367,7 @@ def test_deletes_invoice_draft(
     invoice_id = draft_response.json()["id"]
 
     response = client.delete(
-        f"/invoices/{invoice_id}"
+        f"/api/invoices/{invoice_id}"
     )
 
     assert response.status_code == 204
@@ -1433,7 +1433,7 @@ def test_deleting_draft_releases_monthly_base_fee(
     assert charge_id is not None
 
     response = client.delete(
-        f"/invoices/{original_invoice_id}"
+        f"/api/invoices/{original_invoice_id}"
     )
 
     assert response.status_code == 204
@@ -1503,7 +1503,7 @@ def test_rejects_deleting_finalized_invoice(
     )
 
     draft_response = client.post(
-        "/invoices/drafts",
+        "/api/invoices/drafts",
         json={
             "user_id": user.id,
             "service_period_start": (
@@ -1530,7 +1530,7 @@ def test_rejects_deleting_finalized_invoice(
     database_session.commit()
 
     response = client.delete(
-        f"/invoices/{invoice_id}"
+        f"/api/invoices/{invoice_id}"
     )
 
     assert response.status_code == 409
@@ -1546,7 +1546,7 @@ def test_delete_invoice_returns_not_found(
     client: TestClient,
 ) -> None:
     response = client.delete(
-        "/invoices/999999"
+        "/api/invoices/999999"
     )
 
     assert response.status_code == 404
@@ -1584,7 +1584,7 @@ def test_sends_invoice_email(
     )
 
     response = client.post(
-        "/invoices/42/send-email"
+        "/api/invoices/42/send-email"
     )
 
     assert response.status_code == 200
@@ -1661,7 +1661,7 @@ def test_maps_invoice_email_errors(
     )
 
     response = client.post(
-        "/invoices/42/send-email"
+        "/api/invoices/42/send-email"
     )
 
     assert response.status_code == expected_status

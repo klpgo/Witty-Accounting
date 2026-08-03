@@ -24,8 +24,6 @@ class Settings(BaseSettings):
     db_user: str
     db_password: str
 
-    secret_key: str
-
     log_level: str = "INFO"
 
     jwt_secret_key: SecretStr
@@ -38,8 +36,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    invoice_issuer_name: str
-    invoice_issuer_address: str
+    # Legacy fallbacks for installations that have not yet moved the
+    # invoice issuer data into GlobalSettings.  They must not prevent the
+    # application from starting when the database-backed settings are used.
+    invoice_issuer_name: str | None = None
+    invoice_issuer_address: str | None = None
     invoice_tax_number: str | None = None
     invoice_vat_id: str | None = None
     invoice_payment_term_days: int = 0

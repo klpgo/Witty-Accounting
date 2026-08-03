@@ -115,7 +115,7 @@ def authorization_header(
 def test_list_users_requires_authentication(
     client: TestClient,
 ) -> None:
-    response = client.get("/users")
+    response = client.get("/api/users")
 
     assert response.status_code == 401
     assert response.headers[
@@ -135,7 +135,7 @@ def test_list_users_rejects_non_admin(
     )
 
     response = client.get(
-        "/users",
+        "/api/users",
         headers=authorization_header(user),
     )
 
@@ -151,7 +151,7 @@ def test_create_user_requires_authentication(
     client: TestClient,
 ) -> None:
     response = client.post(
-        "/users",
+        "/api/users",
         json={
             "email": "new@example.com",
             "first_name": "Neue",
@@ -175,7 +175,7 @@ def test_create_user_rejects_non_admin(
     )
 
     response = client.post(
-        "/users",
+        "/api/users",
         headers=authorization_header(user),
         json={
             "email": "new@example.com",
@@ -218,7 +218,7 @@ def test_admin_creates_user(
     )
 
     response = client.post(
-        "/users",
+        "/api/users",
         headers=authorization_header(admin),
         json={
             "email": " NEW@example.com ",
@@ -294,7 +294,7 @@ def test_user_creation_rolls_back_if_invitation_fails(
     )
 
     response = client.post(
-        "/users",
+        "/api/users",
         headers=authorization_header(admin),
         json={
             "email": "new@example.com",
@@ -346,7 +346,7 @@ def test_list_users_returns_sorted_users(
     )
 
     response = client.get(
-        "/users",
+        "/api/users",
         headers=authorization_header(admin),
     )
 
@@ -380,7 +380,7 @@ def test_list_users_returns_sorted_users(
 def test_get_own_profile_requires_authentication(
     client: TestClient,
 ) -> None:
-    response = client.get("/users/me")
+    response = client.get("/api/users/me")
 
     assert response.status_code == 401
 
@@ -397,7 +397,7 @@ def test_get_own_profile(
     )
 
     response = client.get(
-        "/users/me",
+        "/api/users/me",
         headers=authorization_header(user),
     )
 
@@ -422,7 +422,7 @@ def test_updates_own_profile(
     )
 
     response = client.patch(
-        "/users/me",
+        "/api/users/me",
         headers=authorization_header(user),
         json={
             "email": "NEW@example.com",
@@ -485,7 +485,7 @@ def test_update_own_profile_rejects_duplicate_email(
     )
 
     response = client.patch(
-        "/users/me",
+        "/api/users/me",
         headers=authorization_header(user),
         json={
             "email": "USED@example.com",
@@ -513,7 +513,7 @@ def test_update_own_profile_rejects_admin_fields(
     )
 
     response = client.patch(
-        "/users/me",
+        "/api/users/me",
         headers=authorization_header(user),
         json={
             "is_admin": True,
@@ -542,7 +542,7 @@ def test_changes_own_password(
     )
 
     response = client.post(
-        "/users/me/password",
+        "/api/users/me/password",
         headers=authorization_header(user),
         json={
             "current_password": "old-password",
@@ -580,7 +580,7 @@ def test_change_own_password_rejects_weak_password(
     original_password_hash = user.password_hash
 
     response = client.post(
-        "/users/me/password",
+        "/api/users/me/password",
         headers=authorization_header(user),
         json={
             "current_password": "old-password",
@@ -620,7 +620,7 @@ def test_change_own_password_rejects_wrong_password(
     original_password_hash = user.password_hash
 
     response = client.post(
-        "/users/me/password",
+        "/api/users/me/password",
         headers=authorization_header(user),
         json={
             "current_password": "wrong-password",
@@ -663,7 +663,7 @@ def test_get_user_requires_admin(
     )
 
     response = client.get(
-        f"/users/{target.id}",
+        f"/api/users/{target.id}",
         headers=authorization_header(user),
     )
 
@@ -690,7 +690,7 @@ def test_admin_gets_user(
     )
 
     response = client.get(
-        f"/users/{target.id}",
+        f"/api/users/{target.id}",
         headers=authorization_header(admin),
     )
 
@@ -723,7 +723,7 @@ def test_admin_updates_user(
     )
 
     response = client.patch(
-        f"/users/{target.id}",
+        f"/api/users/{target.id}",
         headers=authorization_header(admin),
         json={
             "email": "NEW@example.com",
@@ -788,7 +788,7 @@ def test_admin_update_rejects_duplicate_email(
     )
 
     response = client.patch(
-        f"/users/{target.id}",
+        f"/api/users/{target.id}",
         headers=authorization_header(admin),
         json={
             "email": "USED@example.com",
@@ -819,7 +819,7 @@ def test_admin_resets_user_password(
     )
 
     response = client.post(
-        f"/users/{target.id}/password",
+        f"/api/users/{target.id}/password",
         headers=authorization_header(admin),
         json={
             "new_password": "New-password1!",
@@ -864,7 +864,7 @@ def test_admin_password_reset_rejects_weak_password(
     original_password_hash = target.password_hash
 
     response = client.post(
-        f"/users/{target.id}/password",
+        f"/api/users/{target.id}/password",
         headers=authorization_header(admin),
         json={
             "new_password": "abcdefgh",
@@ -913,7 +913,7 @@ def test_password_change_uses_saved_policy(
     )
 
     response = client.post(
-        "/users/me/password",
+        "/api/users/me/password",
         headers=authorization_header(user),
         json={
             "current_password": "old-password",
@@ -944,7 +944,7 @@ def test_admin_user_routes_return_not_found(
     )
 
     response = client.get(
-        "/users/999999",
+        "/api/users/999999",
         headers=authorization_header(admin),
     )
 
