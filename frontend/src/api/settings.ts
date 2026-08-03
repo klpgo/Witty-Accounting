@@ -27,6 +27,8 @@ export interface GlobalSettings {
   password_require_lowercase: boolean
   password_require_digit: boolean
   password_require_special: boolean
+  frontend_base_url: string
+  password_reset_token_expire_minutes: number
 }
 
 export interface GlobalSettingsUpdate {
@@ -50,6 +52,8 @@ export interface GlobalSettingsUpdate {
   password_require_lowercase?: boolean
   password_require_digit?: boolean
   password_require_special?: boolean
+  frontend_base_url?: string
+  password_reset_token_expire_minutes?: number
 }
 
 export interface SmtpSettings {

@@ -135,6 +135,10 @@ def add_global_settings(
     invoice_number_prefix: str = "RE",
     invoice_pdf_format: str = "standard",
     dashboard_note: str | None = None,
+    frontend_base_url: str = (
+        "http://localhost:5173"
+    ),
+    password_reset_token_expire_minutes: int = 60,
 ) -> GlobalSettings:
     global_settings = GlobalSettings(
         id=1,
@@ -156,6 +160,10 @@ def add_global_settings(
         invoice_number_prefix=invoice_number_prefix,
         invoice_pdf_format=invoice_pdf_format,
         dashboard_note=dashboard_note,
+        frontend_base_url=frontend_base_url,
+        password_reset_token_expire_minutes=(
+            password_reset_token_expire_minutes
+        ),
     )
 
     db.add(global_settings)
@@ -237,6 +245,10 @@ def test_reads_admin_settings(
         "password_require_lowercase": True,
         "password_require_digit": True,
         "password_require_special": True,
+        "frontend_base_url": (
+            "http://localhost:5173"
+        ),
+        "password_reset_token_expire_minutes": 60,
     }
 
 
@@ -256,6 +268,10 @@ def test_updates_admin_settings(
             "monthly_base_fee_vat_rate": "7.00",
             "invoice_payment_term_days": 21,
             "dashboard_note": "  Wartung am Freitag  ",
+            "frontend_base_url": (
+                " https://witty.example.test/app/ "
+            ),
+            "password_reset_token_expire_minutes": 90,
         },
     )
 
@@ -281,6 +297,10 @@ def test_updates_admin_settings(
         "password_require_lowercase": True,
         "password_require_digit": True,
         "password_require_special": True,
+        "frontend_base_url": (
+            "https://witty.example.test/app"
+        ),
+        "password_reset_token_expire_minutes": 90,
     }
 
     database_session.refresh(global_settings)
@@ -302,6 +322,14 @@ def test_updates_admin_settings(
     assert (
         global_settings.invoice_payment_term_days
         == 21
+    )
+    assert global_settings.frontend_base_url == (
+        "https://witty.example.test/app"
+    )
+    assert (
+        global_settings
+        .password_reset_token_expire_minutes
+        == 90
     )
 
 
@@ -326,6 +354,20 @@ def test_rejects_invalid_admin_settings(
         },
         {
             "dashboard_note": "x" * 4001,
+        },
+        {
+            "frontend_base_url": "ftp://example.test",
+        },
+        {
+            "frontend_base_url": (
+                "https://user@example.test"
+            ),
+        },
+        {
+            "password_reset_token_expire_minutes": 0,
+        },
+        {
+            "password_reset_token_expire_minutes": 10081,
         },
     ]
 

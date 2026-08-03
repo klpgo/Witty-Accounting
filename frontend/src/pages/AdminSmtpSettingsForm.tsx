@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useCallback,
   useEffect,
   useState,
 } from 'react'
@@ -69,13 +70,13 @@ function AdminSmtpSettingsForm() {
     setSuccessMessage,
   ] = useState<string | null>(null)
 
-  function handleUnauthorized(): void {
+  const handleUnauthorized = useCallback((): void => {
     signOut()
 
     navigate('/login', {
       replace: true,
     })
-  }
+  }, [navigate, signOut])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -161,7 +162,7 @@ function AdminSmtpSettingsForm() {
     return () => {
       controller.abort()
     }
-  }, [navigate, signOut])
+  }, [handleUnauthorized])
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,

@@ -179,6 +179,22 @@ class GlobalSettings(Base):
         server_default="1",
     )
 
+    frontend_base_url: Mapped[str] = mapped_column(
+        String(2048),
+        nullable=False,
+        default="http://localhost:5173",
+        server_default="http://localhost:5173",
+    )
+
+    password_reset_token_expire_minutes: Mapped[
+        int
+    ] = mapped_column(
+        Integer,
+        nullable=False,
+        default=60,
+        server_default="60",
+    )
+
     smtp_use_database_settings: Mapped[
         bool
     ] = mapped_column(

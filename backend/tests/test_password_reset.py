@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.dependencies import get_db
 from app.database import Base
 from app.main import app
+from app.models.global_settings import GlobalSettings
 from app.models.password_reset_token import (
     PasswordResetToken,
 )
@@ -21,10 +22,12 @@ from app.security import (
 )
 from app.services.password_policy import PasswordPolicy
 from app.services.password_reset import (
+    PasswordResetConfiguration,
     build_password_reset_message,
     create_password_reset_token,
     generate_temporary_password,
     hash_reset_token,
+    load_password_reset_configuration,
     sign_password_reset_message,
 )
 from app.utils.utc import utc_now
@@ -315,13 +318,22 @@ def test_reset_enforces_password_policy(
 
 def test_invitation_message_contains_reset_link(
     database_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = create_user(database_session)
-
-    monkeypatch.setattr(
-        "app.services.password_reset.settings.frontend_base_url",
-        "https://accounting.example.com",
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            frontend_base_url=(
+                "https://accounting.example.com"
+            ),
+            password_reset_token_expire_minutes=45,
+        )
+    )
+    database_session.commit()
+    configuration = (
+        load_password_reset_configuration(
+            database_session
+        )
     )
 
     message = build_password_reset_message(
@@ -331,6 +343,7 @@ def test_invitation_message_contains_reset_link(
         application_name="Witty-Accounting",
         sender_email="service@example.com",
         sender_name="Witty",
+        configuration=configuration,
     )
 
     body = message.get_content()
@@ -343,6 +356,36 @@ def test_invitation_message_contains_reset_link(
         "reset-password?token=secret-reset-token"
     ) in body
     assert "einmalig" in body
+    assert "45 Minuten gültig" in body
+
+
+def test_reset_token_uses_configured_expiry(
+    database_session: Session,
+) -> None:
+    user = create_user(database_session)
+    configuration = PasswordResetConfiguration(
+        frontend_base_url="https://example.test",
+        expire_minutes=15,
+    )
+    before = utc_now()
+
+    create_password_reset_token(
+        database_session,
+        user=user,
+        configuration=configuration,
+    )
+
+    stored_token = database_session.scalar(
+        select(PasswordResetToken)
+    )
+
+    assert stored_token is not None
+    assert stored_token.expires_at >= (
+        before + timedelta(minutes=15)
+    )
+    assert stored_token.expires_at <= (
+        utc_now() + timedelta(minutes=15)
+    )
 
 
 def test_generated_temporary_password_meets_policy() -> None:

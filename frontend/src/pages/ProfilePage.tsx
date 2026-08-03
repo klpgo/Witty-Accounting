@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useCallback,
   useEffect,
   useState,
 } from 'react'
@@ -83,13 +84,13 @@ function ProfilePage() {
     setSuccessMessage,
   ] = useState<string | null>(null)
 
-  function handleUnauthorized(): void {
+  const handleUnauthorized = useCallback((): void => {
     signOut()
 
     navigate('/login', {
       replace: true,
     })
-  }
+  }, [navigate, signOut])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -158,7 +159,7 @@ function ProfilePage() {
     return () => {
       controller.abort()
     }
-  }, [navigate, signOut])
+  }, [handleUnauthorized])
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,

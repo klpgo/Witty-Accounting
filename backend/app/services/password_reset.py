@@ -1,4 +1,5 @@
 from datetime import timedelta
+from dataclasses import dataclass
 from email.message import EmailMessage
 from email.utils import formataddr
 from hashlib import sha256
@@ -41,6 +42,12 @@ PasswordResetPurpose = Literal[
 ]
 
 
+@dataclass(frozen=True)
+class PasswordResetConfiguration:
+    frontend_base_url: str
+    expire_minutes: int
+
+
 class PasswordResetError(Exception):
     """Base class for password-reset failures."""
 
@@ -61,12 +68,46 @@ def hash_reset_token(token: str) -> str:
     ).hexdigest()
 
 
+def load_password_reset_configuration(
+    db: Session,
+) -> PasswordResetConfiguration:
+    global_settings = db.get(
+        GlobalSettings,
+        1,
+    )
+
+    if global_settings is not None:
+        return PasswordResetConfiguration(
+            frontend_base_url=(
+                global_settings.frontend_base_url
+            ),
+            expire_minutes=(
+                global_settings
+                .password_reset_token_expire_minutes
+            ),
+        )
+
+    return PasswordResetConfiguration(
+        frontend_base_url=settings.frontend_base_url,
+        expire_minutes=(
+            settings.password_reset_token_expire_minutes
+        ),
+    )
+
+
 def create_password_reset_token(
     db: Session,
     *,
     user: User,
+    configuration: (
+        PasswordResetConfiguration | None
+    ) = None,
 ) -> str:
     now = utc_now()
+    effective_configuration = (
+        configuration
+        or load_password_reset_configuration(db)
+    )
 
     db.execute(
         update(PasswordResetToken)
@@ -87,8 +128,8 @@ def create_password_reset_token(
                 now
                 + timedelta(
                     minutes=(
-                        settings
-                        .password_reset_token_expire_minutes
+                        effective_configuration
+                        .expire_minutes
                     )
                 )
             ),
@@ -115,8 +156,15 @@ def get_application_name(db: Session) -> str:
     return settings.app_name
 
 
-def build_password_reset_url(token: str) -> str:
-    base_url = settings.frontend_base_url.rstrip("/")
+def build_password_reset_url(
+    token: str,
+    *,
+    frontend_base_url: str | None = None,
+) -> str:
+    base_url = (
+        frontend_base_url
+        or settings.frontend_base_url
+    ).rstrip("/")
     query = urlencode({"token": token})
 
     return f"{base_url}/reset-password?{query}"
@@ -130,8 +178,28 @@ def build_password_reset_message(
     application_name: str,
     sender_email: str,
     sender_name: str,
+    configuration: (
+        PasswordResetConfiguration | None
+    ) = None,
 ) -> EmailMessage:
-    reset_url = build_password_reset_url(token)
+    effective_configuration = (
+        configuration
+        or PasswordResetConfiguration(
+            frontend_base_url=(
+                settings.frontend_base_url
+            ),
+            expire_minutes=(
+                settings
+                .password_reset_token_expire_minutes
+            ),
+        )
+    )
+    reset_url = build_password_reset_url(
+        token,
+        frontend_base_url=(
+            effective_configuration.frontend_base_url
+        ),
+    )
     display_name = (
         f"{user.first_name} {user.last_name}"
     ).strip()
@@ -174,7 +242,7 @@ def build_password_reset_message(
         f"{introduction}\n\n"
         f"{reset_url}\n\n"
         "Der Link ist einmalig und "
-        f"{settings.password_reset_token_expire_minutes} "
+        f"{effective_configuration.expire_minutes} "
         "Minuten gültig. Falls Sie diese Nachricht "
         "nicht angefordert haben, können Sie sie "
         "ignorieren.\n\n"
@@ -226,7 +294,14 @@ def send_password_reset_email(
     user: User,
     token: str,
     purpose: PasswordResetPurpose,
+    configuration: (
+        PasswordResetConfiguration | None
+    ) = None,
 ) -> None:
+    effective_configuration = (
+        configuration
+        or load_password_reset_configuration(db)
+    )
     try:
         smtp_configuration = (
             load_smtp_configuration(db)
@@ -243,6 +318,7 @@ def send_password_reset_email(
             smtp_configuration.from_address
         ),
         sender_name=smtp_configuration.from_name,
+        configuration=effective_configuration,
     )
 
     signed_message = sign_password_reset_message(
@@ -273,15 +349,20 @@ def issue_password_reset(
     user: User,
     purpose: PasswordResetPurpose,
 ) -> None:
+    configuration = (
+        load_password_reset_configuration(db)
+    )
     token = create_password_reset_token(
         db,
         user=user,
+        configuration=configuration,
     )
     send_password_reset_email(
         db,
         user=user,
         token=token,
         purpose=purpose,
+        configuration=configuration,
     )
 
 

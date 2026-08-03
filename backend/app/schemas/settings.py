@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import (
     BaseModel,
@@ -101,6 +102,22 @@ PasswordMinLength = Annotated[
     ),
 ]
 
+FrontendBaseUrl = Annotated[
+    str,
+    Field(
+        min_length=1,
+        max_length=2048,
+    ),
+]
+
+PasswordResetTokenExpireMinutes = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=10080,
+    ),
+]
+
 DashboardNote = Annotated[
     str,
     Field(
@@ -143,6 +160,8 @@ class GlobalSettingsResponse(BaseModel):
     password_require_lowercase: bool
     password_require_digit: bool
     password_require_special: bool
+    frontend_base_url: str
+    password_reset_token_expire_minutes: int
 
 
 class GlobalSettingsUpdate(BaseModel):
@@ -176,6 +195,10 @@ class GlobalSettingsUpdate(BaseModel):
     password_require_lowercase: bool | None = None
     password_require_digit: bool | None = None
     password_require_special: bool | None = None
+    frontend_base_url: FrontendBaseUrl | None = None
+    password_reset_token_expire_minutes: (
+        PasswordResetTokenExpireMinutes | None
+    ) = None
 
     @field_validator(
         "app_name",
@@ -189,6 +212,8 @@ class GlobalSettingsUpdate(BaseModel):
         "password_require_lowercase",
         "password_require_digit",
         "password_require_special",
+        "frontend_base_url",
+        "password_reset_token_expire_minutes",
         mode="before",
     )
     @classmethod
@@ -214,6 +239,32 @@ class GlobalSettingsUpdate(BaseModel):
         if not normalized:
             raise ValueError(
                 "Der Anwendungsname darf nicht leer sein."
+            )
+
+        return normalized
+
+    @field_validator("frontend_base_url")
+    @classmethod
+    def normalize_frontend_base_url(
+        cls,
+        value: str,
+    ) -> str:
+        normalized = value.strip().rstrip("/")
+        parsed = urlsplit(normalized)
+
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "Die öffentliche Frontend-Adresse muss "
+                "eine vollständige HTTP- oder HTTPS-URL "
+                "ohne Zugangsdaten, Parameter oder Fragment "
+                "sein."
             )
 
         return normalized
