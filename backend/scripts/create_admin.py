@@ -1,13 +1,29 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from getpass import getpass
 
-from sqlalchemy import select
+from sqlalchemy import Connection, select, text
+from sqlalchemy.orm import Session
 
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.models.user import User
 from app.security import hash_password
+from app.services.password_policy import (
+    PasswordPolicy,
+    PasswordPolicyError,
+    load_password_policy,
+    validate_password,
+)
 
 
-MIN_PASSWORD_LENGTH = 12
+BOOTSTRAP_LOCK_NAME = (
+    "witty-accounting-create-first-admin"
+)
+BOOTSTRAP_LOCK_TIMEOUT_SECONDS = 10
+
+
+class BootstrapRefusedError(RuntimeError):
+    """Der erste Administrator darf nicht angelegt werden."""
 
 
 def read_required(prompt: str) -> str:
@@ -20,15 +36,19 @@ def read_required(prompt: str) -> str:
         print("Dieses Feld darf nicht leer sein.")
 
 
-def read_password() -> str:
+def read_password(
+    policy: PasswordPolicy,
+) -> str:
     while True:
         password = getpass("Passwort: ")
 
-        if len(password) < MIN_PASSWORD_LENGTH:
-            print(
-                "Das Passwort muss mindestens "
-                f"{MIN_PASSWORD_LENGTH} Zeichen lang sein."
+        try:
+            validate_password(
+                password,
+                policy,
             )
+        except PasswordPolicyError as exc:
+            print(str(exc))
             continue
 
         confirmation = getpass(
@@ -42,10 +62,92 @@ def read_password() -> str:
         return password
 
 
-def main() -> None:
+@contextmanager
+def bootstrap_lock(
+    connection: Connection,
+) -> Iterator[None]:
+    uses_named_lock = (
+        connection.dialect.name
+        in {"mysql", "mariadb"}
+    )
+
+    if uses_named_lock:
+        acquired = connection.execute(
+            text(
+                "SELECT GET_LOCK("
+                ":lock_name, :timeout_seconds"
+                ")"
+            ),
+            {
+                "lock_name": BOOTSTRAP_LOCK_NAME,
+                "timeout_seconds": (
+                    BOOTSTRAP_LOCK_TIMEOUT_SECONDS
+                ),
+            },
+        ).scalar_one()
+
+        if acquired != 1:
+            raise BootstrapRefusedError(
+                "Der Bootstrap ist bereits in "
+                "einem anderen Prozess aktiv."
+            )
+
+    try:
+        yield
+    finally:
+        if uses_named_lock:
+            connection.execute(
+                text(
+                    "SELECT RELEASE_LOCK("
+                    ":lock_name"
+                    ")"
+                ),
+                {
+                    "lock_name": (
+                        BOOTSTRAP_LOCK_NAME
+                    ),
+                },
+            )
+
+
+def ensure_no_admin_exists(
+    db: Session,
+) -> None:
+    admin_id = db.scalar(
+        select(User.id)
+        .where(User.is_admin.is_(True))
+        .limit(1)
+    )
+
+    if admin_id is not None:
+        raise BootstrapRefusedError(
+            "Es existiert bereits mindestens ein "
+            "Administrator. Der Bootstrap wurde "
+            "ohne Änderung abgebrochen."
+        )
+
+
+def create_first_admin(
+    db: Session,
+) -> User:
+    ensure_no_admin_exists(db)
+
     email = read_required(
         "E-Mail-Adresse: "
     ).lower()
+
+    existing_user_id = db.scalar(
+        select(User.id).where(
+            User.email == email
+        )
+    )
+
+    if existing_user_id is not None:
+        raise BootstrapRefusedError(
+            "Für diese E-Mail-Adresse existiert "
+            "bereits ein Benutzer. Der Bootstrap "
+            "ändert keine vorhandenen Konten."
+        )
 
     first_name = read_required(
         "Vorname: "
@@ -55,55 +157,57 @@ def main() -> None:
         "Nachname: "
     )
 
-    password = read_password()
+    password = read_password(
+        load_password_policy(db)
+    )
     password_hash = hash_password(password)
 
-    with SessionLocal() as db:
-        user = db.scalar(
-            select(User).where(
-                User.email == email
-            )
-        )
+    user = User(
+        email=email,
+        password_hash=password_hash,
+        salutation=None,
+        first_name=first_name,
+        last_name=last_name,
+        address=None,
+        phone=None,
+        invoice_delivery_email=False,
+        invoice_delivery_post=False,
+        active=True,
+        is_admin=True,
+    )
 
-        if user is None:
-            user = User(
-                email=email,
-                password_hash=password_hash,
-                salutation=None,
-                first_name=first_name,
-                last_name=last_name,
-                address=None,
-                phone=None,
-                invoice_delivery_email=False,
-                invoice_delivery_post=False,
-                active=True,
-                is_admin=True,
-            )
+    db.add(user)
 
-            db.add(user)
-            action = "angelegt"
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
-        else:
-            user.password_hash = password_hash
-            user.first_name = first_name
-            user.last_name = last_name
-            user.active = True
-            user.is_admin = True
-            action = "aktualisiert"
+    db.refresh(user)
 
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
+    return user
 
-        db.refresh(user)
 
-        print()
-        print(f"Administrator {action}:")
-        print(f"  ID:     {user.id}")
-        print(f"  E-Mail: {user.email}")
-        print(f"  Name:   {user.first_name} {user.last_name}")
+def main() -> None:
+    try:
+        with engine.connect() as connection:
+            with bootstrap_lock(connection):
+                with SessionLocal(
+                    bind=connection
+                ) as db:
+                    user = create_first_admin(db)
+    except BootstrapRefusedError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    print()
+    print("Erster Administrator angelegt:")
+    print(f"  ID:     {user.id}")
+    print(f"  E-Mail: {user.email}")
+    print(
+        "  Name:   "
+        f"{user.first_name} {user.last_name}"
+    )
 
 
 if __name__ == "__main__":

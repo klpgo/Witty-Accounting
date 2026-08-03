@@ -16,5 +16,7 @@ RUN uv pip install --system .
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 COPY app ./app
+COPY scripts/__init__.py ./scripts/__init__.py
+COPY scripts/create_admin.py ./scripts/create_admin.py
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
