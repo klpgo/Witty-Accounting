@@ -145,6 +145,7 @@ class GlobalSettingsResponse(BaseModel):
     dashboard_note: str | None
     monthly_base_fee_net: Decimal
     monthly_base_fee_vat_rate: Decimal
+    postal_delivery_fee_net: Decimal
     invoice_payment_term_days: int
     invoice_issuer_name: str | None
     invoice_issuer_address: str | None
@@ -174,6 +175,7 @@ class GlobalSettingsUpdate(BaseModel):
     dashboard_note: DashboardNote | None = None
     monthly_base_fee_net: BaseFeeDecimal | None = None
     monthly_base_fee_vat_rate: VatDecimal | None = None
+    postal_delivery_fee_net: BaseFeeDecimal | None = None
     invoice_payment_term_days: (
         PaymentTermDays | None
     ) = None
@@ -204,6 +206,7 @@ class GlobalSettingsUpdate(BaseModel):
         "app_name",
         "monthly_base_fee_net",
         "monthly_base_fee_vat_rate",
+        "postal_delivery_fee_net",
         "invoice_payment_term_days",
         "invoice_number_prefix",
         "invoice_pdf_format",

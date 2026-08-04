@@ -264,6 +264,34 @@ def test_admin_creates_user(
     ]
 
 
+def test_rejects_combined_email_and_post_delivery(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        last_name="User",
+        is_admin=True,
+    )
+
+    response = client.post(
+        "/api/users",
+        headers=authorization_header(admin),
+        json={
+            "email": "new@example.com",
+            "first_name": "Neue",
+            "last_name": "Person",
+            "invoice_delivery_email": True,
+            "invoice_delivery_post": True,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "genau eine" in response.json()["detail"]
+
+
 def test_user_creation_rolls_back_if_invitation_fails(
     client: TestClient,
     database_session: Session,
@@ -434,7 +462,7 @@ def test_updates_own_profile(
                 "12345 Musterstadt"
             ),
             "phone": " +49 123 456 ",
-            "invoice_delivery_email": True,
+            "invoice_delivery_email": False,
             "invoice_delivery_post": True,
         },
     )
@@ -452,7 +480,7 @@ def test_updates_own_profile(
     )
     assert body["salutation"] == "Frau"
     assert body["phone"] == "+49 123 456"
-    assert body["invoice_delivery_email"] is True
+    assert body["invoice_delivery_email"] is False
     assert body["invoice_delivery_post"] is True
 
     database_session.refresh(user)
@@ -462,7 +490,7 @@ def test_updates_own_profile(
     assert user.last_name == "Musterfrau"
     assert user.salutation == "Frau"
     assert user.phone == "+49 123 456"
-    assert user.invoice_delivery_email is True
+    assert user.invoice_delivery_email is False
     assert user.invoice_delivery_post is True
 
 
@@ -733,8 +761,8 @@ def test_admin_updates_user(
                 "Musterstraße 5\n"
                 "12345 Musterstadt"
             ),
-            "invoice_delivery_email": True,
-            "invoice_delivery_post": True,
+            "invoice_delivery_email": False,
+            "invoice_delivery_post": False,
             "active": False,
             "is_admin": True,
         },
@@ -755,8 +783,8 @@ def test_admin_updates_user(
     assert target.email == "new@example.com"
     assert target.first_name == "Erika"
     assert target.last_name == "Musterfrau"
-    assert target.invoice_delivery_email is True
-    assert target.invoice_delivery_post is True
+    assert target.invoice_delivery_email is False
+    assert target.invoice_delivery_post is False
     assert target.active is False
     assert target.is_admin is True
 

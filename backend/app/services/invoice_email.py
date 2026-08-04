@@ -398,6 +398,7 @@ def create_body(
     invoice: Invoice,
     *,
     sender_name: str,
+    portal_url: str | None = None,
 ) -> str:
     document_label = (
         "Ladestrom-Stornorechnung"
@@ -405,10 +406,21 @@ def create_body(
         else "Ladestrom-Rechnung"
     )
 
+    delivery_text = (
+        f"Ihre {document_label} "
+        f"{invoice.invoice_number} steht im Portal zum "
+        "Download bereit:\n"
+        f"{portal_url}\n"
+        if portal_url is not None
+        else (
+            f"im Anhang erhalten Sie Ihre {document_label} "
+            f"{invoice.invoice_number} als PDF-Datei.\n"
+        )
+    )
+
     return (
         "Guten Tag,\n\n"
-        f"im Anhang erhalten Sie Ihre {document_label} "
-        f"{invoice.invoice_number} als PDF-Datei.\n\n"
+        f"{delivery_text}\n"
         "Mit freundlichen Grüßen\n"
         f"{sender_name}\n"
     )
@@ -418,10 +430,11 @@ def build_invoice_message(
     *,
     invoice: Invoice,
     recipient_email: str,
-    pdf_data: bytes,
-    pdf_filename: str,
+    pdf_data: bytes | None,
+    pdf_filename: str | None,
     sender_email: str,
     sender_name: str,
+    portal_url: str | None = None,
 ) -> EmailMessage:
     message = EmailMessage()
 
@@ -438,17 +451,19 @@ def build_invoice_message(
         create_body(
             invoice,
             sender_name=sender_name,
+            portal_url=portal_url,
         ),
         subtype="plain",
         charset="utf-8",
     )
 
-    message.add_attachment(
-        pdf_data,
-        maintype="application",
-        subtype="pdf",
-        filename=pdf_filename,
-    )
+    if pdf_data is not None and pdf_filename is not None:
+        message.add_attachment(
+            pdf_data,
+            maintype="application",
+            subtype="pdf",
+            filename=pdf_filename,
+        )
 
     return message
 
@@ -529,10 +544,18 @@ def send_invoice_email(
             "Der Rechnung ist kein Benutzer zugeordnet."
         )
 
-    if not user.invoice_delivery_email:
+    is_portal_delivery = (
+        not user.invoice_delivery_email
+        and not user.invoice_delivery_post
+    )
+
+    if (
+        not user.invoice_delivery_email
+        and not is_portal_delivery
+    ):
         raise InvoiceEmailRecipientError(
-            "Die E-Mail-Zustellung ist für diesen "
-            "Benutzer deaktiviert."
+            "Für diesen Benutzer ist die "
+            "Briefzustellung ausgewählt."
         )
 
     recipient_email = user.email.strip()
@@ -562,9 +585,28 @@ def send_invoice_email(
             f"ist nicht verfügbar: {exc}"
         ) from exc
 
-    pdf_data = (
-        archived_pdf.absolute_path.read_bytes()
-    )
+    pdf_data = None
+    pdf_filename = None
+    portal_url = None
+
+    if is_portal_delivery:
+        global_settings = db.get(
+            GlobalSettings,
+            1,
+        )
+        frontend_base_url = (
+            global_settings.frontend_base_url
+            if global_settings is not None
+            else settings.frontend_base_url
+        ).strip().rstrip("/")
+        portal_url = (
+            f"{frontend_base_url}/invoices/{invoice.id}"
+        )
+    else:
+        pdf_data = (
+            archived_pdf.absolute_path.read_bytes()
+        )
+        pdf_filename = archived_pdf.absolute_path.name
 
     message = build_invoice_message(
         invoice=invoice,
@@ -574,9 +616,8 @@ def send_invoice_email(
         ),
         recipient_email=recipient_email,
         pdf_data=pdf_data,
-        pdf_filename=(
-            archived_pdf.absolute_path.name
-        ),
+        pdf_filename=pdf_filename,
+        portal_url=portal_url,
     )
 
     signed_message = sign_invoice_message(

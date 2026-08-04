@@ -47,6 +47,24 @@ router = APIRouter(
 )
 
 
+def ensure_valid_delivery_method(
+    *,
+    invoice_delivery_email: bool,
+    invoice_delivery_post: bool,
+) -> None:
+    if invoice_delivery_email and invoice_delivery_post:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_CONTENT
+            ),
+            detail=(
+                "Bitte wählen Sie genau eine "
+                "Rechnungszustellung: E-Mail, Brief "
+                "oder manueller Portal-Download."
+            ),
+        )
+
+
 def ensure_email_available(
     db: Session,
     *,
@@ -146,6 +164,27 @@ def update_own_profile(
         Depends(get_db),
     ],
 ) -> User:
+    next_delivery_email = (
+        payload.invoice_delivery_email
+        if "invoice_delivery_email"
+        in payload.model_fields_set
+        else current_user.invoice_delivery_email
+    )
+    next_delivery_post = (
+        payload.invoice_delivery_post
+        if "invoice_delivery_post"
+        in payload.model_fields_set
+        else current_user.invoice_delivery_post
+    )
+
+    assert next_delivery_email is not None
+    assert next_delivery_post is not None
+
+    ensure_valid_delivery_method(
+        invoice_delivery_email=next_delivery_email,
+        invoice_delivery_post=next_delivery_post,
+    )
+
     if "email" in payload.model_fields_set:
         assert payload.email is not None
 
@@ -298,6 +337,15 @@ def create_new_user(
         Depends(get_db),
     ],
 ) -> User:
+    ensure_valid_delivery_method(
+        invoice_delivery_email=(
+            payload.invoice_delivery_email
+        ),
+        invoice_delivery_post=(
+            payload.invoice_delivery_post
+        ),
+    )
+
     ensure_email_available(
         db,
         email=payload.email,
@@ -404,6 +452,27 @@ def update_user(
     user = get_user_or_404(
         db,
         user_id,
+    )
+
+    next_delivery_email = (
+        payload.invoice_delivery_email
+        if "invoice_delivery_email"
+        in payload.model_fields_set
+        else user.invoice_delivery_email
+    )
+    next_delivery_post = (
+        payload.invoice_delivery_post
+        if "invoice_delivery_post"
+        in payload.model_fields_set
+        else user.invoice_delivery_post
+    )
+
+    assert next_delivery_email is not None
+    assert next_delivery_post is not None
+
+    ensure_valid_delivery_method(
+        invoice_delivery_email=next_delivery_email,
+        invoice_delivery_post=next_delivery_post,
     )
 
     if "email" in payload.model_fields_set:

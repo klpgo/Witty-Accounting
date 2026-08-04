@@ -59,6 +59,10 @@ function AdminSettingsPage() {
     setMonthlyBaseFeeVatRate,
   ] = useState('')
   const [
+    postalDeliveryFeeNet,
+    setPostalDeliveryFeeNet,
+  ] = useState('')
+  const [
     invoicePaymentTermDays,
     setInvoicePaymentTermDays,
   ] = useState('')
@@ -239,6 +243,9 @@ function AdminSettingsPage() {
         setMonthlyBaseFeeVatRate(
           loadedSettings.monthly_base_fee_vat_rate,
         )
+        setPostalDeliveryFeeNet(
+          loadedSettings.postal_delivery_fee_net,
+        )
         setInvoicePaymentTermDays(
           String(
             loadedSettings
@@ -326,6 +333,8 @@ function AdminSettingsPage() {
       normalizeDecimal(monthlyBaseFeeNet)
     const normalizedVatRate =
       normalizeDecimal(monthlyBaseFeeVatRate)
+    const normalizedPostalDeliveryFee =
+      normalizeDecimal(postalDeliveryFeeNet)
     const paymentTermDays = Number(
       invoicePaymentTermDays,
     )
@@ -390,6 +399,19 @@ function AdminSettingsPage() {
     ) {
       setErrorMessage(
         'Der Umsatzsteuersatz muss zwischen 0 und 100 liegen.',
+      )
+      setSuccessMessage(null)
+      return
+    }
+
+    if (
+      !Number.isFinite(
+        Number(normalizedPostalDeliveryFee),
+      ) ||
+      Number(normalizedPostalDeliveryFee) < 0
+    ) {
+      setErrorMessage(
+        'Das Briefporto muss mindestens 0 sein.',
       )
       setSuccessMessage(null)
       return
@@ -505,6 +527,8 @@ function AdminSettingsPage() {
               normalizedBaseFee,
             monthly_base_fee_vat_rate:
               normalizedVatRate,
+            postal_delivery_fee_net:
+              normalizedPostalDeliveryFee,
             invoice_payment_term_days:
               paymentTermDays,
             invoice_issuer_name:
@@ -535,6 +559,9 @@ function AdminSettingsPage() {
       setMonthlyBaseFeeVatRate(
         updatedSettings
           .monthly_base_fee_vat_rate,
+      )
+      setPostalDeliveryFeeNet(
+        updatedSettings.postal_delivery_fee_net,
       )
       setInvoicePaymentTermDays(
         String(
@@ -977,7 +1004,8 @@ function AdminSettingsPage() {
 
             <label className="form-field">
               <span>
-                Umsatzsteuer Grundgebühr (%)
+                Umsatzsteuer Grundgebühr und
+                Briefporto (%)
               </span>
 
               <input
@@ -991,6 +1019,28 @@ function AdminSettingsPage() {
                 }}
                 required
               />
+            </label>
+
+            <label className="form-field">
+              <span>Briefporto netto</span>
+
+              <input
+                type="text"
+                inputMode="decimal"
+                value={postalDeliveryFeeNet}
+                onChange={(event) => {
+                  setPostalDeliveryFeeNet(
+                    event.target.value,
+                  )
+                }}
+                required
+              />
+
+              <small className="muted">
+                Wird nur bei Briefzustellung und nur bei
+                einem Betrag größer als 0 als Position
+                „Briefporto“ berechnet.
+              </small>
             </label>
 
             <label className="form-field">

@@ -439,6 +439,9 @@ def finalize_cancellation(
             )
             continue
 
+        if original_item.item_type == "postal_delivery":
+            continue
+
         raise InvoiceCancellationStateError(
             "Die Originalposition "
             f"{original_item.id} besitzt den "

@@ -10,7 +10,10 @@ import {
   getOwnProfile,
   updateOwnProfile,
   changeOwnPassword,
+  getInvoiceDeliveryFlags,
+  getInvoiceDeliveryMethod,
   UserApiError,
+  type InvoiceDeliveryMethod,
 } from '../api/users'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
@@ -35,14 +38,8 @@ function ProfilePage() {
   const [phone, setPhone] =
     useState('')
 
-  const [
-    invoiceDeliveryEmail,
-    setInvoiceDeliveryEmail,
-  ] = useState(false)
-  const [
-    invoiceDeliveryPost,
-    setInvoiceDeliveryPost,
-  ] = useState(false)
+  const [invoiceDeliveryMethod, setInvoiceDeliveryMethod] =
+    useState<InvoiceDeliveryMethod>('email')
 
   const [isLoading, setIsLoading] =
     useState(true)
@@ -120,11 +117,8 @@ function ProfilePage() {
         setLastName(profile.last_name)
         setAddress(profile.address ?? '')
         setPhone(profile.phone ?? '')
-        setInvoiceDeliveryEmail(
-          profile.invoice_delivery_email,
-        )
-        setInvoiceDeliveryPost(
-          profile.invoice_delivery_post,
+        setInvoiceDeliveryMethod(
+          getInvoiceDeliveryMethod(profile),
         )
       } catch (error) {
         if (
@@ -191,10 +185,9 @@ function ProfilePage() {
               address.trim() || null,
             phone:
               phone.trim() || null,
-            invoice_delivery_email:
-              invoiceDeliveryEmail,
-            invoice_delivery_post:
-              invoiceDeliveryPost,
+            ...getInvoiceDeliveryFlags(
+              invoiceDeliveryMethod,
+            ),
           },
         )
 
@@ -214,11 +207,8 @@ function ProfilePage() {
       setPhone(
         updatedProfile.phone ?? '',
       )
-      setInvoiceDeliveryEmail(
-        updatedProfile.invoice_delivery_email,
-      )
-      setInvoiceDeliveryPost(
-        updatedProfile.invoice_delivery_post,
+      setInvoiceDeliveryMethod(
+        getInvoiceDeliveryMethod(updatedProfile),
       )
 
       updateAuthenticatedUser(
@@ -459,38 +449,52 @@ function ProfilePage() {
               <h2>Rechnungsversand</h2>
 
               <p className="muted">
-                Legen Sie fest, auf welchen Wegen
-                Rechnungen zugestellt werden sollen.
+                Wählen Sie genau eine Zustellart.
               </p>
             </div>
 
-            <div className="form-grid">
+            <div className="checkbox-group">
               <label className="checkbox-field">
                 <input
-                  type="checkbox"
-                  checked={invoiceDeliveryEmail}
-                  onChange={(event) =>
-                    setInvoiceDeliveryEmail(
-                      event.target.checked,
-                    )
+                  type="radio"
+                  name="invoice-delivery-method"
+                  value="email"
+                  checked={invoiceDeliveryMethod === 'email'}
+                  onChange={() =>
+                    setInvoiceDeliveryMethod('email')
                   }
                 />
 
-                Rechnung per E-Mail
+                Per E-Mail
               </label>
 
               <label className="checkbox-field">
                 <input
-                  type="checkbox"
-                  checked={invoiceDeliveryPost}
-                  onChange={(event) =>
-                    setInvoiceDeliveryPost(
-                      event.target.checked,
-                    )
+                  type="radio"
+                  name="invoice-delivery-method"
+                  value="post"
+                  checked={invoiceDeliveryMethod === 'post'}
+                  onChange={() =>
+                    setInvoiceDeliveryMethod('post')
                   }
                 />
 
-                Rechnung per Post
+                Per Brief (Porto wird berechnet)
+              </label>
+
+              <label className="checkbox-field">
+                <input
+                  type="radio"
+                  name="invoice-delivery-method"
+                  value="portal"
+                  checked={invoiceDeliveryMethod === 'portal'}
+                  onChange={() =>
+                    setInvoiceDeliveryMethod('portal')
+                  }
+                />
+
+                Manueller Download aus dem Portal nach
+                Benachrichtigung per E-Mail
               </label>
             </div>
 

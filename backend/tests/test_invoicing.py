@@ -327,6 +327,74 @@ def test_places_monthly_base_fee_before_charging_session(
     assert invoice.total_gross == Decimal("14.52")
 
 
+def test_adds_postal_delivery_fee_as_last_item(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+    user.invoice_delivery_email = False
+    user.invoice_delivery_post = True
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            postal_delivery_fee_net=Decimal("1.6000"),
+            monthly_base_fee_vat_rate=Decimal("7.00"),
+        )
+    )
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(2026, 6, 1),
+        service_period_end=datetime(2026, 7, 1),
+    )
+
+    assert [item.item_type for item in invoice.items] == [
+        "charging_session",
+        "postal_delivery",
+    ]
+
+    postal_item = invoice.items[-1]
+    assert postal_item.position_number == 2
+    assert postal_item.description == "Briefporto"
+    assert postal_item.net_amount == Decimal("1.6000")
+    assert postal_item.vat_rate == Decimal("7.00")
+    assert postal_item.vat_amount == Decimal("0.11")
+    assert postal_item.gross_amount == Decimal("1.71")
+    assert invoice.total_net == Decimal("3.80")
+    assert invoice.vat_amount == Decimal("0.53")
+    assert invoice.total_gross == Decimal("4.33")
+
+
+def test_omits_zero_postal_delivery_fee(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+    user.invoice_delivery_email = False
+    user.invoice_delivery_post = True
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            postal_delivery_fee_net=Decimal("0.0000"),
+        )
+    )
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(2026, 6, 1),
+        service_period_end=datetime(2026, 7, 1),
+    )
+
+    assert [item.item_type for item in invoice.items] == [
+        "charging_session",
+    ]
+    assert invoice.total_gross == Decimal("2.62")
+
+
 def test_session_cannot_enter_second_draft(
     database_session: Session,
 ) -> None:

@@ -238,6 +238,51 @@ def test_builds_monthly_base_fee_invoice_pdf() -> None:
     assert "11,90" in extracted_text
 
 
+def test_builds_invoice_pdf_with_postal_delivery_fee() -> None:
+    invoice = create_finalized_invoice()
+    invoice.total_net = Decimal("3.80")
+    invoice.vat_amount = Decimal("0.72")
+    invoice.total_gross = Decimal("4.52")
+    invoice.items.append(
+        InvoiceItem(
+            id=2,
+            invoice_id=invoice.id,
+            item_type="postal_delivery",
+            monthly_base_fee_charge_id=None,
+            charging_session_id=None,
+            reversed_invoice_item_id=None,
+            rebills_invoice_item_id=None,
+            position_number=2,
+            description="Briefporto",
+            session_start=None,
+            session_end=None,
+            station_id=None,
+            energy_total_kwh=None,
+            energy_grid_kwh=None,
+            energy_pv_kwh=None,
+            grid_price_net=None,
+            pv_price_net=None,
+            cost_grid_net=None,
+            cost_pv_net=None,
+            net_amount=Decimal("1.6000"),
+            vat_rate=Decimal("19.00"),
+            vat_amount=Decimal("0.30"),
+            gross_amount=Decimal("1.90"),
+        )
+    )
+
+    pdf_bytes = build_invoice_pdf(invoice)
+    reader = PdfReader(BytesIO(pdf_bytes))
+    extracted_text = "\n".join(
+        page.extract_text() or ""
+        for page in reader.pages
+    )
+
+    assert "Briefporto" in extracted_text
+    assert "1,60" in extracted_text
+    assert "1,90" in extracted_text
+
+
 def test_converts_invoice_to_pdfa_2b() -> None:
     invoice = create_finalized_invoice()
 

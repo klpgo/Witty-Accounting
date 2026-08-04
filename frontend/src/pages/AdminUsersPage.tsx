@@ -9,14 +9,21 @@ import { useNavigate } from 'react-router-dom'
 
 import {
   createUser,
+  getInvoiceDeliveryFlags,
+  getInvoiceDeliveryMethod,
   listUsers,
   resetUserPassword,
   updateUser,
   UserApiError,
   type User,
+  type InvoiceDeliveryMethod,
 } from '../api/users'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import {
+  getGlobalSettings,
+  SettingsApiError,
+} from '../api/settings'
 
 function sortUsers(users: User[]): User[] {
   return [...users].sort((first, second) => {
@@ -67,15 +74,8 @@ function AdminUsersPage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [address, setAddress] = useState('')
-  const [
-    invoiceDeliveryEmail,
-    setInvoiceDeliveryEmail,
-  ] = useState(false)
-
-  const [
-    invoiceDeliveryPost,
-    setInvoiceDeliveryPost,
-  ] = useState(false)
+  const [invoiceDeliveryMethod, setInvoiceDeliveryMethod] =
+    useState<InvoiceDeliveryMethod>('email')
   const [active, setActive] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
 
@@ -83,6 +83,8 @@ function AdminUsersPage() {
     useState('')
   const [confirmPassword, setConfirmPassword] =
     useState('')
+  const [passwordMinLength, setPasswordMinLength] =
+    useState(8)
 
   const [isLoading, setIsLoading] =
     useState(true)
@@ -138,7 +140,10 @@ function AdminUsersPage() {
         fallbackMessage: string,
       ): void => {
         if (
-          error instanceof UserApiError &&
+          (
+            error instanceof UserApiError ||
+            error instanceof SettingsApiError
+          ) &&
           error.status === 401
         ) {
           signOut()
@@ -179,11 +184,24 @@ function AdminUsersPage() {
       setErrorMessage(null)
 
       try {
+        const [userResults, loadedSettings] =
+          await Promise.all([
+            listUsers(
+              accessToken,
+              controller.signal,
+            ),
+            getGlobalSettings(
+              accessToken,
+              controller.signal,
+            ),
+          ])
+
         const loadedUsers = sortUsers(
-          await listUsers(
-            accessToken,
-            controller.signal,
-          ),
+          userResults,
+        )
+
+        setPasswordMinLength(
+          loadedSettings.password_min_length,
         )
 
         setUsers(loadedUsers)
@@ -231,8 +249,7 @@ function AdminUsersPage() {
       setFirstName('')
       setLastName('')
       setAddress('')
-      setInvoiceDeliveryEmail(true)
-      setInvoiceDeliveryPost(false)
+      setInvoiceDeliveryMethod('email')
       setActive(true)
       setIsAdmin(false)
       setNewPassword('')
@@ -246,8 +263,7 @@ function AdminUsersPage() {
       setFirstName('')
       setLastName('')
       setAddress('')
-      setInvoiceDeliveryEmail(false)
-      setInvoiceDeliveryPost(false)
+      setInvoiceDeliveryMethod('email')
       setActive(false)
       setIsAdmin(false)
       setNewPassword('')
@@ -260,11 +276,8 @@ function AdminUsersPage() {
     setFirstName(selectedUser.first_name)
     setLastName(selectedUser.last_name)
     setAddress(selectedUser.address ?? '')
-    setInvoiceDeliveryEmail(
-      selectedUser.invoice_delivery_email,
-    )
-    setInvoiceDeliveryPost(
-      selectedUser.invoice_delivery_post,
+    setInvoiceDeliveryMethod(
+      getInvoiceDeliveryMethod(selectedUser),
     )
     setActive(selectedUser.active)
     setIsAdmin(selectedUser.is_admin)
@@ -320,10 +333,9 @@ function AdminUsersPage() {
             first_name: firstName,
             last_name: lastName,
             address: address.trim() || null,
-            invoice_delivery_email:
-              invoiceDeliveryEmail,
-            invoice_delivery_post:
-              invoiceDeliveryPost,
+            ...getInvoiceDeliveryFlags(
+              invoiceDeliveryMethod,
+            ),
             active,
             is_admin: isAdmin,
           },
@@ -360,10 +372,9 @@ function AdminUsersPage() {
           first_name: firstName,
           last_name: lastName,
           address: address.trim() || null,
-          invoice_delivery_email:
-            invoiceDeliveryEmail,
-          invoice_delivery_post:
-            invoiceDeliveryPost,
+          ...getInvoiceDeliveryFlags(
+            invoiceDeliveryMethod,
+          ),
           active,
           is_admin: isAdmin,
         },
@@ -404,10 +415,10 @@ function AdminUsersPage() {
       return
     }
 
-    if (newPassword.length < 8) {
+    if (newPassword.length < passwordMinLength) {
       setErrorMessage(
         'Das neue Passwort muss mindestens ' +
-          '8 Zeichen lang sein.',
+          `${passwordMinLength} Zeichen lang sein.`,
       )
 
       return
@@ -699,34 +710,55 @@ function AdminUsersPage() {
                   </p>
                 )}
 
-                <div className="checkbox-group">
+                <div>
+                  <p className="form-label">
+                    Rechnungszustellung
+                  </p>
+
+                  <div className="checkbox-group">
                   <label className="checkbox-field">
                     <input
-                      type="checkbox"
-                      checked={invoiceDeliveryEmail}
-                      onChange={(event) =>
-                        setInvoiceDeliveryEmail(
-                          event.target.checked,
-                        )
+                      type="radio"
+                      name="admin-invoice-delivery-method"
+                      value="email"
+                      checked={invoiceDeliveryMethod === 'email'}
+                      onChange={() =>
+                        setInvoiceDeliveryMethod('email')
                       }
                     />
 
-                    Rechnung per E-Mail zustellen
+                    Per E-Mail
                   </label>
 
                   <label className="checkbox-field">
                     <input
-                      type="checkbox"
-                      checked={invoiceDeliveryPost}
-                      onChange={(event) =>
-                        setInvoiceDeliveryPost(
-                          event.target.checked,
-                        )
+                      type="radio"
+                      name="admin-invoice-delivery-method"
+                      value="post"
+                      checked={invoiceDeliveryMethod === 'post'}
+                      onChange={() =>
+                        setInvoiceDeliveryMethod('post')
                       }
                     />
 
-                    Rechnung per Post zustellen
+                    Per Brief (Porto wird berechnet)
                   </label>
+
+                  <label className="checkbox-field">
+                    <input
+                      type="radio"
+                      name="admin-invoice-delivery-method"
+                      value="portal"
+                      checked={invoiceDeliveryMethod === 'portal'}
+                      onChange={() =>
+                        setInvoiceDeliveryMethod('portal')
+                      }
+                    />
+
+                    Manueller Download aus dem Portal
+                    nach Benachrichtigung per E-Mail
+                  </label>
+                  </div>
                 </div>
                 <div className="checkbox-group">
                   <label className="checkbox-field">
@@ -796,7 +828,8 @@ function AdminUsersPage() {
 
                      <p className="muted">
                        Das neue Passwort muss mindestens
-                       acht Zeichen lang sein.
+                       {' '}{passwordMinLength} Zeichen lang
+                       sein.
                      </p>
                    </div>
 
@@ -810,7 +843,7 @@ function AdminUsersPage() {
                          type="password"
                          value={newPassword}
                          required
-                         minLength={8}
+                         minLength={passwordMinLength}
                          autoComplete="new-password"
                          onChange={(event) =>
                            setNewPassword(
@@ -826,7 +859,7 @@ function AdminUsersPage() {
                          type="password"
                          value={confirmPassword}
                          required
-                         minLength={8}
+                         minLength={passwordMinLength}
                          autoComplete="new-password"
                          onChange={(event) =>
                            setConfirmPassword(

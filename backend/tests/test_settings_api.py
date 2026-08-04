@@ -124,6 +124,9 @@ def add_global_settings(
     monthly_base_fee_vat_rate: Decimal = Decimal(
         "19.00"
     ),
+    postal_delivery_fee_net: Decimal = Decimal(
+        "0.0000"
+    ),
     invoice_payment_term_days: int = 0,
     invoice_issuer_name: str | None = None,
     invoice_issuer_address: str | None = None,
@@ -146,6 +149,9 @@ def add_global_settings(
         monthly_base_fee_net=monthly_base_fee_net,
         monthly_base_fee_vat_rate=(
             monthly_base_fee_vat_rate
+        ),
+        postal_delivery_fee_net=(
+            postal_delivery_fee_net
         ),
         invoice_payment_term_days=(
             invoice_payment_term_days
@@ -230,6 +236,7 @@ def test_reads_admin_settings(
         "dashboard_note": None,
         "monthly_base_fee_net": "12.5000",
         "monthly_base_fee_vat_rate": "19.00",
+        "postal_delivery_fee_net": "0.0000",
         "invoice_payment_term_days": 14,
         "invoice_issuer_name": None,
         "invoice_issuer_address": None,
@@ -266,6 +273,7 @@ def test_updates_admin_settings(
             "app_name": "  Neue Abrechnung  ",
             "monthly_base_fee_net": "9.9900",
             "monthly_base_fee_vat_rate": "7.00",
+            "postal_delivery_fee_net": "1.6000",
             "invoice_payment_term_days": 21,
             "dashboard_note": "  Wartung am Freitag  ",
             "frontend_base_url": (
@@ -282,6 +290,7 @@ def test_updates_admin_settings(
         "dashboard_note": "Wartung am Freitag",
         "monthly_base_fee_net": "9.9900",
         "monthly_base_fee_vat_rate": "7.00",
+        "postal_delivery_fee_net": "1.6000",
         "invoice_payment_term_days": 21,
         "invoice_issuer_name": None,
         "invoice_issuer_address": None,
@@ -320,6 +329,10 @@ def test_updates_admin_settings(
         == Decimal("7.00")
     )
     assert (
+        global_settings.postal_delivery_fee_net
+        == Decimal("1.6000")
+    )
+    assert (
         global_settings.invoice_payment_term_days
         == 21
     )
@@ -345,6 +358,9 @@ def test_rejects_invalid_admin_settings(
         },
         {
             "monthly_base_fee_vat_rate": "100.01",
+        },
+        {
+            "postal_delivery_fee_net": "-0.0001",
         },
         {
             "invoice_payment_term_days": -1,

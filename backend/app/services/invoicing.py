@@ -960,6 +960,88 @@ def create_invoice_draft(
             total_vat += vat_amount
             total_gross += gross_amount
 
+        postal_delivery_fee_net = (
+            to_decimal(
+                global_settings.postal_delivery_fee_net
+            ).quantize(
+                FOUR_DECIMALS,
+                rounding=ROUND_HALF_UP,
+            )
+            if (
+                global_settings is not None
+                and user.invoice_delivery_post
+                and not user.invoice_delivery_email
+            )
+            else Decimal("0.0000")
+        )
+
+        if postal_delivery_fee_net > 0:
+            shared_fee_vat_rate = to_decimal(
+                global_settings
+                .monthly_base_fee_vat_rate
+            ).quantize(
+                CENT,
+                rounding=ROUND_HALF_UP,
+            )
+            postal_delivery_fee_net_cents = (
+                postal_delivery_fee_net.quantize(
+                    CENT,
+                    rounding=ROUND_HALF_UP,
+                )
+            )
+            postal_delivery_fee_vat = (
+                postal_delivery_fee_net
+                * shared_fee_vat_rate
+                / HUNDRED
+            ).quantize(
+                CENT,
+                rounding=ROUND_HALF_UP,
+            )
+            postal_delivery_fee_gross = (
+                postal_delivery_fee_net_cents
+                + postal_delivery_fee_vat
+            ).quantize(
+                CENT,
+                rounding=ROUND_HALF_UP,
+            )
+
+            db.add(
+                InvoiceItem(
+                    invoice_id=invoice.id,
+                    item_type="postal_delivery",
+                    monthly_base_fee_charge_id=None,
+                    charging_session_id=None,
+                    reversed_invoice_item_id=None,
+                    rebills_invoice_item_id=None,
+                    position_number=(
+                        len(monthly_base_fee_candidates)
+                        + len(charging_sessions)
+                        + 1
+                    ),
+                    description="Briefporto",
+                    session_start=None,
+                    session_end=None,
+                    station_id=None,
+                    energy_total_kwh=None,
+                    energy_grid_kwh=None,
+                    energy_pv_kwh=None,
+                    grid_price_net=None,
+                    pv_price_net=None,
+                    cost_grid_net=None,
+                    cost_pv_net=None,
+                    net_amount=postal_delivery_fee_net,
+                    vat_rate=shared_fee_vat_rate,
+                    vat_amount=postal_delivery_fee_vat,
+                    gross_amount=(
+                        postal_delivery_fee_gross
+                    ),
+                )
+            )
+
+            total_net += postal_delivery_fee_net_cents
+            total_vat += postal_delivery_fee_vat
+            total_gross += postal_delivery_fee_gross
+
         invoice.total_net = total_net.quantize(
             CENT,
             rounding=ROUND_HALF_UP,
@@ -1130,6 +1212,9 @@ def finalize_invoice(
                 base_fee_charge.invoice_id = (
                     invoice.id
                 )
+                continue
+
+            if item.item_type == "postal_delivery":
                 continue
 
             raise InvoiceItemStateError(

@@ -6,21 +6,23 @@ export type DecimalValue = string | number
 
 export interface InvoiceItem {
   id: number
+  item_type: string
+  monthly_base_fee_charge_id: number | null
   charging_session_id: number | null
   reversed_invoice_item_id: number | null
   rebills_invoice_item_id: number | null
   position_number: number
   description: string
-  session_start: string
-  session_end: string
-  station_id: string
-  energy_total_kwh: DecimalValue
-  energy_grid_kwh: DecimalValue
-  energy_pv_kwh: DecimalValue
-  grid_price_net: DecimalValue
-  pv_price_net: DecimalValue
-  cost_grid_net: DecimalValue
-  cost_pv_net: DecimalValue
+  session_start: string | null
+  session_end: string | null
+  station_id: string | null
+  energy_total_kwh: DecimalValue | null
+  energy_grid_kwh: DecimalValue | null
+  energy_pv_kwh: DecimalValue | null
+  grid_price_net: DecimalValue | null
+  pv_price_net: DecimalValue | null
+  cost_grid_net: DecimalValue | null
+  cost_pv_net: DecimalValue | null
   net_amount: DecimalValue
   vat_rate: DecimalValue
   vat_amount: DecimalValue

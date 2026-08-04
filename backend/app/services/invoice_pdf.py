@@ -611,11 +611,14 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
         ]
     ]
 
-    base_fee_row_indices: list[int] = []
+    flat_fee_row_indices: list[int] = []
 
     for item in invoice.items:
-        if item.item_type == "monthly_base_fee":
-            base_fee_row_indices.append(
+        if item.item_type in {
+            "monthly_base_fee",
+            "postal_delivery",
+        }:
+            flat_fee_row_indices.append(
                 len(item_rows)
             )
 
@@ -833,7 +836,7 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
         )
     )
 
-    for row_index in base_fee_row_indices:
+    for row_index in flat_fee_row_indices:
         items_table.setStyle(
             TableStyle(
                 [

@@ -50,6 +50,15 @@ class GlobalSettings(Base):
         server_default="19.00",
     )
 
+    postal_delivery_fee_net: Mapped[
+        Decimal
+    ] = mapped_column(
+        Numeric(12, 4),
+        nullable=False,
+        default=Decimal("0.0000"),
+        server_default="0.0000",
+    )
+
     invoice_payment_term_days: Mapped[int] = (
         mapped_column(
             Integer,

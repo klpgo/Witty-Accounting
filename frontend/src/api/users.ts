@@ -42,6 +42,42 @@ export interface UserCreate
   last_name: string
 }
 
+export type InvoiceDeliveryMethod =
+  | 'email'
+  | 'post'
+  | 'portal'
+
+export function getInvoiceDeliveryMethod(
+  user: Pick<
+    User,
+    | 'invoice_delivery_email'
+    | 'invoice_delivery_post'
+  >,
+): InvoiceDeliveryMethod {
+  if (user.invoice_delivery_post) {
+    return 'post'
+  }
+
+  if (user.invoice_delivery_email) {
+    return 'email'
+  }
+
+  return 'portal'
+}
+
+export function getInvoiceDeliveryFlags(
+  method: InvoiceDeliveryMethod,
+): Pick<
+  User,
+  | 'invoice_delivery_email'
+  | 'invoice_delivery_post'
+> {
+  return {
+    invoice_delivery_email: method === 'email',
+    invoice_delivery_post: method === 'post',
+  }
+}
+
 interface ApiErrorResponse {
   detail?: string
 }

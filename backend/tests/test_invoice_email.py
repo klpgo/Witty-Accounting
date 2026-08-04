@@ -625,16 +625,65 @@ def test_rejects_disabled_email_delivery(
     assert invoice.user is not None
 
     invoice.user.invoice_delivery_email = False
+    invoice.user.invoice_delivery_post = True
     database_session.commit()
 
     with pytest.raises(
         InvoiceEmailRecipientError,
-        match="deaktiviert",
+        match="Briefzustellung",
     ):
         send_invoice_email(
             database_session,
             invoice_id=invoice.id,
         )
+
+
+def test_sends_portal_download_notification_without_pdf(
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice = create_finalized_invoice(
+        database_session
+    )
+    archive_invoice(
+        database_session,
+        invoice,
+        tmp_path,
+    )
+
+    assert invoice.user is not None
+    invoice.user.invoice_delivery_email = False
+    invoice.user.invoice_delivery_post = False
+    database_session.commit()
+
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FakeSMTP,
+    )
+
+    send_invoice_email(
+        database_session,
+        invoice_id=invoice.id,
+    )
+
+    message = FakeSMTP.instances[0].message
+    assert message is not None
+    assert list(message.iter_attachments()) == []
+
+    plain_body = message.get_body(
+        preferencelist=("plain",)
+    )
+    assert plain_body is not None
+    assert (
+        "steht im Portal zum Download bereit:\n"
+        in plain_body.get_content()
+    )
+    assert "manuellen" not in plain_body.get_content()
+    assert (
+        f"/invoices/{invoice.id}"
+        in plain_body.get_content()
+    )
 
 
 def test_rejects_missing_sender_address(

@@ -12,6 +12,7 @@ export interface GlobalSettings {
   dashboard_note: string | null
   monthly_base_fee_net: string
   monthly_base_fee_vat_rate: string
+  postal_delivery_fee_net: string
   invoice_payment_term_days: number
   invoice_issuer_name: string | null
   invoice_issuer_address: string | null
@@ -37,6 +38,7 @@ export interface GlobalSettingsUpdate {
   dashboard_note?: string | null
   monthly_base_fee_net?: string
   monthly_base_fee_vat_rate?: string
+  postal_delivery_fee_net?: string
   invoice_payment_term_days?: number
   invoice_issuer_name?: string | null
   invoice_issuer_address?: string | null

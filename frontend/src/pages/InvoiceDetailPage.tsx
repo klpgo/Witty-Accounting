@@ -45,9 +45,13 @@ function formatCurrency(
 }
 
 function formatNumber(
-  value: string | number,
+  value: string | number | null,
   maximumFractionDigits = 3,
 ): string {
+  if (value === null) {
+    return '–'
+  }
+
   const numericValue = Number(value)
 
   if (!Number.isFinite(numericValue)) {
@@ -83,8 +87,12 @@ function formatDate(
 }
 
 function formatDateTime(
-  value: string,
+  value: string | null,
 ): string {
+  if (value === null) {
+    return '–'
+  }
+
   const date = new Date(value)
 
   if (Number.isNaN(date.getTime())) {
@@ -357,7 +365,7 @@ function InvoiceDetailPage() {
       invoice.status !== 'finalized' ||
       invoice.pdf_storage_path === null ||
       recipient === null ||
-      !recipient.invoice_delivery_email
+      recipient.invoice_delivery_post
     ) {
       return
     }
@@ -371,9 +379,15 @@ function InvoiceDetailPage() {
       invoice.invoice_number ??
       `#${invoice.id}`
 
+    const isPortalNotification =
+      !recipient.invoice_delivery_email &&
+      !recipient.invoice_delivery_post
+
     const confirmed = window.confirm(
       `${documentLabel} ${documentNumber} ` +
-        'per E-Mail versenden?\n\n' +
+        (isPortalNotification
+          ? 'als im Portal verfügbar melden?\n\n'
+          : 'per E-Mail versenden?\n\n') +
         'Empfänger:\n' +
         `${invoice.recipient_name}\n` +
         recipient.email,
@@ -406,8 +420,11 @@ function InvoiceDetailPage() {
       )
 
       setEmailSuccessMessage(
-        `Die ${documentLabel} wurde an ` +
-          `${result.recipient_email} gesendet.`,
+        isPortalNotification
+          ? `Die Download-Benachrichtigung wurde an ` +
+            `${result.recipient_email} gesendet.`
+          : `Die ${documentLabel} wurde an ` +
+            `${result.recipient_email} gesendet.`,
       )
     } catch (error) {
       if (
@@ -668,6 +685,15 @@ function InvoiceDetailPage() {
     recipient?.invoice_delivery_post === true &&
     recipient.invoice_delivery_email === false
 
+  const canSendInvoiceEmail =
+    isAdmin &&
+    recipient !== null &&
+    recipient.invoice_delivery_post === false
+
+  const isPortalDelivery =
+    canSendInvoiceEmail &&
+    recipient.invoice_delivery_email === false
+
   return (
     <div className="page invoice-detail-page">
       <div className="detail-header-actions">
@@ -693,9 +719,9 @@ function InvoiceDetailPage() {
           </button>
         )}
 
-        {isAdmin &&
+        {canSendInvoiceEmail &&
           invoice.status === 'finalized' &&
-          recipient?.invoice_delivery_email === true && (
+          (
           <button
             className="button button-secondary"
             type="button"
@@ -709,7 +735,9 @@ function InvoiceDetailPage() {
           >
             {isSendingEmail
               ? 'E-Mail wird gesendet …'
-              : 'Per E-Mail senden'}
+              : isPortalDelivery
+                ? 'Download-Nachricht senden'
+                : 'Per E-Mail senden'}
           </button>
         )}
 
@@ -1014,25 +1042,33 @@ function InvoiceDetailPage() {
                   </td>
 
                   <td>
-                    {formatDateTime(
-                      item.session_start,
+                    {item.item_type ===
+                    'charging_session' ? (
+                      <>
+                        {formatDateTime(
+                          item.session_start,
+                        )}
+                        <br />
+                        <span className="muted">
+                          bis{' '}
+                          {formatDateTime(
+                            item.session_end,
+                          )}
+                        </span>
+                      </>
+                    ) : (
+                      '–'
                     )}
-                    <br />
-                    <span className="muted">
-                      bis{' '}
-                      {formatDateTime(
-                        item.session_end,
-                      )}
-                    </span>
                   </td>
 
-                  <td>{item.station_id}</td>
+                  <td>{item.station_id ?? '–'}</td>
 
                   <td className="table-number">
-                    {formatNumber(
-                      item.energy_total_kwh,
-                    )}{' '}
-                    kWh
+                    {item.energy_total_kwh === null
+                      ? '–'
+                      : `${formatNumber(
+                          item.energy_total_kwh,
+                        )} kWh`}
                   </td>
 
                   <td className="table-number">
