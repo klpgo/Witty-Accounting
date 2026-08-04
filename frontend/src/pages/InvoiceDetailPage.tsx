@@ -25,6 +25,7 @@ import InvoiceCancellationFinalizeForm from '../components/InvoiceCancellationFi
 import {
   getUser,
   UserApiError,
+  type User,
 } from '../api/users'
 
 function formatCurrency(
@@ -133,8 +134,8 @@ function InvoiceDetailPage() {
   const [invoice, setInvoice] =
     useState<Invoice | null>(null)
 
-  const [recipientEmail, setRecipientEmail] =
-    useState<string | null>(null)
+  const [recipient, setRecipient] =
+    useState<User | null>(null)
 
   const [isLoading, setIsLoading] =
     useState(true)
@@ -161,6 +162,9 @@ function InvoiceDetailPage() {
     isDownloading,
     setIsDownloading,
   ] = useState(false)
+
+  const [isPrinting, setIsPrinting] =
+    useState(false)
 
   const [
     isSendingEmail,
@@ -214,15 +218,15 @@ function InvoiceDetailPage() {
         setInvoice(loadedInvoice)
 
         if (isAdmin) {
-        const loadedRecipient = await getUser(
-          token,
-          loadedInvoice.user_id,
-          controller.signal,
-        )
+          const loadedRecipient = await getUser(
+            token,
+            loadedInvoice.user_id,
+            controller.signal,
+          )
 
-          setRecipientEmail(loadedRecipient.email)
+          setRecipient(loadedRecipient)
         } else {
-          setRecipientEmail(null)
+          setRecipient(null)
         }
       } catch (error) {
         if (
@@ -352,7 +356,8 @@ function InvoiceDetailPage() {
       invoice === null ||
       invoice.status !== 'finalized' ||
       invoice.pdf_storage_path === null ||
-      recipientEmail === null
+      recipient === null ||
+      !recipient.invoice_delivery_email
     ) {
       return
     }
@@ -371,7 +376,7 @@ function InvoiceDetailPage() {
         'per E-Mail versenden?\n\n' +
         'Empfänger:\n' +
         `${invoice.recipient_name}\n` +
-        recipientEmail,
+        recipient.email,
     )
 
     if (!confirmed) {
@@ -425,6 +430,127 @@ function InvoiceDetailPage() {
       )
     } finally {
       setIsSendingEmail(false)
+    }
+  }
+
+  async function handlePdfPrint(): Promise<void> {
+    if (
+      !isAdmin ||
+      invoice === null ||
+      invoice.status !== 'finalized' ||
+      invoice.pdf_storage_path === null ||
+      recipient === null ||
+      recipient.invoice_delivery_email ||
+      !recipient.invoice_delivery_post
+    ) {
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+
+      navigate('/login', {
+        replace: true,
+      })
+
+      return
+    }
+
+    setPdfErrorMessage(null)
+    setIsPrinting(true)
+
+    try {
+      const pdfBlob = await downloadInvoicePdf(
+        accessToken,
+        invoice.id,
+      )
+
+      const printUrl = URL.createObjectURL(pdfBlob)
+      const printFrame = document.createElement(
+        'iframe',
+      )
+
+      printFrame.title = 'Rechnung drucken'
+      printFrame.style.position = 'fixed'
+      printFrame.style.right = '0'
+      printFrame.style.bottom = '0'
+      printFrame.style.width = '1px'
+      printFrame.style.height = '1px'
+      printFrame.style.border = '0'
+      printFrame.style.opacity = '0'
+      printFrame.style.pointerEvents = 'none'
+
+      await new Promise<void>((resolve, reject) => {
+        const loadTimeout = window.setTimeout(() => {
+          printFrame.remove()
+          URL.revokeObjectURL(printUrl)
+          reject(
+            new Error(
+              'Die PDF konnte nicht zum Drucken geöffnet werden.',
+            ),
+          )
+        }, 15_000)
+
+        printFrame.addEventListener(
+          'load',
+          () => {
+            window.clearTimeout(loadTimeout)
+
+            window.setTimeout(() => {
+              try {
+                const printWindow =
+                  printFrame.contentWindow
+
+                if (printWindow === null) {
+                  throw new Error(
+                    'Das Druckfenster konnte nicht geöffnet werden.',
+                  )
+                }
+
+                printWindow.focus()
+                printWindow.print()
+                resolve()
+              } catch (error) {
+                printFrame.remove()
+                URL.revokeObjectURL(printUrl)
+                reject(error)
+              }
+            }, 250)
+          },
+          { once: true },
+        )
+
+        printFrame.src = printUrl
+        document.body.append(printFrame)
+      })
+
+      window.setTimeout(() => {
+        printFrame.remove()
+        URL.revokeObjectURL(printUrl)
+      }, 60_000)
+    } catch (error) {
+      if (
+        error instanceof InvoiceApiError &&
+        error.status === 401
+      ) {
+        signOut()
+
+        navigate('/login', {
+          replace: true,
+        })
+
+        return
+      }
+
+      setPdfErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Die PDF konnte nicht gedruckt werden.',
+      )
+    } finally {
+      setIsPrinting(false)
     }
   }
 
@@ -537,6 +663,11 @@ function InvoiceDetailPage() {
   const hasArchivedPdf =
     invoice.pdf_storage_path !== null
 
+  const isPostalDeliveryOnly =
+    isAdmin &&
+    recipient?.invoice_delivery_post === true &&
+    recipient.invoice_delivery_email === false
+
   return (
     <div className="page invoice-detail-page">
       <div className="detail-header-actions">
@@ -562,7 +693,9 @@ function InvoiceDetailPage() {
           </button>
         )}
 
-        {isAdmin && invoice.status === 'finalized' && (
+        {isAdmin &&
+          invoice.status === 'finalized' &&
+          recipient?.invoice_delivery_email === true && (
           <button
             className="button button-secondary"
             type="button"
@@ -577,6 +710,25 @@ function InvoiceDetailPage() {
             {isSendingEmail
               ? 'E-Mail wird gesendet …'
               : 'Per E-Mail senden'}
+          </button>
+        )}
+
+        {isPostalDeliveryOnly &&
+          invoice.status === 'finalized' && (
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={
+              !hasArchivedPdf ||
+              isPrinting
+            }
+            onClick={() => {
+              void handlePdfPrint()
+            }}
+          >
+            {isPrinting
+              ? 'Druck wird vorbereitet …'
+              : 'PDF drucken'}
           </button>
         )}
 
