@@ -1,9 +1,11 @@
-name: witty-accounting
+name: witty
 
 services:
+
   db:
     image: mariadb:11
-    container_name: witty-accounting-db
+    container_name: witty-db
+
     restart: unless-stopped
 
     environment:
@@ -11,6 +13,9 @@ services:
       MARIADB_USER: "${DB_USER:?DB_USER muss in .env gesetzt sein}"
       MARIADB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD muss in .env gesetzt sein}"
       MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD muss in .env gesetzt sein}"
+
+    ports:
+      - "3306:3306"
 
     volumes:
       - mariadb_data:/var/lib/mysql
@@ -22,12 +27,9 @@ services:
       retries: 10
       start_period: 30s
 
-  witty:
-    image: witty-accounting:local
-    container_name: witty-accounting
-    restart: unless-stopped
-    init: true
 
+  backend:
+    container_name: witty
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -36,22 +38,20 @@ services:
         WITTY_UID: "${WITTY_UID:-1000}"
         WITTY_GID: "${WITTY_GID:-1000}"
 
+    restart: unless-stopped
+
     env_file:
       - .env
 
     depends_on:
-      db:
-        condition: service_healthy
-
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - db
 
     ports:
-      - "${WITTY_BIND_ADDRESS:-0.0.0.0}:${WITTY_PORT:-8000}:8000"
+      - "8000:8000"
 
     volumes:
-      - "${WITTY_DATA_DIR:-./uploads}/logs:/app/logs"
-      - "${WITTY_DATA_DIR:-./uploads}/invoices:/app/data/invoices"
+      - /srv/witty/logs:/app/logs
+      - /srv/witty/invoices:/app/data/invoices
 
     secrets:
       - source: invoice_mail_signing_pkcs12
@@ -59,24 +59,13 @@ services:
       - source: invoice_mail_signing_password
         target: invoice-mail-signing-password
 
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - >-
-          import urllib.request;
-          urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
 secrets:
   invoice_mail_signing_pkcs12:
-    file: ./secrets/invoice-mail-signing.p12
+    file: /srv/witty/secrets/invoice-mail-signing.p12
+
   invoice_mail_signing_password:
-    file: ./secrets/invoice-mail-signing-password
+    file: /srv/witty/secrets/invoice-mail-signing-password
 
 volumes:
   mariadb_data:
+    name: witty-accounting_mariadb_data

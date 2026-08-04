@@ -1,0 +1,19 @@
+Witty-Accounting is an app to support account energy consumption for
+charging an electric car using Hager Witty Wallboxes. 
+
+Data input is done by exporting the charging events into an *.xlsx file
+and importing it into Witty-Accounting. With the data it will look up 
+the RFID cards and the assigned persons and prepares an invoice for the
+charging events.
+
+If besides grid electricity photovoltaics are available, the energy produced
+by it can be priced with a different amount.
+
+The app includes admin pages for user, charging events and invoices.
+
+When the Hager API for electromobility becomes available, direct synchronization
+of charging events will be integrate.
+
+Installation
+
+.env
