@@ -280,6 +280,29 @@ h2 {
   gap: 16px;
 }
 
+.user-menu-trigger {
+  display: flex;
+  align-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  padding: 8px 10px;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.user-menu-trigger:hover,
+.user-menu-trigger:focus-visible,
+.user-menu-trigger-active {
+  background: #f4f6fa;
+}
+
+.user-menu-trigger:focus-visible {
+  outline: 2px solid #3659d9;
+  outline-offset: 2px;
+}
+
 .user-details {
   display: grid;
   gap: 2px;
@@ -405,7 +428,7 @@ h2 {
     min-height: 42px;
   }
 
-  .user-details {
+  .user-details span {
     display: none;
   }
 

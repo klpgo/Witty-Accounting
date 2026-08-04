@@ -61,19 +61,6 @@ function AppLayout() {
             className="app-nav"
             aria-label="Hauptnavigation"
           >
-
-            {!user?.is_admin && (
-              <NavLink
-                to="/profile"
-                className={({ isActive }) =>
-                  isActive
-                    ? 'nav-link nav-link-active'
-                    : 'nav-link'
-                }
-              >
-                Meine Daten
-              </NavLink>
-            )}
             <NavLink
               to="/charging-sessions"
               className={({ isActive }) =>
@@ -142,11 +129,21 @@ function AppLayout() {
           </nav>
 
           <div className="user-menu">
-            <div className="user-details">
-              <strong>{displayName}</strong>
+            <NavLink
+              to="/profile"
+              className={({ isActive }) =>
+                isActive
+                  ? 'user-menu-trigger user-menu-trigger-active'
+                  : 'user-menu-trigger'
+              }
+              aria-label="Meine Daten öffnen"
+            >
+              <span className="user-details">
+                <strong>{displayName}</strong>
 
-              <span>{user?.email}</span>
-            </div>
+                <span>{user?.email}</span>
+              </span>
+            </NavLink>
 
             <button
               className="button button-secondary"

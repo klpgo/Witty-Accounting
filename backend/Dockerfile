@@ -15,6 +15,9 @@ RUN npm run build
 
 FROM python:3.12-slim AS runtime
 
+ARG WITTY_UID=1000
+ARG WITTY_GID=1000
+
 WORKDIR /app
 
 COPY backend/pyproject.toml .
@@ -33,6 +36,31 @@ COPY backend/scripts/__init__.py ./scripts/__init__.py
 COPY backend/scripts/create_admin.py ./scripts/create_admin.py
 
 COPY --from=frontend-build /build/frontend/dist ./frontend
+
+RUN set -eux; \
+    case "${WITTY_UID}" in \
+        ''|*[!0-9]*) echo "WITTY_UID muss eine positive Ganzzahl sein" >&2; exit 1 ;; \
+    esac; \
+    case "${WITTY_GID}" in \
+        ''|*[!0-9]*) echo "WITTY_GID muss eine positive Ganzzahl sein" >&2; exit 1 ;; \
+    esac; \
+    test "${WITTY_UID}" -gt 0; \
+    test "${WITTY_GID}" -gt 0; \
+    groupadd --gid "${WITTY_GID}" witty; \
+    useradd \
+        --uid "${WITTY_UID}" \
+        --gid "${WITTY_GID}" \
+        --home-dir /app \
+        --no-create-home \
+        --shell /usr/sbin/nologin \
+        witty; \
+    install -d \
+        --owner=witty \
+        --group=witty \
+        /app/logs \
+        /app/data/invoices
+
+USER witty:witty
 
 EXPOSE 8000
 

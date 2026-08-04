@@ -33,6 +33,8 @@ services:
       dockerfile: backend/Dockerfile
       args:
         VITE_API_BASE_URL: /api
+        WITTY_UID: "${WITTY_UID:-1000}"
+        WITTY_GID: "${WITTY_GID:-1000}"
 
     env_file:
       - .env
