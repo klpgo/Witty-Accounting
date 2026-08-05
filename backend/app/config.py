@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
+        # The project-level .env is shared with Docker Compose and therefore
+        # also contains deployment-only values such as DB_ROOT_PASSWORD and
+        # WITTY_UID.  They are intentionally not application settings.
+        extra="ignore",
     )
 
     # Legacy fallbacks for installations that have not yet moved the
