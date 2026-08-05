@@ -1,8 +1,9 @@
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy import Connection, create_engine, select, text
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
@@ -247,3 +248,69 @@ def test_second_bootstrap_is_refused(
 
     database_session.refresh(first_admin)
     assert first_admin.is_admin is True
+
+
+def test_main_commits_admin_outside_lock_transaction(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_path = tmp_path / "bootstrap.sqlite"
+    test_engine = create_engine(
+        f"sqlite+pysqlite:///{database_path}"
+    )
+    test_session_factory = sessionmaker(
+        bind=test_engine,
+        autoflush=False,
+        autocommit=False,
+    )
+    Base.metadata.create_all(test_engine)
+
+    @contextmanager
+    def transaction_starting_lock(
+        connection: Connection,
+    ) -> Iterator[None]:
+        # MariaDB's GET_LOCK() query causes SQLAlchemy to
+        # autobegin a transaction on the lock connection.
+        connection.execute(text("SELECT 1"))
+        yield
+
+    monkeypatch.setattr(
+        create_admin,
+        "engine",
+        test_engine,
+    )
+    monkeypatch.setattr(
+        create_admin,
+        "SessionLocal",
+        test_session_factory,
+    )
+    monkeypatch.setattr(
+        create_admin,
+        "bootstrap_lock",
+        transaction_starting_lock,
+    )
+    configure_inputs(
+        monkeypatch,
+        values=[
+            "ADMIN@EXAMPLE.COM",
+            "Ada",
+            "Admin",
+        ],
+        passwords=[
+            "Sicheres1!",
+            "Sicheres1!",
+        ],
+    )
+
+    create_admin.main()
+
+    with test_session_factory() as db:
+        persisted_user = db.scalar(
+            select(User).where(
+                User.email == "admin@example.com"
+            )
+        )
+
+    assert persisted_user is not None
+    assert persisted_user.is_admin is True
+    test_engine.dispose()

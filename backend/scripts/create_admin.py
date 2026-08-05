@@ -193,9 +193,14 @@ def main() -> None:
     try:
         with engine.connect() as connection:
             with bootstrap_lock(connection):
-                with SessionLocal(
-                    bind=connection
-                ) as db:
+                # The named lock belongs to the lock connection,
+                # not to its transaction.  Keep the application
+                # transaction on a separate Session connection:
+                # GET_LOCK() starts an outer SQLAlchemy transaction
+                # and a Session bound to that connection cannot
+                # commit it.  Closing the lock connection would then
+                # roll the newly inserted administrator back.
+                with SessionLocal() as db:
                     user = create_first_admin(db)
     except BootstrapRefusedError as exc:
         raise SystemExit(str(exc)) from exc
