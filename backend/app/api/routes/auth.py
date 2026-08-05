@@ -37,6 +37,7 @@ from app.services.password_reset import (
     issue_password_reset,
     reset_password_with_token,
 )
+from app.utils.utc import utc_now
 
 router = APIRouter(
     prefix="/auth",
@@ -66,13 +67,21 @@ def login(
         Depends(get_db),
     ],
 ) -> Token:
+    normalized_username = (
+        form_data.username.strip().lower()
+    )
+
     user = authenticate_user(
         db=db,
-        email=form_data.username,
+        email=normalized_username,
         password=form_data.password,
     )
 
     if user is None:
+        logger.warning(
+            "Login fehlgeschlagen: Benutzername=%r.",
+            normalized_username,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-Mail-Adresse oder Passwort ist falsch.",
@@ -92,6 +101,11 @@ def login(
     )
 
     if maintenance_mode and not user.is_admin:
+        logger.warning(
+            "Login im Wartungsmodus abgelehnt: "
+            "Benutzername=%r.",
+            user.email,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_503_SERVICE_UNAVAILABLE
@@ -103,9 +117,12 @@ def login(
             ),
         )
 
-    return Token(
-        access_token=create_access_token(user),
-    )
+    access_token = create_access_token(user)
+
+    user.last_login = utc_now()
+    db.commit()
+
+    return Token(access_token=access_token)
 
 
 @router.get(

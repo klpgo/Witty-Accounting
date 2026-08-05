@@ -14,6 +14,7 @@ export interface User {
   invoice_delivery_post: boolean
   active: boolean
   is_admin: boolean
+  last_login: string | null
   created_at: string
   updated_at: string
 }

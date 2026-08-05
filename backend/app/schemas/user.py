@@ -24,6 +24,7 @@ class UserResponse(BaseModel):
     invoice_delivery_post: bool
     active: bool
     is_admin: bool
+    last_login: datetime | None
     created_at: datetime
     updated_at: datetime
 

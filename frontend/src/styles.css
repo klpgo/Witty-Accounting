@@ -742,6 +742,17 @@ h2 {
   gap: 24px;
 }
 
+.admin-users-layout {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(360px, 420px);
+}
+
+.admin-user-editor {
+  min-width: 0;
+  padding: 24px;
+}
+
 .admin-form {
   display: grid;
   gap: 20px;
@@ -835,6 +846,12 @@ h2 {
   }
 }
 
+@media (max-width: 1280px) {
+  .admin-users-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 640px) {
   .form-grid {
     grid-template-columns: 1fr;
@@ -916,27 +933,38 @@ select {
 }
 
 .admin-users-table th:nth-child(1) {
-  width: 22%;
+  width: 19%;
 }
 
 .admin-users-table th:nth-child(2) {
-  width: 32%;
+  width: 28%;
 }
 
 .admin-users-table th:nth-child(3) {
-  width: 12%;
-}
-
-.admin-users-table th:nth-child(4) {
   width: 18%;
 }
 
+.admin-users-table th:nth-child(4) {
+  width: 9%;
+}
+
 .admin-users-table th:nth-child(5) {
-  width: 16%;
+  width: 14%;
+}
+
+.admin-users-table th:nth-child(6) {
+  width: 12%;
+}
+
+.admin-users-table th,
+.admin-users-table td {
+  padding-right: 12px;
+  padding-left: 12px;
 }
 
 .admin-users-table td:nth-child(1),
-.admin-users-table td:nth-child(2) {
+.admin-users-table td:nth-child(2),
+.admin-users-table td:nth-child(3) {
   overflow-wrap: anywhere;
 }
 
@@ -945,7 +973,7 @@ select {
 }
 
 .admin-users-table .button {
-  padding: 8px 12px;
+  padding: 8px 10px;
 }
 
 .settings-form {

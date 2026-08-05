@@ -46,6 +46,30 @@ function sortUsers(users: User[]): User[] {
   })
 }
 
+function formatLastLogin(
+  value: string | null,
+): string {
+  if (value === null) {
+    return 'Noch nie'
+  }
+
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(
+    value,
+  )
+  const date = new Date(
+    hasTimezone ? value : `${value}Z`,
+  )
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('de-DE', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
 function AdminUsersPage() {
   const navigate = useNavigate()
   const { user: currentUser, signOut } = useAuth()
@@ -551,7 +575,7 @@ function AdminUsersPage() {
       )}
 
       {!isLoading && users.length > 0 && (
-        <div className="admin-layout">
+        <div className="admin-layout admin-users-layout">
           <section className="card table-card">
             <div className="table-scroll">
               <table className="data-table admin-users-table">
@@ -559,6 +583,7 @@ function AdminUsersPage() {
                   <tr>
                     <th>Name</th>
                     <th>E-Mail</th>
+                    <th>Letzte Anmeldung</th>
                     <th>Status</th>
                     <th>Rolle</th>
                     <th />
@@ -584,6 +609,12 @@ function AdminUsersPage() {
                       </td>
 
                       <td>{managedUser.email}</td>
+
+                      <td>
+                        {formatLastLogin(
+                          managedUser.last_login,
+                        )}
+                      </td>
 
                       <td>
                         <span
@@ -625,7 +656,7 @@ function AdminUsersPage() {
 
           {(isCreating ||
             selectedUser !== null) && (
-            <section className="card admin-editor">
+            <section className="card admin-editor admin-user-editor">
               <div>
                 <p className="eyebrow">
                   {isCreating

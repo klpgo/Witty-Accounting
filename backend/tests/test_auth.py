@@ -1,4 +1,5 @@
 from collections.abc import Generator
+import logging
 
 import pytest
 from fastapi.testclient import TestClient
@@ -108,7 +109,7 @@ def test_login_returns_access_token(
     unauthenticated_client: TestClient,
     database_session: Session,
 ) -> None:
-    create_user(
+    user = create_user(
         database_session,
         email="admin@example.com",
         is_admin=True,
@@ -133,24 +134,32 @@ def test_login_returns_access_token(
     )
     assert body["access_token"]
 
+    database_session.refresh(user)
+    assert user.last_login is not None
+
 
 def test_login_rejects_wrong_password(
     unauthenticated_client: TestClient,
     database_session: Session,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    create_user(
+    user = create_user(
         database_session,
         email="admin@example.com",
         is_admin=True,
     )
 
-    response = unauthenticated_client.post(
-        "/api/auth/token",
-        data={
-            "username": "admin@example.com",
-            "password": "wrong-password",
-        },
-    )
+    with caplog.at_level(
+        logging.WARNING,
+        logger="app.api.routes.auth",
+    ):
+        response = unauthenticated_client.post(
+            "/api/auth/token",
+            data={
+                "username": " ADMIN@EXAMPLE.COM ",
+                "password": "wrong-password",
+            },
+        )
 
     assert response.status_code == 401
     assert response.json() == {
@@ -162,6 +171,13 @@ def test_login_rejects_wrong_password(
     assert response.headers[
         "www-authenticate"
     ] == "Bearer"
+    assert (
+        "Login fehlgeschlagen: Benutzername="
+        "'admin@example.com'."
+    ) in caplog.messages
+
+    database_session.refresh(user)
+    assert user.last_login is None
 
 
 def test_reprice_requires_authentication(
@@ -359,6 +375,9 @@ def test_maintenance_mode_rejects_normal_user_login(
             "Administratoren möglich."
         ),
     }
+
+    database_session.refresh(user)
+    assert user.last_login is None
 
 
 def test_maintenance_mode_allows_admin_login(

@@ -74,6 +74,11 @@ class User(Base):
         default=True
     )
 
+    last_login: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utc_now

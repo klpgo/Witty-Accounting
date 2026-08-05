@@ -401,6 +401,7 @@ def test_list_users_returns_sorted_users(
     for user in body:
         assert "password_hash" not in user
         assert "id" in user
+        assert "last_login" in user
         assert "created_at" in user
         assert "updated_at" in user
 
