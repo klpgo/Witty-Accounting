@@ -69,6 +69,14 @@ export interface SmtpSettings {
   smtp_password_configured: boolean
   mail_from_address: string
   mail_from_name: string
+  mail_smime_enabled: boolean
+  smime_certificate_configured: boolean
+  smime_certificate_filename: string | null
+  smime_certificate_source:
+    | 'upload'
+    | 'environment'
+    | null
+  smime_password_configured: boolean
 }
 
 export interface SmtpSettingsUpdate {
@@ -83,6 +91,11 @@ export interface SmtpSettingsUpdate {
   clear_smtp_password?: boolean
   mail_from_address?: string
   mail_from_name?: string
+  mail_smime_enabled?: boolean
+  smime_pkcs12_base64?: string
+  smime_pkcs12_filename?: string
+  smime_password?: string
+  clear_smime_certificate?: boolean
 }
 
 export interface SmtpTestEmailResponse {
@@ -270,6 +283,29 @@ export async function testSmtpSettings(
 ): Promise<SmtpTestEmailResponse> {
   const response = await fetch(
     `${API_BASE_URL}/settings/smtp/test`,
+    {
+      method: 'POST',
+      headers: createHeaders(accessToken),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as SmtpTestEmailResponse
+}
+
+export async function testSmimeSettings(
+  accessToken: string,
+): Promise<SmtpTestEmailResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/smtp/smime/test`,
     {
       method: 'POST',
       headers: createHeaders(accessToken),

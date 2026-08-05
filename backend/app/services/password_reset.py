@@ -29,9 +29,9 @@ from app.services.password_policy import (
     load_password_policy,
     validate_password,
 )
-from app.services.smime import (
-    SmimeSigningError,
-    sign_message,
+from app.services.mail_smime import (
+    MailSmimeConfigurationError,
+    sign_configured_message,
 )
 from app.utils.utc import utc_now
 
@@ -256,32 +256,18 @@ def build_password_reset_message(
 
 
 def sign_password_reset_message(
+    db: Session,
     *,
     message: EmailMessage,
     sender_email: str,
 ) -> bytes | None:
-    if not settings.mail_smime_enabled:
-        return None
-
-    pkcs12_path = settings.mail_smime_pkcs12_path
-    password_file = (
-        settings.mail_smime_pkcs12_password_file
-    )
-
-    if pkcs12_path is None or password_file is None:
-        raise PasswordResetEmailError(
-            "Die S/MIME-Signatur ist nicht vollständig "
-            "konfiguriert."
-        )
-
     try:
-        return sign_message(
+        return sign_configured_message(
+            db,
             message=message,
             sender_email=sender_email,
-            pkcs12_path=pkcs12_path,
-            password_file=password_file,
         )
-    except SmimeSigningError as exc:
+    except MailSmimeConfigurationError as exc:
         raise PasswordResetEmailError(
             "Die E-Mail konnte nicht mit S/MIME "
             "signiert werden."
@@ -322,6 +308,7 @@ def send_password_reset_email(
     )
 
     signed_message = sign_password_reset_message(
+        db,
         message=message,
         sender_email=(
             smtp_configuration.from_address

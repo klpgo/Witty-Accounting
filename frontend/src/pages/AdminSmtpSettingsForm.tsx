@@ -9,12 +9,30 @@ import { useNavigate } from 'react-router-dom'
 import {
   getSmtpSettings,
   SettingsApiError,
+  testSmimeSettings,
   testSmtpSettings,
   updateSmtpSettings,
 } from '../api/settings'
 
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+
+const MAX_SMIME_FILE_SIZE = 65535
+
+async function fileToBase64(
+  file: File,
+): Promise<string> {
+  const bytes = new Uint8Array(
+    await file.arrayBuffer(),
+  )
+  let binary = ''
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+
+  return window.btoa(binary)
+}
 
 function AdminSmtpSettingsForm() {
   const navigate = useNavigate()
@@ -54,12 +72,32 @@ function AdminSmtpSettingsForm() {
   ] = useState('')
   const [mailFromName, setMailFromName] =
     useState('')
+  const [smimeEnabled, setSmimeEnabled] =
+    useState(false)
+  const [smimeCertificateFile, setSmimeCertificateFile] =
+    useState<File | null>(null)
+  const [smimeCertificateConfigured, setSmimeCertificateConfigured] =
+    useState(false)
+  const [smimeCertificateFilename, setSmimeCertificateFilename] =
+    useState<string | null>(null)
+  const [smimeCertificateSource, setSmimeCertificateSource] =
+    useState<'upload' | 'environment' | null>(null)
+  const [smimePassword, setSmimePassword] =
+    useState('')
+  const [smimePasswordConfigured, setSmimePasswordConfigured] =
+    useState(false)
+  const [clearSmimeCertificate, setClearSmimeCertificate] =
+    useState(false)
+  const [smimeFileInputKey, setSmimeFileInputKey] =
+    useState(0)
 
   const [isLoading, setIsLoading] =
     useState(true)
   const [isSaving, setIsSaving] =
     useState(false)
   const [isTesting, setIsTesting] =
+    useState(false)
+  const [isTestingSmime, setIsTestingSmime] =
     useState(false)
   const [
     errorMessage,
@@ -128,6 +166,25 @@ function AdminSmtpSettingsForm() {
         )
         setMailFromName(
           loadedSettings.mail_from_name,
+        )
+        setSmimeEnabled(
+          loadedSettings.mail_smime_enabled,
+        )
+        setSmimeCertificateConfigured(
+          loadedSettings
+            .smime_certificate_configured,
+        )
+        setSmimeCertificateFilename(
+          loadedSettings
+            .smime_certificate_filename,
+        )
+        setSmimeCertificateSource(
+          loadedSettings
+            .smime_certificate_source,
+        )
+        setSmimePasswordConfigured(
+          loadedSettings
+            .smime_password_configured,
         )
       } catch (error) {
         if (
@@ -246,6 +303,53 @@ function AdminSmtpSettingsForm() {
       }
     }
 
+    if (
+      smimeCertificateFile !== null &&
+      smimeCertificateFile.size >
+        MAX_SMIME_FILE_SIZE
+    ) {
+      setErrorMessage(
+        'Die S/MIME-Datei darf höchstens 65.535 Byte groß sein.',
+      )
+      return
+    }
+
+    if (
+      smimeCertificateFile !== null &&
+      !smimePassword &&
+      !(
+        smimePasswordConfigured &&
+        smimeCertificateSource === 'upload'
+      )
+    ) {
+      setErrorMessage(
+        'Für das S/MIME-Zertifikat ist ein Passwort erforderlich.',
+      )
+      return
+    }
+
+    if (
+      smimePassword &&
+      smimeCertificateFile === null &&
+      smimeCertificateSource !== 'upload'
+    ) {
+      setErrorMessage(
+        'Bitte wähle zusammen mit dem S/MIME-Passwort eine Zertifikatsdatei aus.',
+      )
+      return
+    }
+
+    if (
+      smimeEnabled &&
+      !smimeCertificateConfigured &&
+      smimeCertificateFile === null
+    ) {
+      setErrorMessage(
+        'Vor dem Aktivieren muss ein S/MIME-Zertifikat hochgeladen werden.',
+      )
+      return
+    }
+
     const accessToken = getAccessToken()
 
     if (accessToken === null) {
@@ -256,6 +360,13 @@ function AdminSmtpSettingsForm() {
     setIsSaving(true)
 
     try {
+      const smimePkcs12Base64 =
+        smimeCertificateFile === null
+          ? null
+          : await fileToBase64(
+              smimeCertificateFile,
+            )
+
       const updatedSettings =
         await updateSmtpSettings(
           accessToken,
@@ -283,6 +394,24 @@ function AdminSmtpSettingsForm() {
               normalizedFromAddress,
             mail_from_name:
               normalizedFromName,
+            mail_smime_enabled: smimeEnabled,
+            ...(smimePkcs12Base64 !== null &&
+            smimeCertificateFile !== null
+              ? {
+                  smime_pkcs12_base64:
+                    smimePkcs12Base64,
+                  smime_pkcs12_filename:
+                    smimeCertificateFile.name,
+                }
+              : {}),
+            ...(smimePassword
+              ? {
+                  smime_password:
+                    smimePassword,
+                }
+              : {}),
+            clear_smime_certificate:
+              clearSmimeCertificate,
           },
         )
 
@@ -318,9 +447,32 @@ function AdminSmtpSettingsForm() {
       setMailFromName(
         updatedSettings.mail_from_name,
       )
+      setSmimeEnabled(
+        updatedSettings.mail_smime_enabled,
+      )
+      setSmimeCertificateFile(null)
+      setSmimeCertificateConfigured(
+        updatedSettings
+          .smime_certificate_configured,
+      )
+      setSmimeCertificateFilename(
+        updatedSettings
+          .smime_certificate_filename,
+      )
+      setSmimeCertificateSource(
+        updatedSettings
+          .smime_certificate_source,
+      )
+      setSmimePassword('')
+      setSmimePasswordConfigured(
+        updatedSettings
+          .smime_password_configured,
+      )
+      setClearSmimeCertificate(false)
+      setSmimeFileInputKey((key) => key + 1)
 
       setSuccessMessage(
-        'Die Mailserver-Einstellungen wurden gespeichert.',
+        'Die Mail-Einstellungen wurden gespeichert.',
       )
     } catch (error) {
       if (
@@ -334,7 +486,7 @@ function AdminSmtpSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Mailserver-Einstellungen konnten nicht gespeichert werden.',
+          : 'Die Mail-Einstellungen konnten nicht gespeichert werden.',
       )
     } finally {
       setIsSaving(false)
@@ -377,6 +529,45 @@ function AdminSmtpSettingsForm() {
       )
     } finally {
       setIsTesting(false)
+    }
+  }
+
+  async function handleSmimeTest(): Promise<void> {
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      handleUnauthorized()
+      return
+    }
+
+    setIsTestingSmime(true)
+    setErrorMessage(null)
+    setSuccessMessage(null)
+
+    try {
+      const result = await testSmimeSettings(
+        accessToken,
+      )
+
+      setSuccessMessage(
+        `Die signierte S/MIME-Testmail wurde an ${result.recipient_email} gesendet.`,
+      )
+    } catch (error) {
+      if (
+        error instanceof SettingsApiError &&
+        error.status === 401
+      ) {
+        handleUnauthorized()
+        return
+      }
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Die S/MIME-Testnachricht konnte nicht versendet werden.',
+      )
+    } finally {
+      setIsTestingSmime(false)
     }
   }
 
@@ -553,7 +744,6 @@ function AdminSmtpSettingsForm() {
             />
           </label>
 
-          <label className="form-field">
           <div className="form-field settings-password-field">
             <span id="smtp-password-label">
               SMTP-Passwort
@@ -604,7 +794,6 @@ function AdminSmtpSettingsForm() {
               löschen
             </label>
           </div>
-          </label>
 
           <label className="form-field settings-smtp-sender-field">
             <span>Absendername</span>
@@ -643,21 +832,147 @@ function AdminSmtpSettingsForm() {
         </div>
       </section>
 
+      <section className="settings-section settings-smime-section">
+        <div>
+          <h2>S/MIME-Signatur</h2>
+
+          <p className="muted">
+            Ausgehende E-Mails mit dem Zertifikat des
+            Absenders digital signieren.
+          </p>
+        </div>
+
+        <div className="form-grid settings-business-grid">
+          <label className="form-field settings-checkbox-field">
+            <span>S/MIME-Versand</span>
+
+            <span className="settings-checkbox-control">
+              <input
+                type="checkbox"
+                checked={smimeEnabled}
+                onChange={(event) => {
+                  setSmimeEnabled(
+                    event.target.checked,
+                  )
+                }}
+              />
+
+              E-Mails mit S/MIME signieren
+            </span>
+          </label>
+
+          <label className="form-field settings-smime-file-field">
+            <span>PKCS#12-Zertifikat</span>
+
+            <input
+              key={smimeFileInputKey}
+              type="file"
+              accept=".p12,.pfx,application/x-pkcs12"
+              disabled={clearSmimeCertificate}
+              onChange={(event) => {
+                const file =
+                  event.target.files?.[0] ?? null
+
+                setSmimeCertificateFile(file)
+
+                if (file !== null) {
+                  setClearSmimeCertificate(false)
+                }
+              }}
+            />
+
+            <small className="muted">
+              {smimeCertificateConfigured
+                ? `${smimeCertificateFilename ?? 'Ein Zertifikat'} ist konfiguriert${smimeCertificateSource === 'environment' ? ' (Umgebung/Secret)' : ''}. Eine neue Datei ersetzt es beim Speichern.`
+                : 'Es ist noch kein Zertifikat konfiguriert.'}
+            </small>
+          </label>
+
+          <div className="form-field settings-password-field">
+            <span id="smime-password-label">
+              Zertifikatspasswort
+            </span>
+
+            <input
+              type="password"
+              value={smimePassword}
+              aria-labelledby="smime-password-label"
+              autoComplete="new-password"
+              disabled={clearSmimeCertificate}
+              onChange={(event) => {
+                setSmimePassword(
+                  event.target.value,
+                )
+              }}
+            />
+
+            <small className="muted">
+              {smimePasswordConfigured
+                ? 'Ein Passwort ist konfiguriert. Leer lassen, um ein hochgeladenes Passwort beizubehalten.'
+                : 'Beim ersten Upload ist das Zertifikatspasswort erforderlich.'}
+            </small>
+
+            <label className="settings-checkbox-control settings-password-clear-control">
+              <input
+                type="checkbox"
+                checked={clearSmimeCertificate}
+                disabled={
+                  smimeCertificateSource !== 'upload'
+                }
+                onChange={(event) => {
+                  const shouldClear =
+                    event.target.checked
+
+                  setClearSmimeCertificate(
+                    shouldClear,
+                  )
+
+                  if (shouldClear) {
+                    setSmimeCertificateFile(null)
+                    setSmimePassword('')
+                    setSmimeFileInputKey(
+                      (key) => key + 1,
+                    )
+                  }
+                }}
+              />
+
+              Hochgeladenes Zertifikat und Passwort
+              beim Speichern löschen
+            </label>
+          </div>
+        </div>
+
+        <p className="settings-security-warning" role="note">
+          Sicherheits-Hinweis: Lade das Zertifikat nur
+          bei lokaler Nutzung oder über eine
+          verschlüsselte HTTPS-Verbindung hoch.
+        </p>
+      </section>
+
       <div className="settings-actions">
         <button
           className="button button-primary"
           type="submit"
-          disabled={isSaving || isTesting}
+          disabled={
+            isSaving ||
+            isTesting ||
+            isTestingSmime
+          }
         >
           {isSaving
-            ? 'Mailserver wird gespeichert …'
-            : 'Mailserver speichern'}
+            ? 'Mail-Einstellungen werden gespeichert …'
+            : 'Mail-Einstellungen speichern'}
         </button>
 
         <button
           className="button"
           type="button"
-          disabled={isSaving || isTesting}
+          disabled={
+            isSaving ||
+            isTesting ||
+            isTestingSmime
+          }
           onClick={() => {
             void handleTest()
           }}
@@ -666,12 +981,32 @@ function AdminSmtpSettingsForm() {
             ? 'Testmail wird versendet …'
             : 'Mailserver testen'}
         </button>
+
+        <button
+          className="button"
+          type="button"
+          disabled={
+            isSaving ||
+            isTesting ||
+            isTestingSmime
+          }
+          onClick={() => {
+            void handleSmimeTest()
+          }}
+        >
+          {isTestingSmime
+            ? 'S/MIME-Testmail wird versendet …'
+            : 'S/MIME testen'}
+        </button>
       </div>
 
       <p className="muted">
-        Der Test verwendet die zuletzt gespeicherten
-        Einstellungen und sendet die Nachricht an die
-        E-Mail-Adresse des angemeldeten Administrators.
+        Beide Tests verwenden die zuletzt gespeicherten
+        Einstellungen und senden an die E-Mail-Adresse
+        des angemeldeten Administrators. Der
+        Mailserver-Test bleibt unsigniert; der
+        S/MIME-Test wird immer signiert, auch wenn der
+        S/MIME-Versand noch nicht aktiviert ist.
       </p>
     </form>
   )

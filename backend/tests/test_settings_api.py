@@ -1,4 +1,5 @@
 from collections.abc import Generator
+import base64
 from decimal import Decimal
 
 import pytest
@@ -25,6 +26,7 @@ from cryptography.fernet import Fernet
 from pydantic import SecretStr
 
 from app.services.smtp_secret import (
+    decrypt_smime_password,
     decrypt_smtp_password,
 )
 
@@ -780,6 +782,181 @@ def test_clears_existing_smtp_password(
         global_settings.smtp_password_encrypted
         is None
     )
+
+
+def test_uploads_and_encrypts_smime_settings(
+    admin_client: TestClient,
+    database_session: Session,
+    smtp_encryption_key: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    del smtp_encryption_key
+
+    global_settings = add_global_settings(
+        database_session,
+    )
+    certificate_data = b"test-pkcs12-data"
+    validation_calls: list[
+        tuple[bytes, str, str]
+    ] = []
+
+    def fake_validate_smime_material(
+        *,
+        pkcs12_data: bytes,
+        password: str,
+        sender_email: str,
+    ) -> None:
+        validation_calls.append(
+            (
+                pkcs12_data,
+                password,
+                sender_email,
+            )
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.settings."
+        "validate_smime_material",
+        fake_validate_smime_material,
+    )
+
+    response = admin_client.patch(
+        "/api/settings/smtp",
+        json={
+            "smtp_use_database_settings": True,
+            "smtp_host": "smtp.example.com",
+            "smtp_port": 587,
+            "smtp_timeout_seconds": "15.00",
+            "smtp_starttls": True,
+            "mail_from_address": (
+                "billing@example.com"
+            ),
+            "mail_from_name": "Witty Accounting",
+            "mail_smime_enabled": True,
+            "smime_pkcs12_base64": (
+                base64.b64encode(
+                    certificate_data
+                ).decode("ascii")
+            ),
+            "smime_pkcs12_filename": (
+                "private/signing.p12"
+            ),
+            "smime_password": (
+                "certificate-password"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["mail_smime_enabled"] is True
+    assert body[
+        "smime_certificate_configured"
+    ] is True
+    assert body[
+        "smime_certificate_filename"
+    ] == "signing.p12"
+    assert body[
+        "smime_certificate_source"
+    ] == "upload"
+    assert body[
+        "smime_password_configured"
+    ] is True
+    assert "certificate-password" not in response.text
+    assert "test-pkcs12-data" not in response.text
+
+    assert validation_calls == [
+        (
+            certificate_data,
+            "certificate-password",
+            "billing@example.com",
+        )
+    ]
+
+    database_session.refresh(global_settings)
+
+    assert (
+        global_settings.mail_smime_pkcs12_data
+        == certificate_data
+    )
+    assert (
+        global_settings.mail_smime_pkcs12_filename
+        == "signing.p12"
+    )
+
+    encrypted_password = (
+        global_settings
+        .mail_smime_pkcs12_password_encrypted
+    )
+
+    assert encrypted_password is not None
+    assert decrypt_smime_password(
+        encrypted_password
+    ) == "certificate-password"
+
+
+def test_rejects_smime_upload_without_password(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings/smtp",
+        json={
+            "smime_pkcs12_base64": (
+                base64.b64encode(
+                    b"test-pkcs12-data"
+                ).decode("ascii")
+            ),
+            "smime_pkcs12_filename": "signing.p12",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "Passwort" in response.json()["detail"]
+
+
+def test_sends_smime_test_email_to_admin(
+    admin_client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_recipient: list[str] = []
+
+    def fake_send_smime_test_email(
+        db: Session,
+        *,
+        recipient_email: str,
+    ) -> SmtpTestEmailResult:
+        assert db is database_session
+        captured_recipient.append(recipient_email)
+
+        return SmtpTestEmailResult(
+            recipient_email=recipient_email,
+            subject="Witty-Accounting S/MIME-Test",
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.settings."
+        "send_smime_test_email",
+        fake_send_smime_test_email,
+    )
+
+    response = admin_client.post(
+        "/api/settings/smtp/smime/test"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "recipient_email": "admin@example.test",
+        "subject": "Witty-Accounting S/MIME-Test",
+    }
+    assert captured_recipient == [
+        "admin@example.test"
+    ]
 
 
 def test_sends_smtp_test_email_to_admin(

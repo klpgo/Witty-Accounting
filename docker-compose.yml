@@ -52,19 +52,10 @@ services:
     volumes:
       - /srv/witty/logs:/app/logs
       - /srv/witty/invoices:/app/data/invoices
-
-    secrets:
-      - source: invoice_mail_signing_pkcs12
-        target: invoice-mail-signing.p12
-      - source: invoice_mail_signing_password
-        target: invoice-mail-signing-password
-
-secrets:
-  invoice_mail_signing_pkcs12:
-    file: /srv/witty/secrets/invoice-mail-signing.p12
-
-  invoice_mail_signing_password:
-    file: /srv/witty/secrets/invoice-mail-signing-password
+      # Optionaler Rückfallweg für ältere, dateibasierte
+      # S/MIME-Konfigurationen. Neue Zertifikate können
+      # unter Einstellungen → Mailserver hochgeladen werden.
+      - /srv/witty/secrets:/run/secrets:ro
 
 volumes:
   mariadb_data:

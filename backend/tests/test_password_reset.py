@@ -414,7 +414,6 @@ def test_password_email_uses_smime_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    del database_session
     message = build_password_reset_message(
         user=User(
             email="user@example.com",
@@ -430,6 +429,11 @@ def test_password_email_uses_smime_when_enabled(
     )
     pkcs12_path = tmp_path / "signing.p12"
     password_path = tmp_path / "password"
+    pkcs12_path.write_bytes(b"test-pkcs12-data")
+    password_path.write_text(
+        "certificate-password",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(
         "app.services.password_reset.settings.mail_smime_enabled",
@@ -444,31 +448,32 @@ def test_password_email_uses_smime_when_enabled(
         password_path,
     )
 
-    calls: list[tuple[str, object, object]] = []
+    calls: list[tuple[str, bytes, bytes]] = []
 
     def fake_sign_message(
         *,
         message: object,
         sender_email: str,
-        pkcs12_path: object,
-        password_file: object,
+        pkcs12_data: bytes,
+        password: bytes,
     ) -> bytes:
         del message
         calls.append(
             (
                 sender_email,
-                pkcs12_path,
-                password_file,
+                pkcs12_data,
+                password,
             )
         )
         return b"signed-message"
 
     monkeypatch.setattr(
-        "app.services.password_reset.sign_message",
+        "app.services.mail_smime.sign_message_from_data",
         fake_sign_message,
     )
 
     signed_message = sign_password_reset_message(
+        database_session,
         message=message,
         sender_email="service@example.com",
     )
@@ -477,7 +482,7 @@ def test_password_email_uses_smime_when_enabled(
     assert calls == [
         (
             "service@example.com",
-            pkcs12_path,
-            password_path,
+            b"test-pkcs12-data",
+            b"certificate-password",
         )
     ]

@@ -69,8 +69,8 @@ Bei den Beispielwerten muss `id` Folgendes enthalten:
 uid=1000(witty) gid=1000(witty)
 ```
 
-Wenn S/MIME aktiviert ist, müssen auch die beiden Secret-Dateien für die
-gewählte UID lesbar sein:
+Wenn noch die ältere dateibasierte S/MIME-Konfiguration verwendet wird,
+müssen auch die beiden Secret-Dateien für die gewählte UID lesbar sein:
 
 ```bash
 docker compose exec witty sh -c \
@@ -80,6 +80,5 @@ docker compose exec witty sh -c \
 ```
 
 Witty benötigt für diese Secret-Dateien nur Lesezugriff und verändert sie
-nicht. Falls der Test fehlschlägt, müssen Besitzer und Rechte der beiden
-Quelldateien im Host-Verzeichnis `./secrets` an die gewählte UID/GID
-angepasst werden.
+nicht. Bei einem über **Einstellungen → Mailserver** hochgeladenen Zertifikat
+ist diese Prüfung nicht erforderlich.

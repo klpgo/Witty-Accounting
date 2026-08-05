@@ -18,6 +18,35 @@ Absenderadresse:  eine beim Provider zulässige Adresse
 Danach sollte über die Einstellungsseite eine Test-E-Mail versendet werden.
 Witty unterstützt derzeit STARTTLS, aber noch kein implizites TLS auf Port 465.
 
+## S/MIME-Signatur
+
+Das PKCS#12-Zertifikat (`.p12` oder `.pfx`) und sein Passwort werden ebenfalls
+unter **Einstellungen → Mailserver** gepflegt. Das Zertifikat wird beim
+Speichern geprüft; dabei müssen der private Schlüssel, die Zertifikatszwecke,
+die Gültigkeit und die E-Mail-Adresse des Zertifikats zur konfigurierten
+Absenderadresse passen.
+
+Da die PKCS#12-Datei den privaten Schlüssel enthält, darf sie nur bei lokaler
+Nutzung oder über eine verschlüsselte HTTPS-Verbindung hochgeladen werden. Das
+Zertifikat bleibt passwortgeschützt in der Datenbank; das Passwort wird mit
+`SMTP_SETTINGS_ENCRYPTION_KEY` zusätzlich verschlüsselt gespeichert.
+Der Schlüssel muss vor dem Speichern gesetzt sein und darf bei Updates nicht
+geändert werden. Er kann beispielsweise so erzeugt werden:
+
+```bash
+python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+Nach dem Speichern sendet **S/MIME testen** eine signierte Testnachricht an den
+angemeldeten Administrator. Dieser Test funktioniert auch, solange
+**E-Mails mit S/MIME signieren** noch deaktiviert ist. **Mailserver testen**
+bleibt dagegen bewusst unsigniert und prüft nur den SMTP-Versand.
+
+Die bisherigen Einstellungen `MAIL_SMIME_PKCS12_PATH` und
+`MAIL_SMIME_PKCS12_PASSWORD_FILE` bleiben als Rückfallweg für vorhandene
+Installationen erhalten. Sobald ein Zertifikat über die Webseite gespeichert
+wurde, wird dieses verwendet.
+
 Bei Verwendung des Provider-Servers ist `host.docker.internal` nicht nötig.
 Der Eintrag in `docker-compose.yml` kann jedoch als lokale Ausweichmöglichkeit
 bestehen bleiben.

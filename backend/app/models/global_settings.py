@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import (
     DateTime,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Boolean,
@@ -275,6 +276,36 @@ class GlobalSettings(Base):
         str | None
     ] = mapped_column(
         String(255),
+        nullable=True,
+    )
+
+    mail_smime_enabled: Mapped[
+        bool
+    ] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+
+    mail_smime_pkcs12_data: Mapped[
+        bytes | None
+    ] = mapped_column(
+        LargeBinary(length=65535),
+        nullable=True,
+    )
+
+    mail_smime_pkcs12_filename: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    mail_smime_pkcs12_password_encrypted: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
         nullable=True,
     )
 

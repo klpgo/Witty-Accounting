@@ -14,9 +14,9 @@ from app.services.invoice_archive import (
     InvoiceArchiveError,
     get_archived_invoice_pdf,
 )
-from app.services.smime import (
-    SmimeSigningError,
-    sign_message,
+from app.services.mail_smime import (
+    MailSmimeConfigurationError,
+    sign_configured_message,
 )
 from app.services.smtp_secret import (
     SmtpSecretError,
@@ -382,6 +382,100 @@ def send_smtp_test_email(
     )
 
 
+def build_smime_test_message(
+    *,
+    recipient_email: str,
+    sender_email: str,
+    sender_name: str,
+) -> EmailMessage:
+    message = EmailMessage()
+
+    message["From"] = formataddr(
+        (
+            sender_name,
+            sender_email,
+        )
+    )
+    message["To"] = recipient_email
+    message["Subject"] = (
+        "Witty-Accounting S/MIME-Test"
+    )
+    message.set_content(
+        "Guten Tag,\n\n"
+        "diese signierte Testnachricht bestätigt, "
+        "dass die S/MIME-Einstellungen "
+        "funktionieren.\n\n"
+        "Mit freundlichen Grüßen\n"
+        f"{sender_name}\n",
+        subtype="plain",
+        charset="utf-8",
+    )
+
+    return message
+
+
+def send_smime_test_email(
+    db: Session,
+    *,
+    recipient_email: str,
+) -> SmtpTestEmailResult:
+    normalized_recipient_email = (
+        recipient_email.strip()
+    )
+
+    if not normalized_recipient_email:
+        raise InvoiceEmailRecipientError(
+            "Für den Administrator ist keine "
+            "E-Mail-Adresse hinterlegt."
+        )
+
+    smtp_configuration = load_smtp_configuration(
+        db
+    )
+    message = build_smime_test_message(
+        recipient_email=normalized_recipient_email,
+        sender_email=smtp_configuration.from_address,
+        sender_name=smtp_configuration.from_name,
+    )
+
+    try:
+        signed_message = sign_configured_message(
+            db,
+            message=message,
+            sender_email=(
+                smtp_configuration.from_address
+            ),
+            require_enabled=False,
+        )
+    except MailSmimeConfigurationError as exc:
+        raise InvoiceEmailConfigurationError(
+            "Die S/MIME-Testnachricht konnte nicht "
+            f"signiert werden: {exc}"
+        ) from exc
+
+    if signed_message is None:
+        raise InvoiceEmailConfigurationError(
+            "Die S/MIME-Konfiguration ist "
+            "unvollständig."
+        )
+
+    deliver_email_message(
+        smtp_configuration,
+        message=message,
+        recipient_email=normalized_recipient_email,
+        signed_message=signed_message,
+        delivery_error_message=(
+            "Die S/MIME-Testnachricht konnte nicht "
+            "versendet werden."
+        ),
+    )
+
+    return SmtpTestEmailResult(
+        recipient_email=normalized_recipient_email,
+        subject=str(message["Subject"]),
+    )
+
+
 def create_subject(invoice: Invoice) -> str:
     document_label = (
         "Stornorechnung"
@@ -469,38 +563,18 @@ def build_invoice_message(
 
 
 def sign_invoice_message(
+    db: Session,
     *,
     message: EmailMessage,
     sender_email: str,
 ) -> bytes | None:
-    if not settings.mail_smime_enabled:
-        return None
-
-    pkcs12_path = settings.mail_smime_pkcs12_path
-    password_file = (
-        settings.mail_smime_pkcs12_password_file
-    )
-
-    if pkcs12_path is None:
-        raise InvoiceEmailConfigurationError(
-            "Der Pfad zur S/MIME-PKCS#12-Datei "
-            "ist nicht konfiguriert."
-        )
-
-    if password_file is None:
-        raise InvoiceEmailConfigurationError(
-            "Der Pfad zur S/MIME-Passwortdatei "
-            "ist nicht konfiguriert."
-        )
-
     try:
-        return sign_message(
+        return sign_configured_message(
+            db,
             message=message,
             sender_email=sender_email,
-            pkcs12_path=pkcs12_path,
-            password_file=password_file,
         )
-    except SmimeSigningError as exc:
+    except MailSmimeConfigurationError as exc:
         raise InvoiceEmailConfigurationError(
             "Die Rechnung konnte nicht mit "
             f"S/MIME signiert werden: {exc}"
@@ -621,6 +695,7 @@ def send_invoice_email(
     )
 
     signed_message = sign_invoice_message(
+        db,
         message=message,
         sender_email=sender_email,
     )

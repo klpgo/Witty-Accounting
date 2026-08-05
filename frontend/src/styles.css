@@ -1067,6 +1067,24 @@ select {
   margin-top: 0.25rem;
 }
 
+.settings-smime-section {
+  border-top: 1px solid #dfe4ec;
+  padding-top: 1.5rem;
+}
+
+.settings-smime-file-field {
+  grid-column: 1 / -1;
+}
+
+.settings-security-warning {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid #d6a72b;
+  border-radius: 8px;
+  background: #fff8df;
+  color: #6b4d00;
+}
+
 @media (max-width: 1100px) {
   .settings-billing-grid {
     grid-template-columns: repeat(

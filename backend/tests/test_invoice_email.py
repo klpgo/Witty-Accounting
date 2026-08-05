@@ -32,10 +32,12 @@ from app.services.invoice_email import (
     InvoiceEmailRecipientError,
     InvoiceEmailStateError,
     send_invoice_email,
+    send_smime_test_email,
     send_smtp_test_email,
 )
 from app.services.smime import SmimeSigningError
 from app.services.smtp_secret import (
+    encrypt_smime_password,
     encrypt_smtp_password,
 )
 
@@ -811,6 +813,11 @@ def test_sends_signed_message_when_smime_enabled(
 
     pkcs12_path = tmp_path / "signing.p12"
     password_file = tmp_path / "password"
+    pkcs12_path.write_bytes(b"test-pkcs12-data")
+    password_file.write_text(
+        "certificate-password",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(
         settings,
@@ -840,8 +847,8 @@ def test_sends_signed_message_when_smime_enabled(
         tuple[
             EmailMessage,
             str,
-            Path,
-            Path,
+            bytes,
+            bytes,
         ]
     ] = []
 
@@ -849,22 +856,22 @@ def test_sends_signed_message_when_smime_enabled(
         *,
         message: EmailMessage,
         sender_email: str,
-        pkcs12_path: Path,
-        password_file: Path,
+        pkcs12_data: bytes,
+        password: bytes,
     ) -> bytes:
         sign_calls.append(
             (
                 message,
                 sender_email,
-                pkcs12_path,
-                password_file,
+                pkcs12_data,
+                password,
             )
         )
 
         return signed_bytes
 
     monkeypatch.setattr(
-        "app.services.invoice_email.sign_message",
+        "app.services.mail_smime.sign_message_from_data",
         fake_sign_message,
     )
     monkeypatch.setattr(
@@ -889,13 +896,13 @@ def test_sends_signed_message_when_smime_enabled(
     (
         unsigned_message,
         sender_email,
-        used_pkcs12_path,
-        used_password_file,
+        used_pkcs12_data,
+        used_password,
     ) = sign_calls[0]
 
     assert sender_email == "rechnung@example.test"
-    assert used_pkcs12_path == pkcs12_path
-    assert used_password_file == password_file
+    assert used_pkcs12_data == b"test-pkcs12-data"
+    assert used_password == b"certificate-password"
     assert unsigned_message["To"] == (
         "recipient@example.test"
     )
@@ -910,6 +917,78 @@ def test_sends_signed_message_when_smime_enabled(
         "recipient@example.test"
     ]
     assert smtp.raw_message == signed_bytes
+
+
+def test_uses_uploaded_smime_material_for_invoice(
+    database_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice = create_finalized_invoice(
+        database_session
+    )
+    archive_invoice(
+        database_session,
+        invoice,
+        tmp_path,
+    )
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            mail_smime_enabled=True,
+            mail_smime_pkcs12_data=(
+                b"uploaded-pkcs12-data"
+            ),
+            mail_smime_pkcs12_filename=(
+                "uploaded.p12"
+            ),
+            mail_smime_pkcs12_password_encrypted=(
+                encrypt_smime_password(
+                    "uploaded-password"
+                )
+            ),
+        )
+    )
+    database_session.commit()
+
+    sign_calls: list[tuple[bytes, bytes]] = []
+
+    def fake_sign_message(
+        *,
+        message: EmailMessage,
+        sender_email: str,
+        pkcs12_data: bytes,
+        password: bytes,
+    ) -> bytes:
+        del message, sender_email
+        sign_calls.append(
+            (pkcs12_data, password)
+        )
+        return b"signed-uploaded-message"
+
+    monkeypatch.setattr(
+        "app.services.mail_smime.sign_message_from_data",
+        fake_sign_message,
+    )
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FakeSMTP,
+    )
+
+    send_invoice_email(
+        database_session,
+        invoice_id=invoice.id,
+    )
+
+    assert sign_calls == [
+        (
+            b"uploaded-pkcs12-data",
+            b"uploaded-password",
+        )
+    ]
+    assert FakeSMTP.instances[0].raw_message == (
+        b"signed-uploaded-message"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1009,6 +1088,13 @@ def test_does_not_send_unsigned_mail_on_smime_error(
         "mail_smime_pkcs12_password_file",
         tmp_path / "password",
     )
+    (tmp_path / "signing.p12").write_bytes(
+        b"invalid-test-data"
+    )
+    (tmp_path / "password").write_text(
+        "test-password",
+        encoding="utf-8",
+    )
 
     def fail_signing(
         **kwargs: object,
@@ -1018,7 +1104,7 @@ def test_does_not_send_unsigned_mail_on_smime_error(
         )
 
     monkeypatch.setattr(
-        "app.services.invoice_email.sign_message",
+        "app.services.mail_smime.sign_message_from_data",
         fail_signing,
     )
     monkeypatch.setattr(
@@ -1067,8 +1153,15 @@ def test_wraps_signed_smtp_delivery_error(
         "mail_smime_pkcs12_password_file",
         tmp_path / "password",
     )
+    (tmp_path / "signing.p12").write_bytes(
+        b"invalid-test-data"
+    )
+    (tmp_path / "password").write_text(
+        "test-password",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(
-        "app.services.invoice_email.sign_message",
+        "app.services.mail_smime.sign_message_from_data",
         lambda **kwargs: b"Signed message",
     )
     monkeypatch.setattr(
@@ -1138,3 +1231,88 @@ def test_sends_smtp_test_email(
         "Mailserver-Einstellungen funktionieren"
         in plain_body.get_content()
     )
+
+
+def test_sends_signed_smime_test_even_when_disabled(
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pkcs12_path = tmp_path / "signing.p12"
+    password_path = tmp_path / "password"
+    pkcs12_path.write_bytes(b"test-pkcs12-data")
+    password_path.write_text(
+        "certificate-password",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_enabled",
+        False,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_path",
+        pkcs12_path,
+    )
+    monkeypatch.setattr(
+        settings,
+        "mail_smime_pkcs12_password_file",
+        password_path,
+    )
+
+    signed_bytes = b"signed-smime-test"
+    sign_calls: list[tuple[str, bytes, bytes]] = []
+
+    def fake_sign_message(
+        *,
+        message: EmailMessage,
+        sender_email: str,
+        pkcs12_data: bytes,
+        password: bytes,
+    ) -> bytes:
+        assert message["Subject"] == (
+            "Witty-Accounting S/MIME-Test"
+        )
+        sign_calls.append(
+            (
+                sender_email,
+                pkcs12_data,
+                password,
+            )
+        )
+        return signed_bytes
+
+    monkeypatch.setattr(
+        "app.services.mail_smime.sign_message_from_data",
+        fake_sign_message,
+    )
+    monkeypatch.setattr(
+        "app.services.invoice_email.smtplib.SMTP",
+        FakeSMTP,
+    )
+
+    result = send_smime_test_email(
+        database_session,
+        recipient_email="admin@example.test",
+    )
+
+    assert result.subject == (
+        "Witty-Accounting S/MIME-Test"
+    )
+    assert sign_calls == [
+        (
+            "rechnung@example.test",
+            b"test-pkcs12-data",
+            b"certificate-password",
+        )
+    ]
+
+    smtp = FakeSMTP.instances[0]
+
+    assert smtp.message is None
+    assert smtp.raw_message == signed_bytes
+    assert smtp.rcpt_tos == [
+        "admin@example.test"
+    ]

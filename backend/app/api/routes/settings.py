@@ -1,4 +1,7 @@
+import base64
+import binascii
 from decimal import Decimal
+import re
 from fastapi import (
     APIRouter,
     Depends,
@@ -26,12 +29,20 @@ from app.schemas.smtp_settings import (
 )
 from app.services.smtp_secret import (
     SmtpSecretError,
+    decrypt_smime_password,
+    encrypt_smime_password,
     encrypt_smtp_password,
+)
+from app.services.mail_smime import (
+    MailSmimeConfigurationError,
+    environment_smime_status,
+    validate_smime_material,
 )
 from app.services.invoice_email import (
     InvoiceEmailConfigurationError,
     InvoiceEmailDeliveryError,
     InvoiceEmailRecipientError,
+    send_smime_test_email,
     send_smtp_test_email,
 )
 
@@ -67,6 +78,62 @@ def get_global_settings(
 def build_smtp_settings_response(
     global_settings: GlobalSettings,
 ) -> SmtpSettingsResponse:
+    stored_certificate_configured = (
+        global_settings.mail_smime_pkcs12_data
+        is not None
+    )
+    stored_password_configured = (
+        global_settings
+        .mail_smime_pkcs12_password_encrypted
+        is not None
+    )
+
+    if (
+        stored_certificate_configured
+        or stored_password_configured
+    ):
+        smime_certificate_configured = (
+            stored_certificate_configured
+        )
+        smime_password_configured = (
+            stored_password_configured
+        )
+        smime_certificate_filename = (
+            global_settings
+            .mail_smime_pkcs12_filename
+        )
+        smime_certificate_source = "upload"
+    else:
+        (
+            smime_certificate_configured,
+            smime_password_configured,
+            smime_certificate_filename,
+        ) = environment_smime_status()
+        smime_certificate_source = (
+            "environment"
+            if smime_certificate_configured
+            or smime_password_configured
+            else None
+        )
+
+    smime_response_values = {
+        "mail_smime_enabled": (
+            global_settings.mail_smime_enabled
+        ),
+        "smime_certificate_configured": (
+            smime_certificate_configured
+        ),
+        "smime_certificate_filename": (
+            smime_certificate_filename
+        ),
+        "smime_certificate_source": (
+            smime_certificate_source
+        ),
+        "smime_password_configured": (
+            smime_password_configured
+        ),
+    }
+
     if (
         global_settings
         .smtp_use_database_settings
@@ -138,6 +205,7 @@ def build_smtp_settings_response(
             mail_from_name=(
                 global_settings.mail_from_name
             ),
+            **smime_response_values,
         )
 
     environment_password = (
@@ -176,6 +244,7 @@ def build_smtp_settings_response(
         mail_from_name=(
             app_settings.mail_from_name
         ),
+        **smime_response_values,
     )
 
 
@@ -244,6 +313,10 @@ def update_smtp_settings(
         exclude={
             "smtp_password",
             "clear_smtp_password",
+            "smime_pkcs12_base64",
+            "smime_pkcs12_filename",
+            "smime_password",
+            "clear_smime_certificate",
         },
     )
 
@@ -294,7 +367,7 @@ def update_smtp_settings(
             raise HTTPException(
                 status_code=(
                     status
-                    .HTTP_422_UNPROCESSABLE_ENTITY
+                    .HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
                     "Für datenbankbasierte "
@@ -335,6 +408,207 @@ def update_smtp_settings(
 
             password_was_updated = True
 
+    smime_data = (
+        global_settings.mail_smime_pkcs12_data
+    )
+    smime_filename = (
+        global_settings.mail_smime_pkcs12_filename
+    )
+    smime_password_encrypted = (
+        global_settings
+        .mail_smime_pkcs12_password_encrypted
+    )
+    smime_material_was_updated = False
+
+    if data.clear_smime_certificate:
+        smime_data = None
+        smime_filename = None
+        smime_password_encrypted = None
+        smime_material_was_updated = True
+
+    if data.smime_pkcs12_base64 is not None:
+        try:
+            decoded_certificate = base64.b64decode(
+                data.smime_pkcs12_base64,
+                validate=True,
+            )
+        except (
+            binascii.Error,
+            ValueError,
+        ) as exc:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT
+                ),
+                detail=(
+                    "Die hochgeladene S/MIME-Datei "
+                    "ist ungültig."
+                ),
+            ) from exc
+
+        if not decoded_certificate:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT
+                ),
+                detail=(
+                    "Die hochgeladene S/MIME-Datei "
+                    "ist leer."
+                ),
+            )
+
+        if len(decoded_certificate) > 65535:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+                ),
+                detail=(
+                    "Die S/MIME-Datei darf höchstens "
+                    "65.535 Byte groß sein."
+                ),
+            )
+
+        raw_filename = (
+            data.smime_pkcs12_filename or ""
+        ).strip()
+        safe_filename = re.split(
+            r"[\\/]",
+            raw_filename,
+        )[-1]
+
+        if not safe_filename.lower().endswith(
+            (".p12", ".pfx")
+        ):
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT
+                ),
+                detail=(
+                    "Das S/MIME-Zertifikat muss eine "
+                    ".p12- oder .pfx-Datei sein."
+                ),
+            )
+
+        smime_data = decoded_certificate
+        smime_filename = safe_filename
+        smime_material_was_updated = True
+
+    smime_plain_password: str | None = None
+
+    if data.smime_password is not None:
+        smime_plain_password = (
+            data.smime_password.get_secret_value()
+        )
+
+        if smime_plain_password:
+            try:
+                smime_password_encrypted = (
+                    encrypt_smime_password(
+                        smime_plain_password
+                    )
+                )
+            except SmtpSecretError as exc:
+                raise HTTPException(
+                    status_code=(
+                        status
+                        .HTTP_500_INTERNAL_SERVER_ERROR
+                    ),
+                    detail=str(exc),
+                ) from exc
+
+            smime_material_was_updated = True
+    elif smime_password_encrypted is not None:
+        try:
+            smime_plain_password = (
+                decrypt_smime_password(
+                    smime_password_encrypted
+                )
+            )
+        except SmtpSecretError as exc:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_500_INTERNAL_SERVER_ERROR
+                ),
+                detail=(
+                    "Das gespeicherte S/MIME-Passwort "
+                    "konnte nicht verwendet werden."
+                ),
+            ) from exc
+
+    candidate_smime_enabled = updates.get(
+        "mail_smime_enabled",
+        global_settings.mail_smime_enabled,
+    )
+    stored_smime_selected = (
+        smime_data is not None
+        or smime_password_encrypted is not None
+    )
+
+    if stored_smime_selected:
+        if (
+            smime_data is None
+            or smime_plain_password is None
+        ):
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT
+                ),
+                detail=(
+                    "Zum S/MIME-Zertifikat ist ein "
+                    "Passwort erforderlich."
+                ),
+            )
+
+        if (
+            smime_material_was_updated
+            or candidate_smime_enabled
+        ):
+            sender_email = (
+                str(
+                    candidate_values[
+                        "Absenderadresse"
+                    ]
+                )
+                if use_database_settings
+                else app_settings.mail_from_address
+            )
+
+            try:
+                validate_smime_material(
+                    pkcs12_data=smime_data,
+                    password=smime_plain_password,
+                    sender_email=sender_email,
+                )
+            except MailSmimeConfigurationError as exc:
+                raise HTTPException(
+                    status_code=(
+                        status
+                        .HTTP_422_UNPROCESSABLE_CONTENT
+                    ),
+                    detail=str(exc),
+                ) from exc
+    elif candidate_smime_enabled:
+        (
+            environment_certificate_configured,
+            environment_password_configured,
+            _,
+        ) = environment_smime_status()
+
+        if not (
+            environment_certificate_configured
+            and environment_password_configured
+        ):
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT
+                ),
+                detail=(
+                    "Vor dem Aktivieren muss ein "
+                    "S/MIME-Zertifikat mit Passwort "
+                    "hochgeladen werden."
+                ),
+            )
+
     for field_name, value in updates.items():
         setattr(
             global_settings,
@@ -350,6 +624,17 @@ def update_smtp_settings(
                 str,
             )
             else None
+        )
+
+    if smime_material_was_updated:
+        global_settings.mail_smime_pkcs12_data = (
+            smime_data
+        )
+        global_settings.mail_smime_pkcs12_filename = (
+            smime_filename
+        )
+        global_settings.mail_smime_pkcs12_password_encrypted = (
+            smime_password_encrypted
         )
 
     try:
@@ -376,6 +661,44 @@ def test_smtp_settings(
 ) -> SmtpTestEmailResponse:
     try:
         result = send_smtp_test_email(
+            db,
+            recipient_email=current_admin.email,
+        )
+    except (
+        InvoiceEmailConfigurationError,
+        InvoiceEmailRecipientError,
+    ) as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_CONTENT
+            ),
+            detail=str(exc),
+        ) from exc
+    except InvoiceEmailDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    return SmtpTestEmailResponse(
+        recipient_email=result.recipient_email,
+        subject=result.subject,
+    )
+
+
+@router.post(
+    "/smtp/smime/test",
+    response_model=SmtpTestEmailResponse,
+)
+def test_smime_settings(
+    current_admin: Annotated[
+        User,
+        Depends(require_admin),
+    ],
+    db: Session = Depends(get_db),
+) -> SmtpTestEmailResponse:
+    try:
+        result = send_smime_test_email(
             db,
             recipient_email=current_admin.email,
         )

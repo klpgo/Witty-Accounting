@@ -235,6 +235,33 @@ def load_signing_material(
         password_file
     )
 
+    return load_signing_material_from_data(
+        pkcs12_data=pkcs12_data,
+        password=password,
+        sender_email=sender_email,
+    )
+
+
+def load_signing_material_from_data(
+    *,
+    pkcs12_data: bytes,
+    password: bytes,
+    sender_email: str,
+) -> tuple[
+    object,
+    x509.Certificate,
+    tuple[x509.Certificate, ...],
+]:
+    if not pkcs12_data:
+        raise SmimeSigningError(
+            "Die S/MIME-PKCS#12-Datei ist leer."
+        )
+
+    if not password:
+        raise SmimeSigningError(
+            "Das S/MIME-Passwort ist leer."
+        )
+
     try:
         (
             private_key,
@@ -353,6 +380,53 @@ def sign_message(
         sender_email=sender_email,
     )
 
+    return sign_message_with_material(
+        message=message,
+        private_key=private_key,
+        certificate=certificate,
+        additional_certificates=(
+            additional_certificates
+        ),
+    )
+
+
+def sign_message_from_data(
+    *,
+    message: EmailMessage,
+    sender_email: str,
+    pkcs12_data: bytes,
+    password: bytes,
+) -> bytes:
+    (
+        private_key,
+        certificate,
+        additional_certificates,
+    ) = load_signing_material_from_data(
+        pkcs12_data=pkcs12_data,
+        password=password,
+        sender_email=sender_email,
+    )
+
+    return sign_message_with_material(
+        message=message,
+        private_key=private_key,
+        certificate=certificate,
+        additional_certificates=(
+            additional_certificates
+        ),
+    )
+
+
+def sign_message_with_material(
+    *,
+    message: EmailMessage,
+    private_key: object,
+    certificate: x509.Certificate,
+    additional_certificates: tuple[
+        x509.Certificate,
+        ...,
+    ],
+) -> bytes:
     signed_content = create_signed_content(
         message=message,
         private_key=private_key,

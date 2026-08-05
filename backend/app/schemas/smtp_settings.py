@@ -73,6 +73,11 @@ class SmtpSettingsResponse(BaseModel):
     smtp_password_configured: bool
     mail_from_address: str
     mail_from_name: str
+    mail_smime_enabled: bool
+    smime_certificate_configured: bool
+    smime_certificate_filename: str | None
+    smime_certificate_source: str | None
+    smime_password_configured: bool
 
 class SmtpTestEmailResponse(BaseModel):
     recipient_email: str
@@ -96,6 +101,23 @@ class SmtpSettingsUpdate(BaseModel):
     clear_smtp_password: bool = False
     mail_from_address: MailAddress | None = None
     mail_from_name: MailName | None = None
+    mail_smime_enabled: bool | None = None
+    smime_pkcs12_base64: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=90000,
+        ),
+    ] | None = None
+    smime_pkcs12_filename: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=255,
+        ),
+    ] | None = None
+    smime_password: SecretStr | None = None
+    clear_smime_certificate: bool = False
 
     @field_validator(
         "smtp_use_database_settings",
@@ -106,6 +128,7 @@ class SmtpSettingsUpdate(BaseModel):
         "smtp_starttls",
         "mail_from_address",
         "mail_from_name",
+        "mail_smime_enabled",
         mode="before",
     )
     @classmethod
@@ -158,6 +181,7 @@ class SmtpSettingsUpdate(BaseModel):
 
     @field_validator(
         "smtp_password",
+        "smime_password",
         mode="before",
     )
     @classmethod
@@ -182,6 +206,37 @@ class SmtpSettingsUpdate(BaseModel):
                 "Das SMTP-Passwort kann nicht "
                 "gleichzeitig gesetzt und gelöscht "
                 "werden."
+            )
+
+        if (
+            self.clear_smime_certificate
+            and (
+                self.smime_pkcs12_base64 is not None
+                or self.smime_password is not None
+            )
+        ):
+            raise ValueError(
+                "Das S/MIME-Zertifikat kann nicht "
+                "gleichzeitig gesetzt und gelöscht "
+                "werden."
+            )
+
+        if (
+            self.smime_pkcs12_base64 is not None
+            and self.smime_pkcs12_filename is None
+        ):
+            raise ValueError(
+                "Zum S/MIME-Zertifikat fehlt der "
+                "Dateiname."
+            )
+
+        if (
+            self.smime_pkcs12_filename is not None
+            and self.smime_pkcs12_base64 is None
+        ):
+            raise ValueError(
+                "Ein S/MIME-Dateiname darf nur mit "
+                "einem Zertifikat übertragen werden."
             )
 
         return self
