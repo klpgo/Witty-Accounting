@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environments
+.venv/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Uploads
+uploads/invoices/*
+uploads/logs/*
+
+# Alembic
+backend/alembic/versions/__pycache__/
+backend/alembic/versions/*.pyc
+
+# Docker
+*.pid
+
+# Tests
+backend/tests/*.xlsx
+
+# Generated temporary files
+backend/tmp/
+
+# Archived invoice PDFs
+/backend/data/invoices/
+
+backups/
+
+/secrets/
+
+#
+*.md

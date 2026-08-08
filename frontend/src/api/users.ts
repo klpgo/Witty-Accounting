@@ -1,0 +1,329 @@
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ??
+  '/api'
+
+export interface User {
+  id: number
+  email: string
+  salutation: string | null
+  first_name: string
+  last_name: string
+  address: string | null
+  phone: string | null
+  invoice_delivery_email: boolean
+  invoice_delivery_post: boolean
+  active: boolean
+  is_admin: boolean
+  last_login: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface UserProfileUpdate {
+  email?: string
+  salutation?: string | null
+  first_name?: string
+  last_name?: string
+  address?: string | null
+  phone?: string | null
+  invoice_delivery_email?: boolean
+  invoice_delivery_post?: boolean
+}
+
+export interface UserAdminUpdate
+  extends UserProfileUpdate {
+  active?: boolean
+  is_admin?: boolean
+}
+
+export interface UserCreate
+  extends UserAdminUpdate {
+  email: string
+  first_name: string
+  last_name: string
+}
+
+export type InvoiceDeliveryMethod =
+  | 'email'
+  | 'post'
+  | 'portal'
+
+export function getInvoiceDeliveryMethod(
+  user: Pick<
+    User,
+    | 'invoice_delivery_email'
+    | 'invoice_delivery_post'
+  >,
+): InvoiceDeliveryMethod {
+  if (user.invoice_delivery_post) {
+    return 'post'
+  }
+
+  if (user.invoice_delivery_email) {
+    return 'email'
+  }
+
+  return 'portal'
+}
+
+export function getInvoiceDeliveryFlags(
+  method: InvoiceDeliveryMethod,
+): Pick<
+  User,
+  | 'invoice_delivery_email'
+  | 'invoice_delivery_post'
+> {
+  return {
+    invoice_delivery_email: method === 'email',
+    invoice_delivery_post: method === 'post',
+  }
+}
+
+interface ApiErrorResponse {
+  detail?: string
+}
+
+export class UserApiError extends Error {
+  readonly status: number
+
+  constructor(
+    message: string,
+    status: number,
+  ) {
+    super(message)
+    this.name = 'UserApiError'
+    this.status = status
+  }
+}
+
+async function getErrorMessage(
+  response: Response,
+): Promise<string> {
+  try {
+    const body =
+      (await response.json()) as ApiErrorResponse
+
+    if (body.detail) {
+      return body.detail
+    }
+  } catch {
+    // Die Antwort enthielt kein JSON.
+  }
+
+  return `Anfrage fehlgeschlagen (${response.status}).`
+}
+
+function createHeaders(
+  accessToken: string,
+  includeContentType = false,
+): HeadersInit {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    ...(includeContentType
+      ? {
+          'Content-Type': 'application/json',
+        }
+      : {}),
+  }
+}
+
+export async function getOwnProfile(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/me`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
+}
+
+export async function updateOwnProfile(
+  accessToken: string,
+  payload: UserProfileUpdate,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/me`,
+    {
+      method: 'PATCH',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
+}
+
+export async function changeOwnPassword(
+  accessToken: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/me/password`,
+    {
+      method: 'POST',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+}
+
+export async function listUsers(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<User[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/users`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User[]
+}
+
+export async function getUser(
+  accessToken: string,
+  userId: number,
+  signal?: AbortSignal,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
+}
+
+export async function createUser(
+  accessToken: string,
+  payload: UserCreate,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users`,
+    {
+      method: 'POST',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
+}
+
+export async function updateUser(
+  accessToken: string,
+  userId: number,
+  payload: UserAdminUpdate,
+): Promise<User> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}`,
+    {
+      method: 'PATCH',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as User
+}
+
+export async function resetUserPassword(
+  accessToken: string,
+  userId: number,
+  newPassword: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}/password`,
+    {
+      method: 'POST',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify({
+        new_password: newPassword,
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+}

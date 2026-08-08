@@ -1,0 +1,58 @@
+name: witty
+
+services:
+
+  db:
+    image: mariadb:11
+    container_name: witty-db
+
+    restart: unless-stopped
+
+    environment:
+      MARIADB_DATABASE: "${DB_NAME:?DB_NAME muss in .env gesetzt sein}"
+      MARIADB_USER: "${DB_USER:?DB_USER muss in .env gesetzt sein}"
+      MARIADB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD muss in .env gesetzt sein}"
+      MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD muss in .env gesetzt sein}"
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+
+  backend:
+    container_name: witty
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        WITTY_UID: "${WITTY_UID:-1000}"
+        WITTY_GID: "${WITTY_GID:-1000}"
+
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    depends_on:
+      - db
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - /srv/witty/logs:/app/logs
+      - /srv/witty/invoices:/app/data/invoices
+
+volumes:
+  mariadb_data:
+    name: witty-mariadb-data
