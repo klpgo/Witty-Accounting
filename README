@@ -1,19 +1,85 @@
 Witty-Accounting is an app to support account energy consumption for
 charging an electric car using Hager Witty Wallboxes. 
 
+It is available form GitHub under MIT License.
+
 Data input is done by exporting the charging events into an *.xlsx file
 and importing it into Witty-Accounting. With the data it will look up 
 the RFID cards and the assigned persons and prepares an invoice for the
 charging events.
 
-If besides grid electricity photovoltaics are available, the energy produced
-by it can be priced with a different amount.
-
-The app includes admin pages for user, charging events and invoices.
-
 When the Hager API for electromobility becomes available, direct synchronization
 of charging events will be integrate.
 
-Installation
+If besides grid electricity photovoltaics are available, the energy produced
+by it can be priced with a different amount.
 
-.env
+The app includes admin pages for user, charging events and invoices. Users can
+view own charging events, view and download invoices.
+
+Data ist stored in a volume atted to a MariaDB container. On rebuils reuse the
+data container to keep all data.
+
+
+INSTALLTION
+===========
+The Witty-Accounting file are stored in GitHub at https://github.com/klpgo/Witty-Accounting
+
+
+Prerequisites
+-------------
+Witty-Accounting was developed on Debian. You need a working docker environment 
+including docker-buildx- and docker-compose-plugins and git to access the source
+code from the repository. In addition it uses ca-certificates and curl.
+
+Check your environment by issuing thes commands:
+- git --version
+- docker --version
+- docker buildx version
+- docker compose version
+
+The build system must have access to the internet load neccessary software packages.
+
+
+Check out the files from Git
+----------------------------
+$ git clone https://github.com/klpgo/Witty-Accounting
+
+
+Edit file .env
+--------------
+The .env file provides neccessary information to the build 
+process. There is an example .env-example enclosed in the Git archive
+
+$ mv .env-example .env
+$ vi .env
+
+
+Build and Run Witty-Accounting 
+------------------------------
+$ docker compose --env-file .env build
+$ docker compose --env-file .env up -d
+
+
+Add the first Admin User
+------------------------
+Use the following command to create the first admin user for the app.
+This user is able to connect to the app and configure the remaining
+settings using the settings page.
+
+$ docker compose run --rm --no-deps \
+  -v "$PWD/backend/scripts:/app/scripts:ro" \
+  backend python -m scripts.create_admin
+
+Only the first admin user can be created using this command. Other
+users (including other admins) are created though the user page.
+
+
+Access the App
+--------------
+The App Services are provided on port 8000 on the docker host.
+Use your browser to access the Witty-Accounting app by pointin 
+it to http://<docker host>:8000.
+
+
+

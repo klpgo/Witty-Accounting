@@ -52,10 +52,6 @@ services:
     volumes:
       - /srv/witty/logs:/app/logs
       - /srv/witty/invoices:/app/data/invoices
-      # Optionaler Rückfallweg für ältere, dateibasierte
-      # S/MIME-Konfigurationen. Neue Zertifikate können
-      # unter Einstellungen → Mailserver hochgeladen werden.
-      - /srv/witty/secrets:/run/secrets:ro
 
 volumes:
   mariadb_data:

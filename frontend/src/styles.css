@@ -746,6 +746,7 @@ h2 {
   grid-template-columns:
     minmax(0, 1fr)
     minmax(360px, 420px);
+  gap: 0;
 }
 
 .admin-user-editor {
