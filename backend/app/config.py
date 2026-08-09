@@ -24,6 +24,18 @@ class Settings(BaseSettings):
     db_user: str
     db_password: str
 
+    tenancy_enabled: bool = False
+
+    control_db_host: str | None = None
+    control_db_port: int = 3306
+    control_db_name: str | None = None
+    control_db_user: str | None = None
+    control_db_password: SecretStr | None = None
+
+    tenant_db_encryption_key: SecretStr | None = None
+    tenant_registry_cache_seconds: int = 30
+    tenant_engine_cache_size: int = 20
+
     log_level: str = "INFO"
 
     jwt_secret_key: SecretStr

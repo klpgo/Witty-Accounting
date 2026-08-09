@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.swp
+*.md
 
 # Virtual Environments
 .venv/
@@ -40,6 +42,3 @@ backend/tmp/
 backups/
 
 /secrets/
-
-#
-*.md

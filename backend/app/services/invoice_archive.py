@@ -26,6 +26,9 @@ from app.utils.utc import utc_now
 SAFE_INVOICE_NUMBER = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$"
 )
+SAFE_ARCHIVE_NAMESPACE = re.compile(
+    r"^[a-z0-9][a-z0-9_-]{0,99}$"
+)
 
 
 class InvoiceArchiveError(Exception):
@@ -71,6 +74,8 @@ def calculate_sha256(data: bytes) -> str:
 
 def get_archive_root(
     archive_root: Path | None,
+    *,
+    db: Session | None = None,
 ) -> Path:
     configured_root = (
         archive_root
@@ -78,7 +83,41 @@ def get_archive_root(
         else settings.invoice_pdf_archive_dir
     )
 
-    return Path(configured_root).expanduser().resolve()
+    resolved_root = (
+        Path(configured_root)
+        .expanduser()
+        .resolve()
+    )
+
+    if archive_root is not None or db is None:
+        return resolved_root
+
+    tenant = db.info.get("tenant")
+
+    if tenant is None:
+        if settings.tenancy_enabled:
+            raise InvoiceArchiveMetadataError(
+                "Beim Zugriff auf das "
+                "Rechnungsarchiv fehlt der "
+                "Mandantenkontext."
+            )
+
+        return resolved_root
+
+    namespace = tenant.archive_namespace
+
+    if namespace is None:
+        return resolved_root
+
+    if not SAFE_ARCHIVE_NAMESPACE.fullmatch(
+        namespace
+    ):
+        raise InvoiceArchiveMetadataError(
+            "Der konfigurierte Mandanten-Pfad für "
+            "das Rechnungsarchiv ist ungültig."
+        )
+
+    return (resolved_root / namespace).resolve()
 
 
 def resolve_archive_path(
@@ -267,7 +306,8 @@ def archive_invoice_pdf(
         )
 
     resolved_root = get_archive_root(
-        archive_root
+        archive_root,
+        db=db,
     )
 
     archive_metadata = (
@@ -410,5 +450,8 @@ def get_archived_invoice_pdf(
 
     return archived_result(
         invoice,
-        get_archive_root(archive_root),
+        get_archive_root(
+            archive_root,
+            db=db,
+        ),
     )

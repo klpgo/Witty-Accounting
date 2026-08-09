@@ -84,4 +84,14 @@ Use your browser to access the Witty-Accounting app by pointin
 it to http://<docker host>:8000.
 
 
+Multi-tenant operation
+----------------------
+Witty can use one shared frontend and backend with a separate MariaDB
+database for every tenant. The tenant is selected through the request
+hostname. Existing installations remain in single-tenant mode until
+TENANCY_ENABLED is explicitly enabled.
+
+The preparation and activation procedure is documented in
+docs/multi-tenancy.md.
+
 

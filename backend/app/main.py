@@ -37,13 +37,17 @@ from app.api.routes.settings import (
     router as settings_router,
 )
 from app.config import settings
-from app.database import engine
+from app.database import (
+    engine,
+    tenant_session_provider,
+)
 from app.logging_config import setup_logging
 from app.scheduler import (
     start_scheduler,
     stop_scheduler,
 )
 from app.version import BACKEND_VERSION
+from app.tenancy.registry import tenant_registry
 
 
 setup_logging()
@@ -117,6 +121,16 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_scheduler()
+        tenant_session_provider.dispose()
+
+        registry_engine = getattr(
+            tenant_registry,
+            "engine",
+            None,
+        )
+
+        if registry_engine is not None:
+            registry_engine.dispose()
 
 
 app = FastAPI(
@@ -151,8 +165,14 @@ app.include_router(api_router)
 def health() -> dict[str, str]:
     database = "ok"
 
+    health_engine = getattr(
+        tenant_registry,
+        "engine",
+        engine,
+    )
+
     try:
-        with engine.connect() as connection:
+        with health_engine.connect() as connection:
             connection.execute(
                 text("SELECT 1")
             )

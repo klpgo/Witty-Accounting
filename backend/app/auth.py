@@ -10,9 +10,14 @@ from jwt.exceptions import InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import (
+    get_db,
+    get_tenant_context,
+)
+from app.database import DEFAULT_TENANT
 from app.models.user import User
 from app.security import verify_password
+from app.tenancy.context import TenantContext
 
 
 JWT_ALGORITHM = "HS256"
@@ -61,11 +66,23 @@ def authenticate_user(
 
 def create_access_token(
     user: User,
+    *,
+    tenant_id: int | None = None,
 ) -> str:
+    if tenant_id is None:
+        if settings.tenancy_enabled:
+            raise RuntimeError(
+                "Beim Erzeugen eines Tokens fehlt "
+                "der Mandantenkontext."
+            )
+
+        tenant_id = DEFAULT_TENANT.id
+
     now = datetime.now(UTC)
 
     payload = {
         "sub": str(user.id),
+        "tenant_id": tenant_id,
         "iat": now,
         "exp": now
         + timedelta(
@@ -99,6 +116,10 @@ def get_current_user(
         Session,
         Depends(get_db),
     ],
+    tenant: Annotated[
+        TenantContext,
+        Depends(get_tenant_context),
+    ],
 ) -> User:
     try:
         payload = jwt.decode(
@@ -108,11 +129,23 @@ def get_current_user(
         )
 
         subject = payload.get("sub")
+        token_tenant_id = payload.get(
+            "tenant_id"
+        )
 
         if subject is None:
             raise credentials_exception()
 
         user_id = int(subject)
+
+        if token_tenant_id is None:
+            if settings.tenancy_enabled:
+                raise credentials_exception()
+
+            token_tenant_id = tenant.id
+
+        if int(token_tenant_id) != tenant.id:
+            raise credentials_exception()
 
     except (
         InvalidTokenError,

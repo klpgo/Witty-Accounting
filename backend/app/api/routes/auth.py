@@ -12,7 +12,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import (
+    get_db,
+    get_tenant_context,
+)
 from app.auth import (
     authenticate_user,
     create_access_token,
@@ -37,6 +40,7 @@ from app.services.password_reset import (
     issue_password_reset,
     reset_password_with_token,
 )
+from app.tenancy.context import TenantContext
 from app.utils.utc import utc_now
 
 router = APIRouter(
@@ -65,6 +69,10 @@ def login(
     db: Annotated[
         Session,
         Depends(get_db),
+    ],
+    tenant: Annotated[
+        TenantContext,
+        Depends(get_tenant_context),
     ],
 ) -> Token:
     normalized_username = (
@@ -117,7 +125,10 @@ def login(
             ),
         )
 
-    access_token = create_access_token(user)
+    access_token = create_access_token(
+        user,
+        tenant_id=tenant.id,
+    )
 
     user.last_login = utc_now()
     db.commit()
