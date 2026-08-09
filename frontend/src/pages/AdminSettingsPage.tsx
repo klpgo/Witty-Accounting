@@ -63,6 +63,10 @@ function AdminSettingsPage() {
     setPostalDeliveryFeeNet,
   ] = useState('')
   const [
+    billingStartDate,
+    setBillingStartDate,
+  ] = useState('')
+  const [
     invoicePaymentTermDays,
     setInvoicePaymentTermDays,
   ] = useState('')
@@ -245,6 +249,9 @@ function AdminSettingsPage() {
         )
         setPostalDeliveryFeeNet(
           loadedSettings.postal_delivery_fee_net,
+        )
+        setBillingStartDate(
+          loadedSettings.billing_start_date ?? '',
         )
         setInvoicePaymentTermDays(
           String(
@@ -529,6 +536,8 @@ function AdminSettingsPage() {
               normalizedVatRate,
             postal_delivery_fee_net:
               normalizedPostalDeliveryFee,
+            billing_start_date:
+              billingStartDate || null,
             invoice_payment_term_days:
               paymentTermDays,
             invoice_issuer_name:
@@ -562,6 +571,9 @@ function AdminSettingsPage() {
       )
       setPostalDeliveryFeeNet(
         updatedSettings.postal_delivery_fee_net,
+      )
+      setBillingStartDate(
+        updatedSettings.billing_start_date ?? '',
       )
       setInvoicePaymentTermDays(
         String(
@@ -979,6 +991,27 @@ function AdminSettingsPage() {
           <h2>Abrechnung</h2>
 
           <div className="form-grid settings-billing-grid">
+            <label className="form-field">
+              <span>Abrechnungs-Startdatum</span>
+
+              <input
+                type="date"
+                value={billingStartDate}
+                onChange={(event) => {
+                  setBillingStartDate(
+                    event.target.value,
+                  )
+                }}
+              />
+
+              <small className="muted">
+                Ladevorgänge vor diesem Datum und
+                Grundgebühren für frühere Monate werden
+                bei neuen Rechnungen ignoriert. Leer
+                bedeutet: kein Stichtag.
+              </small>
+            </label>
+
               <label className="form-field">
               <span>
                 Monatliche Grundgebühr netto

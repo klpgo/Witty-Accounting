@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import dataclass
 
@@ -502,6 +502,29 @@ def create_invoice_draft(
             f"Benutzer {user_id} wurde nicht gefunden."
         )
 
+    global_settings = db.get(
+        GlobalSettings,
+        1,
+    )
+
+    effective_service_period_start = (
+        service_period_start
+    )
+
+    if (
+        global_settings is not None
+        and global_settings.billing_start_date
+        is not None
+    ):
+        billing_start = datetime.combine(
+            global_settings.billing_start_date,
+            time.min,
+        )
+        effective_service_period_start = max(
+            service_period_start,
+            billing_start,
+        )
+
     candidate_sessions = list(
         db.scalars(
             select(ChargingSession)
@@ -514,7 +537,7 @@ def create_invoice_draft(
             .where(
                 RFIDCardAssignment.user_id == user_id,
                 ChargingSession.start_time
-                >= service_period_start,
+                >= effective_service_period_start,
                 ChargingSession.end_time
                 <= service_period_end,
                 ChargingSession.invoiced.is_(False),
@@ -562,7 +585,9 @@ def create_invoice_draft(
         find_billable_monthly_base_fee_candidates(
             db,
             user_id=user_id,
-            service_period_start=service_period_start,
+            service_period_start=(
+                effective_service_period_start
+            ),
             service_period_end=service_period_end,
         )
     )
@@ -593,11 +618,6 @@ def create_invoice_draft(
             "Für den Rechnungsempfänger ist "
             "keine Anschrift hinterlegt."
         )
-
-    global_settings = db.get(
-        GlobalSettings,
-        1,
-    )
 
     database_business_settings_configured = (
         global_settings is not None

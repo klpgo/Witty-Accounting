@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -146,6 +147,7 @@ class GlobalSettingsResponse(BaseModel):
     monthly_base_fee_net: Decimal
     monthly_base_fee_vat_rate: Decimal
     postal_delivery_fee_net: Decimal
+    billing_start_date: date | None
     invoice_payment_term_days: int
     invoice_issuer_name: str | None
     invoice_issuer_address: str | None
@@ -176,6 +178,7 @@ class GlobalSettingsUpdate(BaseModel):
     monthly_base_fee_net: BaseFeeDecimal | None = None
     monthly_base_fee_vat_rate: VatDecimal | None = None
     postal_delivery_fee_net: BaseFeeDecimal | None = None
+    billing_start_date: date | None = None
     invoice_payment_term_days: (
         PaymentTermDays | None
     ) = None

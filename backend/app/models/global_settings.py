@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Date,
     DateTime,
     Integer,
     LargeBinary,
@@ -58,6 +59,13 @@ class GlobalSettings(Base):
         nullable=False,
         default=Decimal("0.0000"),
         server_default="0.0000",
+    )
+
+    billing_start_date: Mapped[
+        date | None
+    ] = mapped_column(
+        Date,
+        nullable=True,
     )
 
     invoice_payment_term_days: Mapped[int] = (

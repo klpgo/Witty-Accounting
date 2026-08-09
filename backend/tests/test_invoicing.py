@@ -207,6 +207,122 @@ def test_creates_invoice_draft(
     assert item.gross_amount == Decimal("2.62")
 
 
+def test_ignores_sessions_before_billing_start_date(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            billing_start_date=date(
+                2026,
+                6,
+                18,
+            ),
+        )
+    )
+    database_session.commit()
+
+    with pytest.raises(NoBillableSessionsError):
+        create_invoice_draft(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(
+                2026,
+                6,
+                1,
+            ),
+            service_period_end=datetime(
+                2026,
+                7,
+                1,
+            ),
+        )
+
+
+def test_includes_sessions_on_billing_start_date(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            billing_start_date=date(
+                2026,
+                6,
+                17,
+            ),
+        )
+    )
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    assert [
+        item.item_type
+        for item in invoice.items
+    ] == ["charging_session"]
+
+
+def test_billing_start_date_skips_earlier_base_fees(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            billing_start_date=date(
+                2026,
+                6,
+                15,
+            ),
+            monthly_base_fee_net=Decimal(
+                "10.0000"
+            ),
+            monthly_base_fee_vat_rate=Decimal(
+                "19.00"
+            ),
+        )
+    )
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(
+            2026,
+            6,
+            1,
+        ),
+        service_period_end=datetime(
+            2026,
+            7,
+            1,
+        ),
+    )
+
+    assert [
+        item.item_type
+        for item in invoice.items
+    ] == ["charging_session"]
+
+
 def test_uses_global_invoice_business_settings(
     database_session: Session,
 ) -> None:

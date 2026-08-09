@@ -20,6 +20,8 @@ view own charging events, view and download invoices.
 Data ist stored in a volume atted to a MariaDB container. On rebuils reuse the
 data container to keep all data.
 
+The Witty app is in German.
+
 
 INSTALLTION
 ===========

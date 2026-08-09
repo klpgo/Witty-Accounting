@@ -1,5 +1,6 @@
 from collections.abc import Generator
 import base64
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -129,6 +130,7 @@ def add_global_settings(
     postal_delivery_fee_net: Decimal = Decimal(
         "0.0000"
     ),
+    billing_start_date: date | None = None,
     invoice_payment_term_days: int = 0,
     invoice_issuer_name: str | None = None,
     invoice_issuer_address: str | None = None,
@@ -155,6 +157,7 @@ def add_global_settings(
         postal_delivery_fee_net=(
             postal_delivery_fee_net
         ),
+        billing_start_date=billing_start_date,
         invoice_payment_term_days=(
             invoice_payment_term_days
         ),
@@ -239,6 +242,7 @@ def test_reads_admin_settings(
         "monthly_base_fee_net": "12.5000",
         "monthly_base_fee_vat_rate": "19.00",
         "postal_delivery_fee_net": "0.0000",
+        "billing_start_date": None,
         "invoice_payment_term_days": 14,
         "invoice_issuer_name": None,
         "invoice_issuer_address": None,
@@ -276,6 +280,7 @@ def test_updates_admin_settings(
             "monthly_base_fee_net": "9.9900",
             "monthly_base_fee_vat_rate": "7.00",
             "postal_delivery_fee_net": "1.6000",
+            "billing_start_date": "2026-07-01",
             "invoice_payment_term_days": 21,
             "dashboard_note": "  Wartung am Freitag  ",
             "frontend_base_url": (
@@ -293,6 +298,7 @@ def test_updates_admin_settings(
         "monthly_base_fee_net": "9.9900",
         "monthly_base_fee_vat_rate": "7.00",
         "postal_delivery_fee_net": "1.6000",
+        "billing_start_date": "2026-07-01",
         "invoice_payment_term_days": 21,
         "invoice_issuer_name": None,
         "invoice_issuer_address": None,
@@ -334,6 +340,11 @@ def test_updates_admin_settings(
         global_settings.postal_delivery_fee_net
         == Decimal("1.6000")
     )
+    assert global_settings.billing_start_date == date(
+        2026,
+        7,
+        1,
+    )
     assert (
         global_settings.invoice_payment_term_days
         == 21
@@ -363,6 +374,9 @@ def test_rejects_invalid_admin_settings(
         },
         {
             "postal_delivery_fee_net": "-0.0001",
+        },
+        {
+            "billing_start_date": "2026-02-30",
         },
         {
             "invoice_payment_term_days": -1,
@@ -396,6 +410,31 @@ def test_rejects_invalid_admin_settings(
         )
 
         assert response.status_code == 422
+
+
+def test_clears_billing_start_date(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+        billing_start_date=date(2026, 7, 1),
+    )
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={
+            "billing_start_date": None,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()[
+        "billing_start_date"
+    ] is None
+
+    database_session.refresh(global_settings)
+    assert global_settings.billing_start_date is None
 
 
 def test_rejects_blank_application_name(
