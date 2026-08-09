@@ -107,6 +107,13 @@ def get_archive_root(
     namespace = tenant.archive_namespace
 
     if namespace is None:
+        if settings.tenancy_enabled:
+            raise InvoiceArchiveMetadataError(
+                "Beim Zugriff auf das "
+                "Rechnungsarchiv fehlt der "
+                "Archiv-Namespace des Mandanten."
+            )
+
         return resolved_root
 
     if not SAFE_ARCHIVE_NAMESPACE.fullmatch(

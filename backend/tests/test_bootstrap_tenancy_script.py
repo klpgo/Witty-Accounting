@@ -27,7 +27,6 @@ def test_bootstrap_cli_uses_existing_database_settings(
             "Am Wolfsberg 42",
             "--hostname",
             " wb42.witty.kgem.de ",
-            "--use-legacy-archive-root",
         ],
     )
 
@@ -74,9 +73,7 @@ def test_bootstrap_migrates_before_registering() -> None:
             db_name="witty_accounting",
             db_user="witty",
             db_password="tenant-password",
-            archive_namespace=None,
             encryption_key=encryption_key,
-            allow_legacy_archive_root=True,
             migrate_control=migrate_control,
             migrate_tenant=migrate_tenant,
             verify_tenant=verify_tenant,
@@ -96,6 +93,7 @@ def test_bootstrap_migrates_before_registering() -> None:
             )
 
         assert tenant.slug == "existing"
+        assert tenant.archive_namespace == "existing"
         assert stages == [
             "control",
             "migrate:existing",

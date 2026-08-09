@@ -86,12 +86,13 @@ it to http://<docker host>:8000.
 
 Multi-tenant operation
 ----------------------
-Witty can use one shared frontend and backend with a separate MariaDB
-database for every tenant. The tenant is selected through the request
-hostname. Existing installations remain in single-tenant mode until
-TENANCY_ENABLED is explicitly enabled.
+The operating mode is selected through TENANCY_ENABLED during setup.
+With TENANCY_ENABLED=false Witty runs as a standalone installation and
+uses the configured database and invoice archive directly. With
+TENANCY_ENABLED=true Witty uses one shared frontend and backend with a
+separate MariaDB database and invoice archive subdirectory for every
+tenant. The tenant is selected through the request hostname.
 
 The preparation and activation procedure is documented in
 docs/multi-tenancy.md.
-
 

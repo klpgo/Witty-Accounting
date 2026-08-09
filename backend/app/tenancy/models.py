@@ -68,10 +68,10 @@ class Tenant(ControlBase):
             nullable=False,
         )
     )
-    archive_namespace: Mapped[str | None] = mapped_column(
+    archive_namespace: Mapped[str] = mapped_column(
         String(100),
         unique=True,
-        nullable=True,
+        nullable=False,
     )
     config_version: Mapped[int] = mapped_column(
         Integer,

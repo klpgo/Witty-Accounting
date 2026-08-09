@@ -1,11 +1,20 @@
 # Witty-Mandantenbetrieb aktivieren
 
-Witty verwendet im Mandantenbetrieb ein gemeinsames Frontend und Backend,
-aber eine eigene MariaDB-Datenbank je Mandant. Die Domain wird in der
-zentralen Datenbank `witty_control` exakt einem Mandanten zugeordnet.
+Beim Bootstrap wird zuerst der Betriebsmodus festgelegt:
 
-Diese Anleitung aktiviert zuerst die bereits vorhandene Witty-Datenbank als
-ersten Mandanten. Das bisherige Rechnungsarchiv wird unverändert übernommen.
+- `TENANCY_ENABLED=false`: Standalone mit einer Datenbank und dem
+  Rechnungsarchiv direkt im konfigurierten Stammverzeichnis.
+- `TENANCY_ENABLED=true`: Mandantenbetrieb mit eigener Datenbank und eigenem
+  Archiv-Unterverzeichnis `<Archiv>/<Mandanten-Slug>/` je Mandant.
+
+Witty verwendet im Mandantenbetrieb ein gemeinsames Frontend und Backend.
+Die Domain wird in der zentralen Datenbank `witty_control` exakt einem
+Mandanten zugeordnet. Auch der erste Mandant wird wie jeder weitere Mandant
+behandelt; es gibt keinen Sonderfall für das bisherige Archiv.
+
+Diese Anleitung migriert eine vorhandene Standalone-Installation in den
+Mandantenbetrieb. Das bestehende Rechnungsarchiv muss dabei einmalig in das
+Unterverzeichnis des ersten Mandanten verschoben werden.
 
 ## Sicherheitsprinzip des Ablaufs
 
@@ -69,17 +78,16 @@ TENANT_ENGINE_CACHE_SIZE=20
 ## 4. Bestehenden Mandanten vorbereiten
 
 Die Angaben für die bestehende Datenbank werden automatisch aus `DB_HOST`,
-`DB_PORT`, `DB_NAME` und `DB_USER` in der `.env` übernommen. Für den ersten
-Mandanten wird mit `--use-legacy-archive-root` das bisherige Rechnungsarchiv
-ohne Verschieben weiterverwendet.
+`DB_PORT`, `DB_NAME` und `DB_USER` in der `.env` übernommen. Der
+Archiv-Namespace wird automatisch aus dem normalisierten Mandanten-Slug
+gebildet.
 
 ```bash
 docker compose --env-file .env run --rm --no-deps \
   backend python -m scripts.bootstrap_tenancy \
   --slug <mandanten-kuerzel> \
   --name "<Mandantenname>" \
-  --hostname <witty-domain> \
-  --use-legacy-archive-root
+  --hostname <witty-domain>
 ```
 
 Abweichende Datenbankwerte können weiterhin explizit mit `--db-host`,
@@ -96,7 +104,21 @@ Das Werkzeug führt in dieser Reihenfolge aus:
 Bei einem Fehler vor der Registrierung bleibt der Host weiterhin im bisherigen
 Einzelmandantenbetrieb. Das Werkzeug zeigt keine Datenbankpasswörter an.
 
-## 5. Mandantenbetrieb einschalten
+## 5. Bestehendes Rechnungsarchiv verschieben
+
+Vor dem Umschalten muss das Backend gestoppt werden, damit während der
+Verschiebung keine Rechnung erzeugt oder abgerufen wird. Nach einem aktuellen
+Backup werden alle bisherigen Archiv-Inhalte in das Unterverzeichnis des
+ersten Mandanten verschoben. Bei einem Slug `wb42` ist das Ziel beispielsweise:
+
+```text
+/srv/witty/invoices/wb42/
+```
+
+Die in der Mandantendatenbank gespeicherten relativen PDF-Pfade bleiben dabei
+unverändert.
+
+## 6. Mandantenbetrieb einschalten
 
 Erst nach der Erfolgsmeldung aus Schritt 4 wird in `.env` geändert:
 
@@ -114,6 +136,25 @@ docker compose --env-file .env logs --tail=100 backend
 Die Anmeldung muss anschließend über die in Schritt 4 registrierte Domain
 erfolgen. Unbekannte Hostnamen erhalten keinen Zugriff auf eine
 Mandantendatenbank.
+
+## Weitere Mandanten registrieren
+
+Jeder neue Mandant erhält vor der Registrierung eine eigene, bereits
+migrierte Witty-Datenbank. Anschließend wird er registriert:
+
+```bash
+docker compose --env-file .env run --rm --no-deps \
+  backend python -m scripts.register_tenant \
+  --slug <mandanten-kuerzel> \
+  --name "<Mandantenname>" \
+  --hostname <witty-domain> \
+  --db-host db \
+  --db-port 3306 \
+  --db-name <mandanten-datenbank> \
+  --db-user <mandanten-db-benutzer>
+```
+
+Das Archiv-Unterverzeichnis wird immer automatisch aus dem Slug gebildet.
 
 ## Migrationen bei späteren Updates
 

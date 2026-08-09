@@ -60,7 +60,6 @@ def test_registers_existing_tenant_database(
         db_name="witty_kunde_a",
         db_user="witty_kunde_a",
         db_password="tenant-password",
-        archive_namespace="kunde-a",
         encryption_key=encryption_key,
     )
     registry = DatabaseTenantRegistry(
@@ -89,7 +88,6 @@ def test_rejects_duplicate_domain(
         "db_name": "witty_kunde_a",
         "db_user": "witty_kunde_a",
         "db_password": "tenant-password",
-        "archive_namespace": "kunde-a",
         "encryption_key": encryption_key,
     }
     register_tenant(
@@ -105,31 +103,25 @@ def test_rejects_duplicate_domain(
         register_tenant(
             control_db,
             slug="kunde-b",
-            **{
-                **arguments,
-                "archive_namespace": "kunde-b",
-            },
+            **arguments,
         )
 
 
-def test_legacy_archive_root_requires_explicit_flag(
+def test_archive_namespace_is_derived_from_slug(
     control_db: Session,
     encryption_key: SecretStr,
 ) -> None:
-    with pytest.raises(
-        TenantRegistrationError,
-        match="Archiv-Namespace ist erforderlich",
-    ):
-        register_tenant(
-            control_db,
-            slug="existing",
-            name="Existing",
-            hostname="existing.witty.example",
-            db_host="mariadb",
-            db_port=3306,
-            db_name="witty_existing",
-            db_user="witty_existing",
-            db_password="tenant-password",
-            archive_namespace=None,
-            encryption_key=encryption_key,
-        )
+    tenant = register_tenant(
+        control_db,
+        slug="Existing",
+        name="Existing",
+        hostname="existing.witty.example",
+        db_host="mariadb",
+        db_port=3306,
+        db_name="witty_existing",
+        db_user="witty_existing",
+        db_password="tenant-password",
+        encryption_key=encryption_key,
+    )
+
+    assert tenant.archive_namespace == "existing"

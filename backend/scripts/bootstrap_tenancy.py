@@ -21,6 +21,7 @@ from app.tenancy.registry import (
 from scripts.register_tenant import (
     TenantRegistrationError,
     register_tenant,
+    validate_slug,
 )
 
 
@@ -55,9 +56,7 @@ def bootstrap_existing_tenant(
     db_name: str,
     db_user: str,
     db_password: str,
-    archive_namespace: str | None,
     encryption_key: SecretStr,
-    allow_legacy_archive_root: bool,
     migrate_control: Callable[
         [Engine], None
     ] = migrate_control_database,
@@ -69,17 +68,21 @@ def bootstrap_existing_tenant(
     ] = verify_tenant_database,
 ):
     migrate_control(control_engine)
+    normalized_slug = validate_slug(
+        slug,
+        field_name="Slug",
+    )
 
     candidate = TenantContext(
         id=0,
-        slug=slug,
+        slug=normalized_slug,
         name=name,
         db_host=db_host,
         db_port=db_port,
         db_name=db_name,
         db_user=db_user,
         db_password=db_password,
-        archive_namespace=archive_namespace,
+        archive_namespace=normalized_slug,
         canonical_hostname=hostname,
     )
 
@@ -99,11 +102,7 @@ def bootstrap_existing_tenant(
             db_name=db_name,
             db_user=db_user,
             db_password=db_password,
-            archive_namespace=archive_namespace,
             encryption_key=encryption_key,
-            allow_legacy_archive_root=(
-                allow_legacy_archive_root
-            ),
         )
         tenant_id = tenant_model.id
 
@@ -156,20 +155,6 @@ def parse_args() -> argparse.Namespace:
         default=settings.db_user,
         help="Standard: DB_USER aus .env",
     )
-    parser.add_argument(
-        "--archive-namespace",
-        help=(
-            "Unterverzeichnis im Rechnungsarchiv."
-        ),
-    )
-    parser.add_argument(
-        "--use-legacy-archive-root",
-        action="store_true",
-        help=(
-            "Für den bestehenden ersten Mandanten: "
-            "vorhandene PDF-Pfade unverändert lassen."
-        ),
-    )
     return parser.parse_args()
 
 
@@ -205,13 +190,7 @@ def main() -> None:
             db_name=args.db_name,
             db_user=args.db_user,
             db_password=db_password,
-            archive_namespace=(
-                args.archive_namespace
-            ),
             encryption_key=encryption_key,
-            allow_legacy_archive_root=(
-                args.use_legacy_archive_root
-            ),
         )
     except (
         TenantRegistrationError,

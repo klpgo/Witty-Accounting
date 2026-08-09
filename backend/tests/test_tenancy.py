@@ -336,3 +336,41 @@ def test_archive_root_uses_tenant_namespace(
         None,
         db=db,
     ) == (tmp_path / "kunde-a").resolve()
+
+
+def test_tenant_mode_rejects_missing_archive_namespace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant = TenantContext(
+        id=10,
+        slug="kunde-a",
+        name="Kunde A",
+        db_host="db",
+        db_port=3306,
+        db_name="a",
+        db_user="a",
+        db_password="secret",
+        archive_namespace=None,
+    )
+    db = Session()
+    db.info["tenant"] = tenant
+    monkeypatch.setattr(
+        invoice_archive.settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+    monkeypatch.setattr(
+        invoice_archive.settings,
+        "tenancy_enabled",
+        True,
+    )
+
+    with pytest.raises(
+        invoice_archive.InvoiceArchiveMetadataError,
+        match="Archiv-Namespace",
+    ):
+        invoice_archive.get_archive_root(
+            None,
+            db=db,
+        )

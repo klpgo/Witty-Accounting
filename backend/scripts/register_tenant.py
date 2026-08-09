@@ -3,7 +3,7 @@ from getpass import getpass
 import re
 
 from pydantic import SecretStr
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -54,9 +54,7 @@ def register_tenant(
     db_name: str,
     db_user: str,
     db_password: str,
-    archive_namespace: str | None,
     encryption_key: SecretStr | None,
-    allow_legacy_archive_root: bool = False,
 ) -> Tenant:
     normalized_slug = validate_slug(
         slug,
@@ -89,40 +87,6 @@ def register_tenant(
         if not field_value:
             raise TenantRegistrationError(
                 f"{field_name} darf nicht leer sein."
-            )
-
-    if (
-        archive_namespace is not None
-        and allow_legacy_archive_root
-    ):
-        raise TenantRegistrationError(
-            "Archiv-Namespace und bisheriger "
-            "Archiv-Hauptpfad schließen sich aus."
-        )
-
-    if archive_namespace is not None:
-        archive_namespace = validate_slug(
-            archive_namespace,
-            field_name="Archiv-Namespace",
-        )
-    elif not allow_legacy_archive_root:
-        raise TenantRegistrationError(
-            "Ein Archiv-Namespace ist erforderlich. "
-            "Nur der bestehende erste Mandant darf "
-            "explizit den bisherigen Archiv-Hauptpfad "
-            "verwenden."
-        )
-    else:
-        legacy_archive_tenants = db.scalar(
-            select(func.count(Tenant.id)).where(
-                Tenant.archive_namespace.is_(None)
-            )
-        )
-
-        if legacy_archive_tenants:
-            raise TenantRegistrationError(
-                "Der bisherige Archiv-Hauptpfad ist "
-                "bereits einem Mandanten zugeordnet."
             )
 
     existing_tenant = db.scalar(
@@ -162,7 +126,7 @@ def register_tenant(
                 encryption_key=encryption_key,
             )
         ),
-        archive_namespace=archive_namespace,
+        archive_namespace=normalized_slug,
         config_version=1,
         domains=[
             TenantDomain(
@@ -201,23 +165,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--db-name", required=True)
     parser.add_argument("--db-user", required=True)
-    parser.add_argument(
-        "--archive-namespace",
-        help=(
-            "Unterverzeichnis im Rechnungsarchiv. "
-            "Beim vorhandenen ersten Mandanten kann "
-            "es zur Beibehaltung alter Pfade fehlen."
-        ),
-    )
-    parser.add_argument(
-        "--use-legacy-archive-root",
-        action="store_true",
-        help=(
-            "Nur für den bestehenden ersten "
-            "Mandanten: vorhandene PDF-Pfade ohne "
-            "Unterverzeichnis beibehalten."
-        ),
-    )
     return parser.parse_args()
 
 
@@ -243,15 +190,9 @@ def main() -> None:
                 db_name=args.db_name,
                 db_user=args.db_user,
                 db_password=db_password,
-                archive_namespace=(
-                    args.archive_namespace
-                ),
                 encryption_key=(
                     settings
                     .tenant_db_encryption_key
-                ),
-                allow_legacy_archive_root=(
-                    args.use_legacy_archive_root
                 ),
             )
     except TenantRegistrationError as exc:

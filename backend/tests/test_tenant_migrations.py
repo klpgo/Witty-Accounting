@@ -1,9 +1,11 @@
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine, inspect, text
 
 from app.tenancy.context import TenantContext
 from app.tenancy.migrations import (
+    CONTROL_ALEMBIC_CONFIG,
     migrate_active_tenants,
     upgrade_connection,
 )
@@ -110,3 +112,59 @@ def test_upgrade_uses_supplied_connection(
     )
 
     assert calls == [(connection, "head")]
+
+
+def test_control_migration_backfills_archive_namespace(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "control.sqlite"
+    engine = create_engine(
+        f"sqlite+pysqlite:///{database_path}"
+    )
+
+    try:
+        with engine.connect() as connection:
+            upgrade_connection(
+                connection,
+                config_path=CONTROL_ALEMBIC_CONFIG,
+                revision="6f3ce20d8f51",
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO tenants ("
+                    "id, slug, name, active, db_host, "
+                    "db_port, db_name, db_user, "
+                    "db_password_encrypted, "
+                    "archive_namespace, config_version"
+                    ") VALUES ("
+                    "1, 'wb42', 'WB42', 1, 'db', 3306, "
+                    "'witty', 'witty', 'encrypted', "
+                    "NULL, 1)"
+                )
+            )
+            connection.commit()
+
+            upgrade_connection(
+                connection,
+                config_path=CONTROL_ALEMBIC_CONFIG,
+            )
+
+            namespace = connection.scalar(
+                text(
+                    "SELECT archive_namespace "
+                    "FROM tenants WHERE slug = 'wb42'"
+                )
+            )
+            columns = {
+                column["name"]: column
+                for column in inspect(
+                    connection
+                ).get_columns("tenants")
+            }
+
+        assert namespace == "wb42"
+        assert not columns[
+            "archive_namespace"
+        ]["nullable"]
+    finally:
+        engine.dispose()

@@ -7,7 +7,6 @@ from sqlalchemy import (
     Engine,
     URL,
     create_engine,
-    func,
     select,
 )
 from sqlalchemy.orm import Session
@@ -251,19 +250,10 @@ class DatabaseTenantRegistry:
             )
 
         if tenant_model.archive_namespace is None:
-            legacy_archive_tenants = db.scalar(
-                select(func.count(Tenant.id)).where(
-                    Tenant.active.is_(True),
-                    Tenant.archive_namespace.is_(None),
-                )
+            raise TenantRegistryError(
+                f"Mandant {tenant_model.id} hat keinen "
+                "Archiv-Namespace."
             )
-
-            if legacy_archive_tenants != 1:
-                raise TenantRegistryError(
-                    "Der bisherige Archiv-Hauptpfad "
-                    "darf nur einem aktiven Mandanten "
-                    "zugeordnet sein."
-                )
 
         return TenantContext(
             id=tenant_model.id,
