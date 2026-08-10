@@ -24,7 +24,11 @@ class TenantRegistryError(RuntimeError):
 
 
 class TenantNotFoundError(TenantRegistryError):
-    """No active tenant is registered for a hostname."""
+    """No tenant is registered for a hostname."""
+
+
+class TenantInactiveError(TenantRegistryError):
+    """The tenant registered for a hostname is inactive."""
 
 
 def normalize_hostname(hostname: str) -> str:
@@ -155,17 +159,21 @@ class DatabaseTenantRegistry:
                 .where(
                     TenantDomain.hostname
                     == normalized,
-                    Tenant.active.is_(True),
                 )
             ).one_or_none()
 
             if row is None:
                 raise TenantNotFoundError(
-                    "Für diesen Host ist kein aktiver "
-                    "Mandant registriert."
+                    "Für diesen Host ist kein Mandant "
+                    "registriert."
                 )
 
             tenant_model, domain_model = row
+
+            if not tenant_model.active:
+                raise TenantInactiveError(
+                    "Der Mandant ist gesperrt."
+                )
 
             tenant = self._build_context(
                 db,

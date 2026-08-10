@@ -11,11 +11,15 @@ from fastapi import (
 from sqlalchemy.orm import Session
 from typing import Annotated
 
-from app.api.dependencies import get_db
+from app.api.dependencies import (
+    get_db,
+    get_tenant_context,
+)
 from app.auth import require_admin
 from app.config import settings as app_settings
 from app.models.global_settings import GlobalSettings
 from app.models.user import User
+from app.tenancy.context import TenantContext
 
 from app.schemas.settings import (
     GlobalSettingsResponse,
@@ -254,6 +258,9 @@ def build_smtp_settings_response(
 )
 def read_public_settings(
     db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(
+        get_tenant_context
+    ),
 ) -> PublicSettingsResponse:
     global_settings = db.get(
         GlobalSettings,
@@ -266,10 +273,12 @@ def read_public_settings(
         if app_name:
             return PublicSettingsResponse(
                 app_name=app_name,
+                tenant_name=tenant.name,
             )
 
     return PublicSettingsResponse(
         app_name=app_settings.app_name,
+        tenant_name=tenant.name,
     )
 
 

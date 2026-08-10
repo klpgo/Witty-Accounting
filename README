@@ -96,3 +96,35 @@ tenant. The tenant is selected through the request hostname.
 The preparation and activation procedure is documented in
 docs/multi-tenancy.md.
 
+
+Local tenant administration
+---------------------------
+The separate `witty-control` service manages tenants and is bound only to the
+server loopback address at `http://127.0.0.1:8001`. Add a long control password
+and an independent session secret (at least 32 characters) to `.env`:
+
+```dotenv
+WITTY_CONTROL_PASSWORD=<long-random-password>
+WITTY_CONTROL_SESSION_SECRET=<independent-random-secret>
+WITTY_CONTROL_SESSION_MINUTES=30
+WITTY_CONTROL_PORT=8001
+```
+
+Build and start it with:
+
+```bash
+docker compose --env-file .env build control
+docker compose --env-file .env up -d control
+```
+
+For a remote server use an SSH tunnel and then open
+`http://127.0.0.1:8001` locally:
+
+```bash
+ssh -L 8001:127.0.0.1:8001 <server>
+```
+
+Creating a tenant creates its database, a random database password, all schema
+migrations and the first administrator. Deleting a tenant permanently removes
+its registry entry, database, database user and invoice archive. Create an
+external backup first; this deletion cannot be undone.

@@ -1,14 +1,17 @@
 from pathlib import Path
 
 from cryptography.fernet import Fernet
+from fastapi import HTTPException
 from pydantic import SecretStr
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
 from app import database as database_module
+from app.api import dependencies as dependencies_module
 from app.config import Settings
 from app.database import TenantSessionProvider
 from app.services import invoice_archive
@@ -21,6 +24,7 @@ from app.tenancy.models import (
 from app.tenancy.registry import (
     DatabaseTenantRegistry,
     LegacyTenantRegistry,
+    TenantInactiveError,
     TenantNotFoundError,
     TenantRegistryError,
     build_tenant_registry,
@@ -162,24 +166,14 @@ def test_registry_resolves_alias_to_canonical_domain(
     )
 
 
-@pytest.mark.parametrize(
-    ("hostname", "active"),
-    [
-        ("unknown.witty.example", True),
-        ("kunde-a.witty.example", False),
-    ],
-)
-def test_registry_rejects_unknown_or_inactive_tenant(
+def test_registry_rejects_unknown_tenant(
     control_engine,
     tenant_encryption_key: SecretStr,
-    hostname: str,
-    active: bool,
 ) -> None:
     with Session(control_engine) as db:
         add_tenant(
             db,
             encryption_key=tenant_encryption_key,
-            active=active,
         )
 
     registry = DatabaseTenantRegistry(
@@ -188,7 +182,77 @@ def test_registry_rejects_unknown_or_inactive_tenant(
     )
 
     with pytest.raises(TenantNotFoundError):
-        registry.resolve(hostname)
+        registry.resolve("unknown.witty.example")
+
+
+def test_registry_reports_inactive_tenant(
+    control_engine,
+    tenant_encryption_key: SecretStr,
+) -> None:
+    with Session(control_engine) as db:
+        add_tenant(
+            db,
+            encryption_key=tenant_encryption_key,
+            active=False,
+        )
+
+    registry = DatabaseTenantRegistry(
+        engine=control_engine,
+        encryption_key=tenant_encryption_key,
+    )
+
+    with pytest.raises(
+        TenantInactiveError,
+        match="gesperrt",
+    ):
+        registry.resolve("kunde-a.witty.example")
+
+
+def test_tenant_dependency_reports_blocked_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class BlockedTenantRegistry:
+        def resolve(self, hostname: str) -> None:
+            assert hostname == "kunde-a.witty.example"
+            raise TenantInactiveError(
+                "Der Mandant ist gesperrt."
+            )
+
+    monkeypatch.setattr(
+        dependencies_module,
+        "tenant_registry",
+        BlockedTenantRegistry(),
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "https",
+            "path": "/api/auth/token",
+            "query_string": b"",
+            "headers": [
+                (
+                    b"host",
+                    b"kunde-a.witty.example",
+                )
+            ],
+            "client": ("127.0.0.1", 1234),
+            "server": (
+                "kunde-a.witty.example",
+                443,
+            ),
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        dependencies_module.get_tenant_context(
+            request
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == (
+        "Dieser Mandant ist gesperrt."
+    )
 
 
 def make_settings(**overrides) -> Settings:

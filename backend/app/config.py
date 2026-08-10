@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     tenant_registry_cache_seconds: int = 30
     tenant_engine_cache_size: int = 20
 
+    witty_control_password: SecretStr | None = None
+    witty_control_session_secret: SecretStr | None = None
+    witty_control_session_minutes: int = 30
+
+    tenant_provision_db_host: str | None = None
+    tenant_provision_db_port: int | None = None
+    tenant_provision_db_user: str = "root"
+    tenant_provision_db_password: SecretStr | None = None
+    tenant_provision_db_allowed_host: str = "%"
+
     log_level: str = "INFO"
 
     jwt_secret_key: SecretStr

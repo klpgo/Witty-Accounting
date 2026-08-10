@@ -9,7 +9,7 @@ import { useAppSettings } from '../settings/useAppSettings'
 
 
 function ForgotPasswordPage() {
-  const { appName } = useAppSettings()
+  const { tenantName } = useAppSettings()
   const [email, setEmail] = useState('')
   const [isSubmitting, setIsSubmitting] =
     useState(false)
@@ -45,7 +45,7 @@ function ForgotPasswordPage() {
   return (
     <main className="page page-centered">
       <section className="card login-card">
-        <p className="eyebrow">{appName}</p>
+        <p className="eyebrow">{tenantName}</p>
 
         <h1>Passwort vergessen</h1>
 

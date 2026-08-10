@@ -9,13 +9,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.api.dependencies import get_db
+from app.api.dependencies import (
+    get_db,
+    get_tenant_context,
+)
 from app.auth import require_admin
 from app.config import settings
 from app.database import Base
 from app.main import app
 from app.models.global_settings import GlobalSettings
 from app.models.user import User
+from app.tenancy.context import TenantContext
 
 from app.services.invoice_email import (
     InvoiceEmailConfigurationError,
@@ -66,6 +70,20 @@ def client(
         yield database_session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[
+        get_tenant_context
+    ] = lambda: TenantContext(
+        id=42,
+        slug="testmandant",
+        name="Witty Testmandant",
+        db_host="db",
+        db_port=3306,
+        db_name="testmandant",
+        db_user="testmandant",
+        db_password="not-used",
+        archive_namespace="testmandant",
+        canonical_hostname="test.example.de",
+    )
 
     try:
         with TestClient(app) as test_client:
@@ -202,6 +220,7 @@ def test_reads_public_application_name(
     assert response.status_code == 200
     assert response.json() == {
         "app_name": "Meine Wallbox-Abrechnung",
+        "tenant_name": "Witty Testmandant",
     }
 
 
@@ -215,6 +234,7 @@ def test_public_settings_uses_configuration_fallback(
     assert response.status_code == 200
     assert response.json() == {
         "app_name": settings.app_name,
+        "tenant_name": "Witty Testmandant",
     }
 
 

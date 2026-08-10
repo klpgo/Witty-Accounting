@@ -4,6 +4,7 @@ const API_BASE_URL =
 
 export interface PublicSettings {
   app_name: string
+  tenant_name: string
 }
 
 export interface GlobalSettings {

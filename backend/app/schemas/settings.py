@@ -134,6 +134,7 @@ InvoicePdfFormat = Literal[
 
 class PublicSettingsResponse(BaseModel):
     app_name: str
+    tenant_name: str
 
 
 class GlobalSettingsResponse(BaseModel):

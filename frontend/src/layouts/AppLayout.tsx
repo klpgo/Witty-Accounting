@@ -8,7 +8,7 @@ import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
 
 function AppLayout() {
-  const { appName } = useAppSettings()
+  const { tenantName } = useAppSettings()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
 
@@ -17,7 +17,7 @@ function AppLayout() {
     : 'Administrator'
 
   const brandMark =
-    appName
+    tenantName
       .split(/[\s-]+/)
       .filter(Boolean)
       .slice(0, 2)
@@ -49,7 +49,7 @@ function AppLayout() {
             </span>
 
             <div>
-              <strong>{appName}</strong>
+              <strong>{tenantName}</strong>
 
               <span>
                 Verwaltungsoberfläche

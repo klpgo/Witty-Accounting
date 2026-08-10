@@ -24,6 +24,9 @@ export function AppSettingsProvider({
   const [appName, setAppName] = useState(
     DEFAULT_APP_NAME,
   )
+  const [tenantName, setTenantName] = useState(
+    DEFAULT_APP_NAME,
+  )
 
   const [status, setStatus] =
     useState<AppSettingsStatus>('loading')
@@ -36,12 +39,18 @@ export function AppSettingsProvider({
 
         const normalizedName =
           publicSettings.app_name.trim()
+        const normalizedTenantName =
+          publicSettings.tenant_name.trim()
 
         setAppName(
           normalizedName || DEFAULT_APP_NAME,
         )
+        setTenantName(
+          normalizedTenantName || DEFAULT_APP_NAME,
+        )
       } catch {
         setAppName(DEFAULT_APP_NAME)
+        setTenantName(DEFAULT_APP_NAME)
       } finally {
         setStatus('ready')
       }
@@ -58,11 +67,13 @@ export function AppSettingsProvider({
   const contextValue = useMemo(
     () => ({
       appName,
+      tenantName,
       status,
       refreshSettings,
     }),
     [
       appName,
+      tenantName,
       status,
       refreshSettings,
     ],

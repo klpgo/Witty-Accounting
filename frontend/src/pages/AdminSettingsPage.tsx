@@ -839,8 +839,8 @@ function AdminSettingsPage() {
               />
 
               <small className="muted">
-                Wird im Login, in der Kopfzeile und
-                als Browser-Titel angezeigt.
+                Wird als Browser-Titel und in E-Mails
+                angezeigt.
               </small>
             </label>
           </section>

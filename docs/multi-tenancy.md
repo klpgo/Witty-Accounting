@@ -1,5 +1,25 @@
 # Witty-Mandantenbetrieb aktivieren
 
+## Lokale Control-Oberfläche
+
+Die Control-Oberfläche läuft als eigener Compose-Dienst `control` auf Port
+8001. Docker veröffentlicht diesen Port ausschließlich auf `127.0.0.1`; er
+darf nicht über einen Reverse Proxy oder eine öffentliche Firewallfreigabe
+erreichbar gemacht werden.
+
+Sie unterstützt den vollständigen Mandanten-Lebenszyklus:
+
+- Neue Datenbank mit dem Mandantenkürzel als Datenbankname erzeugen
+- Zufälligen, verschlüsselt gespeicherten DB-Zugang erzeugen
+- Alembic-Migrationen und ersten Administrator anlegen
+- Mandanten sperren und entsperren
+- Registrierung, Datenbank, DB-Benutzer und Rechnungsarchiv vollständig löschen
+
+Das vollständige Löschen ist nicht wiederherstellbar. Ein Backup außerhalb
+des Witty-Datenverzeichnisses ist vor dem Löschvorgang zwingend erforderlich.
+Bei einem Teilfehler bleibt der Control-Eintrag gesperrt erhalten, damit die
+Bereinigung nach Behebung der Ursache wiederholt werden kann.
+
 Beim Bootstrap wird zuerst der Betriebsmodus festgelegt:
 
 - `TENANCY_ENABLED=false`: Standalone mit einer Datenbank und dem
