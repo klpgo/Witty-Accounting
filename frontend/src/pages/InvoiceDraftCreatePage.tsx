@@ -13,6 +13,10 @@ import {
   InvoiceApiError,
 } from '../api/invoices'
 import {
+  getGlobalSettings,
+  SettingsApiError,
+} from '../api/settings'
+import {
   listUsers,
   UserApiError,
   type User,
@@ -61,9 +65,9 @@ function getDefaultPeriodEnd(): string {
     new Date(
       now.getFullYear(),
       now.getMonth() + 1,
+      1,
       0,
-      23,
-      59,
+      0,
     ),
   )
 }
@@ -77,6 +81,12 @@ function getUserLabel(user: User): string {
     .join(' ')
 
   return `${fullName} – ${user.email}`
+}
+
+function formatGermanDate(value: string): string {
+  const [year, month, day] = value.split('-')
+
+  return `${day}.${month}.${year}`
 }
 
 function InvoiceDraftCreatePage() {
@@ -105,6 +115,9 @@ function InvoiceDraftCreatePage() {
   const [isSubmitting, setIsSubmitting] =
     useState(false)
 
+  const [billingStartDate, setBillingStartDate] =
+    useState<string | null>(null)
+
   const [
     errorMessage,
     setErrorMessage,
@@ -126,12 +139,19 @@ function InvoiceDraftCreatePage() {
     const token = accessToken
     const controller = new AbortController()
 
-    async function loadUsers(): Promise<void> {
+    async function loadFormData(): Promise<void> {
       try {
-        const loadedUsers = await listUsers(
-          token,
-          controller.signal,
-        )
+        const [loadedUsers, globalSettings] =
+          await Promise.all([
+            listUsers(
+              token,
+              controller.signal,
+            ),
+            getGlobalSettings(
+              token,
+              controller.signal,
+            ),
+          ])
 
         const activeUsers = loadedUsers.filter(
           (user) => user.active,
@@ -144,6 +164,10 @@ function InvoiceDraftCreatePage() {
             String(activeUsers[0].id),
           )
         }
+
+        setBillingStartDate(
+          globalSettings.billing_start_date,
+        )
       } catch (error) {
         if (
           error instanceof Error &&
@@ -153,7 +177,8 @@ function InvoiceDraftCreatePage() {
         }
 
         if (
-          error instanceof UserApiError &&
+          (error instanceof UserApiError ||
+            error instanceof SettingsApiError) &&
           error.status === 401
         ) {
           signOut()
@@ -177,12 +202,26 @@ function InvoiceDraftCreatePage() {
       }
     }
 
-    void loadUsers()
+    void loadFormData()
 
     return () => {
       controller.abort()
     }
   }, [navigate, signOut])
+
+  const billingStartDateTime =
+    billingStartDate === null
+      ? null
+      : `${billingStartDate}T00:00`
+
+  const periodIsBeforeBillingStart =
+    billingStartDateTime !== null &&
+    servicePeriodEnd <= billingStartDateTime
+
+  const periodStartsBeforeBillingStart =
+    billingStartDateTime !== null &&
+    servicePeriodStart < billingStartDateTime &&
+    servicePeriodEnd > billingStartDateTime
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -206,6 +245,13 @@ function InvoiceDraftCreatePage() {
     ) {
       setErrorMessage(
         'Das Ende des Leistungszeitraums muss nach dem Beginn liegen.',
+      )
+      return
+    }
+
+    if (periodIsBeforeBillingStart) {
+      setErrorMessage(
+        'Der gewählte Leistungszeitraum liegt vollständig vor dem Abrechnungs-Startdatum.',
       )
       return
     }
@@ -373,6 +419,46 @@ function InvoiceDraftCreatePage() {
               </label>
             </div>
 
+            {billingStartDate !== null && (
+              <div
+                className={[
+                  'billing-start-notice',
+                  periodIsBeforeBillingStart ||
+                  periodStartsBeforeBillingStart
+                    ? 'billing-start-notice-warning'
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                role={
+                  periodIsBeforeBillingStart
+                    ? 'alert'
+                    : 'note'
+                }
+              >
+                <strong>
+                  Abrechnungs-Startdatum:{' '}
+                  {formatGermanDate(
+                    billingStartDate,
+                  )}
+                </strong>
+
+                <span>
+                  {periodIsBeforeBillingStart
+                    ? ' Der gewählte Leistungszeitraum liegt vollständig davor. Es können keine Ladevorgänge oder Grundgebühren übernommen werden.'
+                    : periodStartsBeforeBillingStart
+                      ? ' Der gewählte Zeitraum beginnt davor. Frühere Ladevorgänge und Grundgebühren werden nicht übernommen.'
+                      : ' Ladevorgänge und Grundgebühren vor diesem Datum werden nicht abgerechnet.'}
+                </span>
+
+                {periodIsBeforeBillingStart && (
+                  <Link to="/admin/settings">
+                    Startdatum in den Einstellungen ändern
+                  </Link>
+                )}
+              </div>
+            )}
+
             {errorMessage && (
               <p
                 className="form-error"
@@ -395,7 +481,8 @@ function InvoiceDraftCreatePage() {
                 type="submit"
                 disabled={
                   isSubmitting ||
-                  users.length === 0
+                  users.length === 0 ||
+                  periodIsBeforeBillingStart
                 }
               >
                 {isSubmitting

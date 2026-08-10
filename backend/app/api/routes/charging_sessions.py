@@ -8,6 +8,7 @@ from app.api.dependencies import get_db
 from app.auth import get_current_user
 from app.models.charging_session import ChargingSession
 from app.models.invoice import Invoice
+from app.models.rfid_card import RFIDCard
 from app.models.rfid_card_assignment import (
     RFIDCardAssignment,
 )
@@ -45,6 +46,7 @@ def list_charging_sessions(
             ),
             User.first_name,
             User.last_name,
+            RFIDCard.rfid_number,
             Invoice.invoice_number,
             Invoice.status.label("invoice_status"),
         )
@@ -56,6 +58,11 @@ def list_charging_sessions(
         .outerjoin(
             User,
             RFIDCardAssignment.user_id == User.id,
+        )
+        .outerjoin(
+            RFIDCard,
+            ChargingSession.rfid_card_id
+            == RFIDCard.id,
         )
         .outerjoin(
             Invoice,
@@ -80,6 +87,7 @@ def list_charging_sessions(
         assigned_user_id,
         first_name,
         last_name,
+        rfid_number,
         invoice_number,
         invoice_status,
     ) in rows:
@@ -98,6 +106,7 @@ def list_charging_sessions(
                     and last_name is not None
                     else None
                 ),
+                rfid_number=rfid_number,
                 station_id=charging_session.station_id,
                 start_time=charging_session.start_time,
                 end_time=charging_session.end_time,

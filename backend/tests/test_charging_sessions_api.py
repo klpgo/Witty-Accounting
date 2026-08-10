@@ -324,6 +324,9 @@ def test_admin_reads_all_charging_sessions(
     ]
 
     assert data[0]["user_id"] == own_user.id
+    assert data[0]["rfid_number"] == (
+        own_card.rfid_number
+    )
     assert data[0]["invoiced"] is True
     assert (
         data[0]["invoice_id"]
@@ -340,6 +343,7 @@ def test_admin_reads_all_charging_sessions(
     assert data[1]["invoice_status"] == "draft"
 
     assert data[3]["user_id"] is None
+    assert data[3]["rfid_number"] is None
 
 
 def test_user_reads_only_own_charging_sessions(
@@ -441,6 +445,9 @@ def test_user_reads_only_own_charging_sessions(
     ]
 
     assert data[0]["invoiced"] is True
+    assert data[0]["rfid_number"] == (
+        own_card.rfid_number
+    )
     assert (
         data[0]["invoice_id"]
         == finalized_invoice.id

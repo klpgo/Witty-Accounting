@@ -1,4 +1,5 @@
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Literal
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -8,6 +9,11 @@ from app.models.energy_price import EnergyPrice
 
 
 COST_QUANTIZER = Decimal("0.0001")
+PricingStatus = Literal[
+    "priced",
+    "missing_price",
+    "invalid_energy",
+]
 
 
 def to_decimal(value: float | Decimal) -> Decimal:
@@ -45,6 +51,52 @@ def find_energy_price(
         )
         .limit(1)
     )
+
+
+def price_charging_session(
+    db: Session,
+    charging_session: ChargingSession,
+) -> PricingStatus:
+    """Bepreist genau einen Ladevorgang ohne Commit."""
+    energy_total = to_decimal(
+        charging_session.energy_total_kwh
+    )
+    energy_pv = to_decimal(
+        charging_session.energy_pv_kwh
+    )
+
+    if (
+        energy_total < Decimal("0")
+        or energy_pv < Decimal("0")
+        or energy_pv > energy_total
+    ):
+        return "invalid_energy"
+
+    energy_price = find_energy_price(
+        db=db,
+        session=charging_session,
+    )
+
+    if energy_price is None:
+        return "missing_price"
+
+    energy_grid = energy_total - energy_pv
+
+    charging_session.cost_grid_net = round_cost(
+        energy_grid
+        * to_decimal(
+            energy_price.grid_price_net
+        )
+    )
+    charging_session.cost_pv_net = round_cost(
+        energy_pv
+        * to_decimal(
+            energy_price.pv_price_net
+        )
+    )
+    charging_session.vat_rate = energy_price.vat_rate
+
+    return "priced"
 
 
 def price_charging_sessions(
@@ -101,50 +153,18 @@ def price_charging_sessions(
             skipped_invoiced += 1
             continue
 
-        energy_total = to_decimal(
-            charging_session.energy_total_kwh
+        pricing_status = price_charging_session(
+            db,
+            charging_session,
         )
 
-        energy_pv = to_decimal(
-            charging_session.energy_pv_kwh
-        )
-
-        if (
-            energy_total < Decimal("0")
-            or energy_pv < Decimal("0")
-            or energy_pv > energy_total
-        ):
+        if pricing_status == "invalid_energy":
             invalid_energy += 1
             continue
 
-        energy_price = find_energy_price(
-            db=db,
-            session=charging_session,
-        )
-
-        if energy_price is None:
+        if pricing_status == "missing_price":
             missing_price += 1
             continue
-
-        energy_grid = energy_total - energy_pv
-
-        charging_session.cost_grid_net = round_cost(
-            energy_grid
-            * to_decimal(
-                energy_price.grid_price_net
-            )
-        )
-
-        charging_session.cost_pv_net = round_cost(
-            energy_pv
-            * to_decimal(
-                energy_price.pv_price_net
-            )
-        )
-
-        charging_session.vat_rate = (
-            energy_price.vat_rate
-        )
 
         priced += 1
 

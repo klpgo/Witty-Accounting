@@ -51,6 +51,28 @@ from app.services.invoice_email import (
     InvoiceEmailStateError,
 )
 
+
+@pytest.fixture(autouse=True)
+def invoice_issuer_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_issuer_name",
+        "Witty Test",
+    )
+    monkeypatch.setattr(
+        settings,
+        "invoice_issuer_address",
+        "Testweg 1, 12345 Teststadt",
+    )
+    monkeypatch.setattr(
+        settings,
+        "invoice_tax_number",
+        "12345",
+    )
+
+
 @pytest.fixture
 def database_session() -> Generator[
     Session,
@@ -340,6 +362,58 @@ def test_creates_base_fee_only_draft_via_api(
     assert item["vat_rate"] == "19.00"
     assert item["vat_amount"] == "1.90"
     assert item["gross_amount"] == "11.90"
+
+
+def test_draft_reports_missing_historical_tariff(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user, charging_session = create_billable_session(
+        database_session
+    )
+    energy_price = database_session.scalar(
+        select(EnergyPrice)
+    )
+
+    assert energy_price is not None
+
+    charging_session.cost_grid_net = None
+    charging_session.cost_pv_net = None
+    charging_session.vat_rate = None
+    database_session.delete(energy_price)
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("10.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    database_session.commit()
+
+    response = client.post(
+        "/api/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": (
+                "2026-06-01T00:00:00"
+            ),
+            "service_period_end": (
+                "2026-07-01T00:00:00"
+            ),
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": (
+            "Kein gültiger Tarif für "
+            f"Ladevorgang {charging_session.id} "
+            "vom 17.06.2026."
+        )
+    }
+    assert database_session.scalar(
+        select(Invoice.id)
+    ) is None
 
 
 def test_create_draft_rejects_missing_recipient_address(

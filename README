@@ -59,8 +59,8 @@ $ vi .env
 
 Build and Run Witty-Accounting 
 ------------------------------
-$ docker compose --env-file .env build
-$ docker compose --env-file .env up -d
+$ docker compose build
+$ docker compose up -d
 
 
 Add the first Admin User

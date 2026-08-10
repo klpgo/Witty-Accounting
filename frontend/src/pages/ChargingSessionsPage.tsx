@@ -324,7 +324,7 @@ function ChargingSessionsPage() {
         visibleChargingSessions.length > 0 && (
           <section className="card table-card">
             <div className="table-scroll">
-              <table className="data-table">
+              <table className="data-table compact-table charging-sessions-table">
                 <thead>
                   <tr>
                     <th>Beginn</th>
@@ -334,6 +334,7 @@ function ChargingSessionsPage() {
                       <th>Benutzer</th>
                     )}
 
+                    <th>RFID-Karte</th>
                     <th>Ladestation</th>
 
                     <th className="table-number">
@@ -376,6 +377,10 @@ function ChargingSessionsPage() {
                             {chargingSession.user_name ?? '-'}
                           </td>
                         )}
+
+                        <td>
+                          {chargingSession.rfid_number ?? '–'}
+                        </td>
 
                         <td>
                           {
