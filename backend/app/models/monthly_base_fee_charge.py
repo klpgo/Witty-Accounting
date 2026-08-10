@@ -49,6 +49,7 @@ class MonthlyBaseFeeCharge(Base):
             ondelete="RESTRICT",
         ),
         nullable=False,
+        index=True,
     )
 
     rfid_assignment_id: Mapped[int] = mapped_column(

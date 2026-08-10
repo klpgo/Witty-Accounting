@@ -29,6 +29,13 @@ depends_on: Union[
 
 
 def upgrade() -> None:
+    op.create_index(
+        "ix_monthly_base_fee_charges_rfid_card_id",
+        "monthly_base_fee_charges",
+        ["rfid_card_id"],
+        unique=False,
+    )
+
     op.drop_constraint(
         "uq_monthly_base_fee_charges_card_month",
         "monthly_base_fee_charges",
@@ -48,6 +55,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.create_index(
+        "ix_monthly_base_fee_charges_rfid_assignment_id",
+        "monthly_base_fee_charges",
+        ["rfid_assignment_id"],
+        unique=False,
+    )
+
     op.drop_constraint(
         (
             "uq_monthly_base_fee_charges_"
@@ -63,4 +77,8 @@ def downgrade() -> None:
             "rfid_card_id",
             "fee_month",
         ],
+    )
+    op.drop_index(
+        "ix_monthly_base_fee_charges_rfid_card_id",
+        table_name="monthly_base_fee_charges",
     )
