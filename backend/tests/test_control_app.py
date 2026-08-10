@@ -39,6 +39,7 @@ def make_settings(tmp_path: Path, **overrides) -> Settings:
 class DummyService:
     def __init__(self) -> None:
         self.state_calls = []
+        self.name_calls = []
         self.delete_calls = []
 
     def list_tenants(self):
@@ -49,6 +50,9 @@ class DummyService:
 
     def set_active(self, tenant_id: int, *, active: bool):
         self.state_calls.append((tenant_id, active))
+
+    def set_name(self, tenant_id: int, *, name: str):
+        self.name_calls.append((tenant_id, name))
 
     def delete_tenant(self, tenant_id: int, *, confirmation: str):
         self.delete_calls.append((tenant_id, confirmation))
@@ -80,6 +84,16 @@ def test_control_login_session_csrf_and_reauthentication(tmp_path: Path) -> None
             headers={"X-Control-CSRF": csrf},
         ).status_code == 200
         assert service.state_calls == [(1, False)]
+
+        assert client.put(
+            "/api/tenants/1/name", json={"name": "Neuer Name"}
+        ).status_code == 403
+        assert client.put(
+            "/api/tenants/1/name",
+            json={"name": "Neuer Name"},
+            headers={"X-Control-CSRF": csrf},
+        ).status_code == 200
+        assert service.name_calls == [(1, "Neuer Name")]
 
         assert client.post(
             "/api/tenants/1/delete",
@@ -185,6 +199,40 @@ def test_delete_removes_database_user_archive_and_registration(
     assert not archive.exists()
     with Session(control_engine) as db:
         assert db.scalar(select(Tenant.id)) is None
+
+
+def test_set_name_trims_and_updates_tenant(
+    tmp_path: Path,
+    control_engine,
+) -> None:
+    settings = make_settings(tmp_path)
+    tenant_id = add_tenant(control_engine, settings)
+    service = TenantControlService(
+        settings=settings,
+        control_engine=control_engine,
+    )
+
+    service.set_name(tenant_id, name="  Witty Berlin  ")
+
+    with Session(control_engine) as db:
+        tenant = db.get(Tenant, tenant_id)
+        assert tenant.name == "Witty Berlin"
+        assert tenant.config_version == 2
+
+
+def test_set_name_rejects_empty_name(
+    tmp_path: Path,
+    control_engine,
+) -> None:
+    settings = make_settings(tmp_path)
+    tenant_id = add_tenant(control_engine, settings)
+    service = TenantControlService(
+        settings=settings,
+        control_engine=control_engine,
+    )
+
+    with pytest.raises(TenantControlError, match="nicht leer"):
+        service.set_name(tenant_id, name="   ")
 
 
 def test_delete_refuses_unexpected_database_name(

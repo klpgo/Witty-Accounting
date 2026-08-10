@@ -1,10 +1,11 @@
-const state = { csrf: null, tenants: [], deleteTenant: null };
+const state = { csrf: null, tenants: [], editTenant: null, deleteTenant: null };
 
 const loginView = document.querySelector("#login-view");
 const appView = document.querySelector("#app-view");
 const message = document.querySelector("#message");
 const tenantList = document.querySelector("#tenant-list");
 const tenantCount = document.querySelector("#tenant-count");
+const editDialog = document.querySelector("#edit-dialog");
 const deleteDialog = document.querySelector("#delete-dialog");
 
 async function api(path, options = {}) {
@@ -62,6 +63,7 @@ function renderTenants() {
         <dt>Datenbank</dt><dd class="database"></dd>
       </dl>
       <div class="tenant-actions">
+        <button class="secondary edit-button" type="button">Anzeigename ändern</button>
         <button class="secondary state-button" type="button"></button>
         <button class="danger delete-button" type="button">Löschen</button>
       </div>`;
@@ -75,6 +77,7 @@ function renderTenants() {
     const stateButton = card.querySelector(".state-button");
     stateButton.textContent = tenant.active ? "Sperren" : "Entsperren";
     stateButton.addEventListener("click", () => changeState(tenant));
+    card.querySelector(".edit-button").addEventListener("click", () => openEdit(tenant));
     card.querySelector(".delete-button").addEventListener("click", () => openDelete(tenant));
     tenantList.append(card);
   }
@@ -90,6 +93,15 @@ async function changeState(tenant) {
     await loadTenants();
     setMessage(tenant.active ? "Mandant wurde gesperrt." : "Mandant wurde entsperrt.");
   } catch (error) { setMessage(error.message, true); }
+}
+
+function openEdit(tenant) {
+  state.editTenant = tenant;
+  document.querySelector("#edit-code").textContent = tenant.code;
+  const nameInput = document.querySelector("#edit-name");
+  nameInput.value = tenant.name;
+  editDialog.showModal();
+  nameInput.select();
 }
 
 function openDelete(tenant) {
@@ -141,6 +153,25 @@ document.querySelector("#create-form").addEventListener("submit", async (event) 
   }
 });
 
+document.querySelector("#edit-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const tenant = state.editTenant;
+  if (!tenant) return;
+  const submit = event.currentTarget.querySelector("button[type=submit]");
+  submit.disabled = true;
+  try {
+    await api(`/api/tenants/${tenant.id}/name`, {
+      method: "PUT",
+      body: JSON.stringify({ name: document.querySelector("#edit-name").value }),
+    });
+    editDialog.close();
+    state.editTenant = null;
+    await loadTenants();
+    setMessage("Der Anzeigename wurde geändert.");
+  } catch (error) { setMessage(error.message, true); }
+  finally { submit.disabled = false; }
+});
+
 document.querySelector("#delete-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const tenant = state.deleteTenant;
@@ -162,6 +193,7 @@ document.querySelector("#delete-form").addEventListener("submit", async (event) 
   finally { submit.disabled = false; }
 });
 
+document.querySelector("#edit-cancel").addEventListener("click", () => editDialog.close());
 document.querySelector("#delete-cancel").addEventListener("click", () => deleteDialog.close());
 document.querySelector("#refresh-button").addEventListener("click", () => loadTenants().catch((error) => setMessage(error.message, true)));
 document.querySelector("#logout-button").addEventListener("click", async () => {

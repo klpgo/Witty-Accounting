@@ -201,6 +201,26 @@ class TenantControlService:
             tenant.config_version += 1
             db.commit()
 
+    def set_name(self, tenant_id: int, *, name: str) -> None:
+        normalized_name = name.strip()
+
+        if not normalized_name:
+            raise TenantControlError("Der Mandantenname darf nicht leer sein.")
+        if len(normalized_name) > 200:
+            raise TenantControlError(
+                "Der Mandantenname darf höchstens 200 Zeichen lang sein."
+            )
+
+        with Session(self.control_engine) as db:
+            tenant = db.get(Tenant, tenant_id)
+
+            if tenant is None:
+                raise TenantControlError("Der Mandant wurde nicht gefunden.")
+
+            tenant.name = normalized_name
+            tenant.config_version += 1
+            db.commit()
+
     def delete_tenant(self, tenant_id: int, *, confirmation: str) -> None:
         with Session(self.control_engine) as db:
             tenant = db.get(Tenant, tenant_id)

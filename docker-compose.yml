@@ -55,6 +55,8 @@ services:
 
   control:
     container_name: witty-control
+    profiles:
+        - control
     build:
       context: .
       dockerfile: backend/Dockerfile

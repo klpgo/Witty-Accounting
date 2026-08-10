@@ -45,6 +45,10 @@ class TenantStateRequest(BaseModel):
     active: bool
 
 
+class TenantNameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
 class TenantDeleteRequest(BaseModel):
     confirmation: str
     control_password: str
@@ -189,6 +193,15 @@ def create_control_app(
         _session=Depends(mutation_session),
     ):
         tenant_service.set_active(tenant_id, active=payload.active)
+        return {"ok": True}
+
+    @app.put("/api/tenants/{tenant_id}/name")
+    def set_tenant_name(
+        tenant_id: int,
+        payload: TenantNameRequest,
+        _session=Depends(mutation_session),
+    ):
+        tenant_service.set_name(tenant_id, name=payload.name)
         return {"ok": True}
 
     @app.post("/api/tenants/{tenant_id}/delete")

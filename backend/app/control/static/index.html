@@ -103,6 +103,22 @@
       </section>
     </main>
 
+    <dialog id="edit-dialog">
+      <form id="edit-form" method="dialog" class="stack">
+        <p class="eyebrow">Mandant bearbeiten</p>
+        <h3>Anzeigename ändern</h3>
+        <p>Neuer Anzeigename für den Mandanten <strong id="edit-code"></strong>.</p>
+        <label>
+          Anzeigename
+          <input id="edit-name" name="name" maxlength="200" required autocomplete="off">
+        </label>
+        <div class="dialog-actions">
+          <button id="edit-cancel" class="secondary" type="button">Abbrechen</button>
+          <button type="submit">Speichern</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="delete-dialog">
       <form id="delete-form" method="dialog" class="stack">
         <p class="eyebrow danger-text">Unwiderrufliche Löschung</p>
