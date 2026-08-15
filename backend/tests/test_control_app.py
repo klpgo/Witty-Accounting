@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import json
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -40,7 +41,9 @@ class DummyService:
     def __init__(self) -> None:
         self.state_calls = []
         self.name_calls = []
+        self.hostname_calls = []
         self.delete_calls = []
+        self.delete_error = None
 
     def list_tenants(self):
         return [{"id": 1, "code": "wb42", "active": True}]
@@ -54,8 +57,16 @@ class DummyService:
     def set_name(self, tenant_id: int, *, name: str):
         self.name_calls.append((tenant_id, name))
 
-    def delete_tenant(self, tenant_id: int, *, confirmation: str):
+    def set_hostname(self, tenant_id: int, *, hostname: str):
+        self.hostname_calls.append((tenant_id, hostname))
+
+    def delete_tenant(self, tenant_id: int, *, confirmation: str, progress=None):
         self.delete_calls.append((tenant_id, confirmation))
+        if self.delete_error:
+            raise TenantControlError(self.delete_error)
+        if progress:
+            progress("validated", "Bestätigung wurde geprüft.")
+            progress("complete", "Mandant wurde gelöscht.")
 
 
 def test_control_login_session_csrf_and_reauthentication(tmp_path: Path) -> None:
@@ -95,12 +106,62 @@ def test_control_login_session_csrf_and_reauthentication(tmp_path: Path) -> None
         ).status_code == 200
         assert service.name_calls == [(1, "Neuer Name")]
 
+        assert client.put(
+            "/api/tenants/1/hostname",
+            json={"hostname": "neu.example.test"},
+        ).status_code == 403
+        assert client.put(
+            "/api/tenants/1/hostname",
+            json={"hostname": "neu.example.test"},
+            headers={"X-Control-CSRF": csrf},
+        ).status_code == 200
+        assert service.hostname_calls == [(1, "neu.example.test")]
+
         assert client.post(
             "/api/tenants/1/delete",
             json={"confirmation": "wb42", "control_password": "wrong"},
             headers={"X-Control-CSRF": csrf},
         ).status_code == 403
         assert not service.delete_calls
+
+        deletion = client.post(
+            "/api/tenants/1/delete",
+            json={
+                "confirmation": "wb42",
+                "control_password": "control-password",
+            },
+            headers={"X-Control-CSRF": csrf},
+        )
+        assert deletion.status_code == 200
+        assert deletion.headers["content-type"].startswith(
+            "application/x-ndjson"
+        )
+        events = [json.loads(line) for line in deletion.text.splitlines()]
+        assert [event["type"] for event in events] == [
+            "progress",
+            "complete",
+        ]
+        assert service.delete_calls == [(1, "wb42")]
+
+        service.delete_error = "Sicherheitsprüfung fehlgeschlagen."
+        failed_deletion = client.post(
+            "/api/tenants/1/delete",
+            json={
+                "confirmation": "wb42",
+                "control_password": "control-password",
+            },
+            headers={"X-Control-CSRF": csrf},
+        )
+        failed_events = [
+            json.loads(line) for line in failed_deletion.text.splitlines()
+        ]
+        assert failed_events == [
+            {
+                "type": "error",
+                "step": "error",
+                "message": "Sicherheitsprüfung fehlgeschlagen.",
+            }
+        ]
 
 
 def test_control_session_expires() -> None:
@@ -149,7 +210,7 @@ def add_tenant(engine, settings: Settings, *, code: str = "wb42") -> int:
         archive_namespace=code,
         config_version=1,
         domains=[
-            TenantDomain(hostname="wb42.example.test", canonical=True)
+            TenantDomain(hostname=f"{code}.example.test", canonical=True)
         ],
     )
     with Session(engine) as db:
@@ -191,14 +252,73 @@ def test_delete_removes_database_user_archive_and_registration(
         lambda _connection, **values: dropped.append(values),
     )
 
-    service.delete_tenant(tenant_id, confirmation="wb42")
+    progress = []
+    service.delete_tenant(
+        tenant_id,
+        confirmation="wb42",
+        progress=lambda step, _message: progress.append(step),
+    )
 
     assert dropped == [
         {"database_name": "wb42", "database_user": "witty_wb42"}
     ]
+    assert progress == [
+        "validated",
+        "blocked",
+        "database",
+        "database_done",
+        "archive",
+        "archive_done",
+        "registry",
+        "complete",
+    ]
     assert not archive.exists()
     with Session(control_engine) as db:
         assert db.scalar(select(Tenant.id)) is None
+
+
+def test_delete_accepts_registered_bootstrap_database(
+    tmp_path: Path,
+    control_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings(tmp_path)
+    tenant_id = add_tenant(control_engine, settings)
+    with Session(control_engine) as db:
+        tenant = db.get(Tenant, tenant_id)
+        tenant.db_name = settings.db_name
+        tenant.db_user = settings.db_user
+        db.commit()
+
+    service = TenantControlService(
+        settings=settings,
+        control_engine=control_engine,
+    )
+    dropped = []
+
+    class FakeConnection:
+        def close(self):
+            pass
+
+    @contextmanager
+    def no_lock(_connection):
+        yield
+
+    monkeypatch.setattr(service, "_connect_admin", FakeConnection)
+    monkeypatch.setattr(service, "_provision_lock", no_lock)
+    monkeypatch.setattr(
+        service,
+        "_drop_database_and_user",
+        lambda _connection, **values: dropped.append(values),
+    )
+
+    service.delete_tenant(tenant_id, confirmation="wb42")
+
+    assert dropped == [
+        {"database_name": "witty", "database_user": "witty"}
+    ]
+    with Session(control_engine) as db:
+        assert db.get(Tenant, tenant_id) is None
 
 
 def test_set_name_trims_and_updates_tenant(
@@ -233,6 +353,57 @@ def test_set_name_rejects_empty_name(
 
     with pytest.raises(TenantControlError, match="nicht leer"):
         service.set_name(tenant_id, name="   ")
+
+
+def test_set_hostname_normalizes_and_updates_only_domain(
+    tmp_path: Path,
+    control_engine,
+) -> None:
+    settings = make_settings(tmp_path)
+    tenant_id = add_tenant(control_engine, settings)
+    service = TenantControlService(
+        settings=settings,
+        control_engine=control_engine,
+    )
+
+    service.set_hostname(
+        tenant_id,
+        hostname="  NEW.Example.Test.  ",
+    )
+
+    with Session(control_engine) as db:
+        tenant = db.get(Tenant, tenant_id)
+        domain = db.scalar(
+            select(TenantDomain).where(
+                TenantDomain.tenant_id == tenant_id,
+                TenantDomain.canonical.is_(True),
+            )
+        )
+        assert domain.hostname == "new.example.test"
+        assert tenant.slug == "wb42"
+        assert tenant.db_name == "wb42"
+        assert tenant.db_user == "witty_wb42"
+        assert tenant.archive_namespace == "wb42"
+        assert tenant.config_version == 2
+
+
+def test_set_hostname_rejects_registered_hostname(
+    tmp_path: Path,
+    control_engine,
+) -> None:
+    settings = make_settings(tmp_path)
+    tenant_id = add_tenant(control_engine, settings)
+    add_tenant(control_engine, settings, code="other")
+    service = TenantControlService(
+        settings=settings,
+        control_engine=control_engine,
+    )
+
+    with pytest.raises(TenantControlError, match="bereits registriert"):
+        service.set_hostname(
+            tenant_id,
+            hostname="other.example.test",
+        )
 
 
 def test_delete_refuses_unexpected_database_name(

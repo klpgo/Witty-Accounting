@@ -5,7 +5,7 @@ import re
 import secrets
 import shutil
 import time
-from typing import Iterator
+from typing import Callable, Iterator
 
 import pymysql
 from pydantic import SecretStr
@@ -16,14 +16,15 @@ from sqlalchemy.pool import NullPool
 from app.config import Settings
 from app.tenancy.context import TenantContext
 from app.tenancy.migrations import migrate_tenant_database
-from app.tenancy.models import Tenant
-from app.tenancy.registry import normalize_hostname
+from app.tenancy.models import Tenant, TenantDomain
+from app.tenancy.registry import TenantRegistryError, normalize_hostname
 from scripts.create_admin import create_first_admin_with_values
 from scripts.register_tenant import register_tenant
 
 
 SAFE_TENANT_CODE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 PROVISION_LOCK_NAME = "witty-control-tenant-provision"
+DeletionProgress = Callable[[str, str], None]
 
 
 class TenantControlError(RuntimeError):
@@ -221,7 +222,62 @@ class TenantControlService:
             tenant.config_version += 1
             db.commit()
 
-    def delete_tenant(self, tenant_id: int, *, confirmation: str) -> None:
+    def set_hostname(self, tenant_id: int, *, hostname: str) -> None:
+        try:
+            normalized_hostname = normalize_hostname(hostname)
+        except TenantRegistryError as exc:
+            raise TenantControlError(str(exc)) from exc
+
+        with Session(self.control_engine) as db:
+            tenant = db.scalar(
+                select(Tenant)
+                .options(selectinload(Tenant.domains))
+                .where(Tenant.id == tenant_id)
+            )
+
+            if tenant is None:
+                raise TenantControlError("Der Mandant wurde nicht gefunden.")
+
+            canonical_domain = next(
+                (
+                    domain
+                    for domain in tenant.domains
+                    if domain.canonical
+                ),
+                None,
+            )
+            if canonical_domain is None:
+                raise TenantControlError(
+                    "Der Mandant hat keine kanonische Domain."
+                )
+
+            if canonical_domain.hostname == normalized_hostname:
+                return
+
+            conflict = db.scalar(
+                select(TenantDomain.id).where(
+                    TenantDomain.hostname == normalized_hostname,
+                    TenantDomain.id != canonical_domain.id,
+                )
+            )
+            if conflict is not None:
+                raise TenantControlError(
+                    "Dieser Hostname ist bereits registriert."
+                )
+
+            canonical_domain.hostname = normalized_hostname
+            tenant.config_version += 1
+            db.commit()
+
+    def delete_tenant(
+        self,
+        tenant_id: int,
+        *,
+        confirmation: str,
+        progress: DeletionProgress | None = None,
+    ) -> None:
+        report = progress or (lambda _step, _message: None)
+
         with Session(self.control_engine) as db:
             tenant = db.get(Tenant, tenant_id)
 
@@ -238,41 +294,56 @@ class TenantControlService:
                     "Das eingegebene Mandantenkürzel stimmt nicht überein."
                 )
 
-            if tenant.db_name != code or tenant.archive_namespace != code:
-                raise TenantControlError(
-                    "Datenbankname oder Archiv-Namespace entsprechen nicht dem "
-                    "Mandantenkürzel. Die automatische Löschung wurde abgebrochen."
-                )
-
-            database_user = tenant.db_user
-            if database_user != tenant_database_user(code):
-                raise TenantControlError(
-                    "Der Datenbankbenutzer entspricht nicht dem erwarteten Namen. "
-                    "Die automatische Löschung wurde abgebrochen."
-                )
+            database_name, database_user = self._deletion_database_values(
+                db,
+                tenant=tenant,
+                code=code,
+            )
+            report("validated", "Bestätigung und Zuordnung wurden geprüft.")
 
             tenant.active = False
             tenant.config_version += 1
             db.commit()
+            report("blocked", "Der Mandant wurde gesperrt.")
 
         # The application backend is a separate process and can still hold a
         # registry entry until its configured TTL expires. Wait before the
         # destructive steps so new requests can no longer reach the tenant.
         if self.settings.tenant_registry_cache_seconds > 0:
+            report(
+                "waiting",
+                "Warte, bis keine zwischengespeicherte "
+                "Mandantenzuordnung mehr aktiv ist.",
+            )
             self._sleep(self.settings.tenant_registry_cache_seconds + 1)
 
         admin_connection = self._connect_admin()
 
         try:
             with self._provision_lock(admin_connection):
+                report(
+                    "database",
+                    f"Lösche Datenbank {database_name} und Datenbankbenutzer.",
+                )
                 self._drop_database_and_user(
                     admin_connection,
-                    database_name=code,
+                    database_name=database_name,
                     database_user=database_user,
+                )
+                report(
+                    "database_done",
+                    "Datenbank und Datenbankbenutzer wurden gelöscht.",
                 )
                 archive_path = self._archive_path(code)
                 if archive_path.exists():
+                    report("archive", "Lösche das Rechnungsarchiv.")
                     shutil.rmtree(archive_path)
+                    report("archive_done", "Das Rechnungsarchiv wurde gelöscht.")
+                else:
+                    report(
+                        "archive_done",
+                        "Es war kein Rechnungsarchiv vorhanden.",
+                    )
         except Exception as exc:
             raise TenantControlError(
                 "Die Bereinigung wurde nicht vollständig abgeschlossen. Der "
@@ -281,11 +352,85 @@ class TenantControlService:
         finally:
             admin_connection.close()
 
+        report("registry", "Entferne die Mandantenregistrierung.")
         with Session(self.control_engine) as db:
             tenant = db.get(Tenant, tenant_id)
             if tenant is not None:
                 db.delete(tenant)
                 db.commit()
+        report("complete", "Der Mandant wurde vollständig gelöscht.")
+
+    def _deletion_database_values(
+        self,
+        db: Session,
+        *,
+        tenant: Tenant,
+        code: str,
+    ) -> tuple[str, str]:
+        database_name = tenant.db_name
+        database_user = tenant.db_user
+
+        if tenant.archive_namespace != code:
+            raise TenantControlError(
+                "Der Archiv-Namespace entspricht nicht dem Mandantenkürzel. "
+                "Die automatische Löschung wurde abgebrochen."
+            )
+
+        regular_values = (
+            database_name == code
+            and database_user == tenant_database_user(code)
+        )
+        bootstrap_values = (
+            tenant.db_host == self.settings.db_host
+            and tenant.db_port == self.settings.db_port
+            and database_name == self.settings.db_name
+            and database_user == self.settings.db_user
+        )
+
+        if not regular_values and not bootstrap_values:
+            raise TenantControlError(
+                "Datenbankname oder Datenbankbenutzer entsprechen weder dem "
+                "Mandantenkürzel noch der registrierten Bootstrap-Datenbank. "
+                "Die automatische Löschung wurde abgebrochen."
+            )
+
+        database_name = validate_tenant_code(database_name)
+        protected_databases = {
+            "information_schema",
+            "mysql",
+            "performance_schema",
+            "sys",
+        }
+        if self.settings.control_db_name:
+            protected_databases.add(self.settings.control_db_name)
+
+        protected_users = {self.settings.tenant_provision_db_user}
+        if self.settings.control_db_user:
+            protected_users.add(self.settings.control_db_user)
+
+        if (
+            database_name in protected_databases
+            or database_user in protected_users
+        ):
+            raise TenantControlError(
+                "Die registrierte Datenbank oder der Datenbankbenutzer ist "
+                "geschützt. Die automatische Löschung wurde abgebrochen."
+            )
+
+        shared_registration = db.scalar(
+            select(Tenant.id).where(
+                Tenant.id != tenant.id,
+                (Tenant.db_name == database_name)
+                | (Tenant.db_user == database_user),
+            )
+        )
+        if shared_registration is not None:
+            raise TenantControlError(
+                "Datenbank oder Datenbankbenutzer werden von einem weiteren "
+                "Mandanten verwendet. Die automatische Löschung wurde abgebrochen."
+            )
+
+        return database_name, database_user
 
     def _ensure_control_values_are_free(self, code: str, hostname: str) -> None:
         with Session(self.control_engine) as db:
@@ -300,8 +445,6 @@ class TenantControlService:
                 raise TenantControlError(
                     "Kürzel, Datenbank oder Archiv-Namespace sind bereits registriert."
                 )
-
-            from app.tenancy.models import TenantDomain
 
             domain_conflict = db.scalar(
                 select(TenantDomain.id).where(TenantDomain.hostname == hostname)

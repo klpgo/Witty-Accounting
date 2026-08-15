@@ -1,9 +1,20 @@
 from collections import defaultdict, deque
+import json
 from pathlib import Path
+from queue import Queue
+from threading import Thread
 import time
 
-from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import (
+    Cookie,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+)
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine
@@ -47,6 +58,10 @@ class TenantStateRequest(BaseModel):
 
 class TenantNameRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+
+
+class TenantHostnameRequest(BaseModel):
+    hostname: str = Field(min_length=1, max_length=253)
 
 
 class TenantDeleteRequest(BaseModel):
@@ -204,6 +219,15 @@ def create_control_app(
         tenant_service.set_name(tenant_id, name=payload.name)
         return {"ok": True}
 
+    @app.put("/api/tenants/{tenant_id}/hostname")
+    def set_tenant_hostname(
+        tenant_id: int,
+        payload: TenantHostnameRequest,
+        _session=Depends(mutation_session),
+    ):
+        tenant_service.set_hostname(tenant_id, hostname=payload.hostname)
+        return {"ok": True}
+
     @app.post("/api/tenants/{tenant_id}/delete")
     def delete_tenant(
         tenant_id: int,
@@ -211,12 +235,61 @@ def create_control_app(
         _session=Depends(mutation_session),
     ):
         if not auth.check_password(payload.control_password):
-            raise HTTPException(status_code=403, detail="Das Control-Passwort ist falsch.")
-        tenant_service.delete_tenant(
-            tenant_id,
-            confirmation=payload.confirmation,
+            raise HTTPException(
+                status_code=403,
+                detail="Das Control-Passwort ist falsch.",
+            )
+
+        def deletion_events():
+            events: Queue[dict[str, str] | None] = Queue()
+
+            def report(step: str, message: str) -> None:
+                events.put(
+                    {
+                        "type": "complete" if step == "complete" else "progress",
+                        "step": step,
+                        "message": message,
+                    }
+                )
+
+            def run_deletion() -> None:
+                try:
+                    tenant_service.delete_tenant(
+                        tenant_id,
+                        confirmation=payload.confirmation,
+                        progress=report,
+                    )
+                except TenantControlError as exc:
+                    events.put(
+                        {
+                            "type": "error",
+                            "step": "error",
+                            "message": str(exc),
+                        }
+                    )
+                except Exception:
+                    events.put(
+                        {
+                            "type": "error",
+                            "step": "error",
+                            "message": "Die Löschung ist unerwartet fehlgeschlagen.",
+                        }
+                    )
+                finally:
+                    events.put(None)
+
+            Thread(target=run_deletion, daemon=True).start()
+
+            while True:
+                event = events.get()
+                if event is None:
+                    break
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+
+        return StreamingResponse(
+            deletion_events(),
+            media_type="application/x-ndjson",
         )
-        return {"ok": True}
 
     app.mount("/assets", StaticFiles(directory=STATIC_DIRECTORY), name="assets")
 

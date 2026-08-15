@@ -45,6 +45,17 @@
 
         <div id="message" class="message hidden" role="status"></div>
 
+        <section id="delete-progress" class="delete-progress hidden" aria-live="polite">
+          <div class="delete-progress-heading">
+            <div>
+              <p class="eyebrow danger-text">Mandant wird gelöscht</p>
+              <h3 id="delete-progress-title">Löschvorgang</h3>
+            </div>
+            <span id="delete-progress-state" class="progress-state">Läuft</span>
+          </div>
+          <ol id="delete-progress-steps" class="progress-steps"></ol>
+        </section>
+
         <div class="layout">
           <section class="panel">
             <div class="section-heading">
@@ -114,6 +125,25 @@
         </label>
         <div class="dialog-actions">
           <button id="edit-cancel" class="secondary" type="button">Abbrechen</button>
+          <button type="submit">Speichern</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="hostname-dialog">
+      <form id="hostname-form" method="dialog" class="stack">
+        <p class="eyebrow">Mandant bearbeiten</p>
+        <h3>Hostname ändern</h3>
+        <p>Neuer Hostname für den Mandanten <strong id="hostname-code"></strong>.</p>
+        <label>
+          Hostname
+          <input id="hostname-value" name="hostname" maxlength="253" required autocomplete="off">
+        </label>
+        <p class="muted">
+          DNS und Reverse Proxy müssen separat auf den neuen Hostnamen eingestellt werden.
+        </p>
+        <div class="dialog-actions">
+          <button id="hostname-cancel" class="secondary" type="button">Abbrechen</button>
           <button type="submit">Speichern</button>
         </div>
       </form>
