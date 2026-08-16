@@ -106,6 +106,29 @@ export interface SmtpTestEmailResponse {
   subject: string
 }
 
+export interface InvoiceExportSettings {
+  enabled: boolean
+  host: string | null
+  port: number
+  username: string | null
+  directory: string | null
+  private_key_configured: boolean
+  known_hosts_configured: boolean
+}
+
+export interface InvoiceExportSettingsUpdate {
+  enabled?: boolean
+  host?: string
+  port?: number
+  username?: string
+  directory?: string
+}
+
+export interface InvoiceExportTestResponse {
+  host: string
+  directory: string
+}
+
 export interface EnergyPrice {
   id: number
   valid_from: string
@@ -353,6 +376,81 @@ export async function updateGlobalSettings(
   return (
     await response.json()
   ) as GlobalSettings
+}
+
+export async function getInvoiceExportSettings(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<InvoiceExportSettings> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/invoice-export`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as InvoiceExportSettings
+}
+
+export async function updateInvoiceExportSettings(
+  accessToken: string,
+  payload: InvoiceExportSettingsUpdate,
+): Promise<InvoiceExportSettings> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/invoice-export`,
+    {
+      method: 'PATCH',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as InvoiceExportSettings
+}
+
+export async function testInvoiceExportSettings(
+  accessToken: string,
+): Promise<InvoiceExportTestResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/invoice-export/test`,
+    {
+      method: 'POST',
+      headers: createHeaders(accessToken),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as InvoiceExportTestResponse
 }
 
 export async function getCurrentEnergyPrice(

@@ -20,6 +20,7 @@ import { useAppSettings } from '../settings/useAppSettings'
 import AdminSmtpSettingsForm from './AdminSmtpSettingsForm'
 import AdminPasswordPolicyForm from './AdminPasswordPolicyForm'
 import AdminAccessSettingsForm from './AdminAccessSettingsForm'
+import AdminInvoiceExportSettingsForm from './AdminInvoiceExportSettingsForm'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
@@ -1295,6 +1296,9 @@ function AdminSettingsPage() {
       )}
       {!isLoading && (
         <AdminPasswordPolicyForm />
+      )}
+      {!isLoading && (
+        <AdminInvoiceExportSettingsForm />
       )}
       {!isLoading && (
         <AdminSmtpSettingsForm />

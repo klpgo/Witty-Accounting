@@ -140,6 +140,45 @@ class GlobalSettings(Base):
         server_default="standard",
     )
 
+    invoice_export_sftp_enabled: Mapped[bool] = (
+        mapped_column(
+            Boolean,
+            nullable=False,
+            default=False,
+            server_default="0",
+        )
+    )
+
+    invoice_export_sftp_host: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    invoice_export_sftp_port: Mapped[int] = (
+        mapped_column(
+            Integer,
+            nullable=False,
+            default=22,
+            server_default="22",
+        )
+    )
+
+    invoice_export_sftp_username: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    invoice_export_sftp_directory: Mapped[
+        str | None
+    ] = mapped_column(
+        String(1024),
+        nullable=True,
+    )
+
     maintenance_mode: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

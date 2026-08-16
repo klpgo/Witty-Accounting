@@ -52,6 +52,7 @@ services:
     volumes:
       - /srv/witty/logs:/app/logs
       - /srv/witty/invoices:/app/data/invoices
+      - /srv/witty/secrets:/run/secrets:ro
 
   control:
     container_name: witty-control

@@ -55,12 +55,20 @@ export interface Invoice {
   pdf_sha256: string | null
   pdf_size_bytes: number | null
   pdf_created_at: string | null
+  pdf_exported_at: string | null
+  pdf_exported_by_user_id: number | null
+  pdf_export_remote_path: string | null
   items: InvoiceItem[]
 }
 
 export interface InvoiceEmailResponse {
   recipient_email: string
   subject: string
+}
+
+export interface InvoiceExportResponse {
+  remote_path: string
+  exported_at: string
 }
 
 interface ApiErrorResponse {
@@ -193,6 +201,32 @@ export async function sendInvoiceEmail(
   return (
     await response.json()
   ) as InvoiceEmailResponse
+}
+
+export async function exportInvoiceSftp(
+  accessToken: string,
+  invoiceId: number,
+): Promise<InvoiceExportResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/export-sftp`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as InvoiceExportResponse
 }
 
 export interface InvoiceDraftCreate {

@@ -224,6 +224,121 @@ def test_reads_public_application_name(
     }
 
 
+def test_reads_invoice_export_settings_and_secret_status(
+    admin_client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    private_key = tmp_path / "export-key"
+    known_hosts = tmp_path / "known-hosts"
+    private_key.write_text("test-key")
+    known_hosts.write_text("test-host-key")
+
+    monkeypatch.setattr(
+        settings,
+        "invoice_export_sftp_private_key_path",
+        private_key,
+    )
+    monkeypatch.setattr(
+        settings,
+        "invoice_export_sftp_known_hosts_path",
+        known_hosts,
+    )
+
+    global_settings = add_global_settings(
+        database_session
+    )
+    global_settings.invoice_export_sftp_enabled = True
+    global_settings.invoice_export_sftp_host = (
+        "sftp.example.test"
+    )
+    global_settings.invoice_export_sftp_port = 2222
+    global_settings.invoice_export_sftp_username = (
+        "witty-export"
+    )
+    global_settings.invoice_export_sftp_directory = (
+        "/invoices"
+    )
+    database_session.commit()
+
+    response = admin_client.get(
+        "/api/settings/invoice-export"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "host": "sftp.example.test",
+        "port": 2222,
+        "username": "witty-export",
+        "directory": "/invoices",
+        "private_key_configured": True,
+        "known_hosts_configured": True,
+    }
+
+
+def test_cannot_enable_invoice_export_without_secret_files(
+    admin_client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_export_sftp_private_key_path",
+        tmp_path / "missing-key",
+    )
+    monkeypatch.setattr(
+        settings,
+        "invoice_export_sftp_known_hosts_path",
+        tmp_path / "missing-known-hosts",
+    )
+    add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings/invoice-export",
+        json={
+            "enabled": True,
+            "host": "sftp.example.test",
+            "port": 22,
+            "username": "witty-export",
+            "directory": "/invoices",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "private Schlüssel" in response.json()[
+        "detail"
+    ]
+
+
+def test_updates_disabled_invoice_export_settings(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings/invoice-export",
+        json={
+            "enabled": False,
+            "host": " sftp.example.test ",
+            "port": 2222,
+            "username": " export-user ",
+            "directory": "/invoices/",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is False
+    assert body["host"] == "sftp.example.test"
+    assert body["port"] == 2222
+    assert body["username"] == "export-user"
+    assert body["directory"] == "/invoices"
+
+
 def test_public_settings_uses_configuration_fallback(
     client: TestClient,
 ) -> None:

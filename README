@@ -17,6 +17,33 @@ by it can be priced with a different amount.
 The app includes admin pages for user, charging events and invoices. Users can
 view own charging events, view and download invoices.
 
+Finalized invoice PDFs can also be exported manually by an administrator to
+an SFTP server. The connection data is configured on the settings page. The
+private client key and the SSH host-key list stay outside the database and are
+mounted read-only from `/srv/witty/secrets`:
+
+```text
+/srv/witty/secrets/invoice-export-key
+/srv/witty/secrets/invoice-export-known-hosts
+```
+
+Both files must be readable by the container user configured through
+`WITTY_UID` and `WITTY_GID`; the private key should use mode `0600`.
+
+The public client key must be installed for the configured account on the
+SFTP server. Create the known-hosts file with `ssh-keyscan`, for example:
+
+```bash
+ssh-keyscan -p 22 sftp.example.org \
+  > /srv/witty/secrets/invoice-export-known-hosts
+```
+
+Verify the displayed fingerprint independently before enabling the export.
+The file locations and connection timeout can be changed in `.env` with
+`INVOICE_EXPORT_SFTP_PRIVATE_KEY_PATH`,
+`INVOICE_EXPORT_SFTP_KNOWN_HOSTS_PATH` and
+`INVOICE_EXPORT_SFTP_TIMEOUT_SECONDS`.
+
 Data ist stored in a volume atted to a MariaDB container. On rebuils reuse the
 data container to keep all data.
 

@@ -87,7 +87,9 @@ class InvoiceResponse(BaseModel):
     pdf_sha256: str | None
     pdf_size_bytes: int | None
     pdf_created_at: datetime | None
+    pdf_exported_at: datetime | None
+    pdf_exported_by_user_id: int | None
+    pdf_export_remote_path: str | None
 
     items: list[InvoiceItemResponse]
-
 

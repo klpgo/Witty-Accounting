@@ -41,6 +41,9 @@ from app.schemas.invoice import (
     InvoiceFinalizeRequest,
     InvoiceResponse,
 )
+from app.schemas.invoice_export import (
+    InvoiceExportResponse,
+)
 
 from app.services.invoice_cancellation import (
     InvoiceAlreadyCancelledError,
@@ -89,6 +92,14 @@ from app.services.invoice_email import (
     InvoiceEmailRecipientError,
     InvoiceEmailStateError,
     send_invoice_email,
+)
+from app.services.invoice_export import (
+    InvoiceExportAlreadyExistsError,
+    InvoiceExportConfigurationError,
+    InvoiceExportConnectionError,
+    InvoiceExportNotFoundError,
+    InvoiceExportStateError,
+    export_invoice_pdf,
 )
 
 router = APIRouter(
@@ -636,6 +647,59 @@ def send_invoice_by_email(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
+
+
+@router.post(
+    "/{invoice_id}/export-sftp",
+    response_model=InvoiceExportResponse,
+)
+def export_invoice_by_sftp(
+    invoice_id: int,
+    current_admin: Annotated[
+        User,
+        Depends(require_admin),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> InvoiceExportResponse:
+    try:
+        result = export_invoice_pdf(
+            db,
+            invoice_id=invoice_id,
+            admin_user_id=current_admin.id,
+        )
+    except InvoiceExportNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (
+        InvoiceExportStateError,
+        InvoiceExportAlreadyExistsError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except InvoiceExportConfigurationError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_CONTENT
+            ),
+            detail=str(exc),
+        ) from exc
+    except InvoiceExportConnectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    return InvoiceExportResponse(
+        remote_path=result.remote_path,
+        exported_at=result.exported_at,
+    )
 
 
 @router.get(

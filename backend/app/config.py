@@ -75,6 +75,19 @@ class Settings(BaseSettings):
         "data/invoices"
     )
 
+    invoice_export_sftp_private_key_path: Path = (
+        Path("/run/secrets/invoice-export-key")
+    )
+    invoice_export_sftp_known_hosts_path: Path = (
+        Path(
+            "/run/secrets/"
+            "invoice-export-known-hosts"
+        )
+    )
+    invoice_export_sftp_timeout_seconds: float = (
+        10.0
+    )
+
     ghostscript_executable: str = "gs"
     pdfa_icc_profile_path: Path = Path(
         "/usr/share/color/icc/ghostscript/srgb.icc"
