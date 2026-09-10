@@ -42,3 +42,6 @@ backend/tmp/
 backups/
 
 /secrets/
+
+# Test data delete scripts
+sql/

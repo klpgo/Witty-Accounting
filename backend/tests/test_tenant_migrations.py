@@ -1,10 +1,13 @@
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
 from app.tenancy.context import TenantContext
 from app.tenancy.migrations import (
+    APPLICATION_ALEMBIC_CONFIG,
     CONTROL_ALEMBIC_CONFIG,
     migrate_active_tenants,
     upgrade_connection,
@@ -29,6 +32,58 @@ def make_tenant(
             f"{slug}.witty.example"
         ),
     )
+
+
+def test_girocode_migration_defaults_off_and_preserves_existing_settings() -> None:
+    engine = create_engine("sqlite+pysqlite://")
+    config = Config(str(APPLICATION_ALEMBIC_CONFIG))
+
+    try:
+        with engine.connect() as connection:
+            connection.execute(text(
+                "CREATE TABLE global_settings "
+                "(id INTEGER PRIMARY KEY, app_name VARCHAR(255) NOT NULL)"
+            ))
+            connection.execute(text(
+                "INSERT INTO global_settings VALUES (1, 'Existing installation')"
+            ))
+            connection.commit()
+            config.attributes["connection"] = connection
+            command.stamp(config, "9c8a7b6d5e4f")
+
+            upgrade_connection(
+                connection,
+                config_path=APPLICATION_ALEMBIC_CONFIG,
+                revision="d71c9a4e6b20",
+            )
+            assert connection.execute(text(
+                "SELECT app_name, invoice_girocode_enabled "
+                "FROM global_settings WHERE id = 1"
+            )).one() == ("Existing installation", 0)
+            columns = {
+                column["name"]: column
+                for column in inspect(connection).get_columns("global_settings")
+            }
+            assert not columns["invoice_girocode_enabled"]["nullable"]
+
+            connection.execute(text(
+                "INSERT INTO global_settings (id, app_name) VALUES (2, 'New row')"
+            ))
+            assert connection.scalar(text(
+                "SELECT invoice_girocode_enabled FROM global_settings WHERE id = 2"
+            )) == 0
+            connection.commit()
+
+            command.downgrade(config, "9c8a7b6d5e4f")
+            assert "invoice_girocode_enabled" not in {
+                column["name"]
+                for column in inspect(connection).get_columns("global_settings")
+            }
+            assert connection.scalar(text(
+                "SELECT app_name FROM global_settings WHERE id = 1"
+            )) == "Existing installation"
+    finally:
+        engine.dispose()
 
 
 def test_migrates_all_tenants_and_reports_partial_failure() -> None:

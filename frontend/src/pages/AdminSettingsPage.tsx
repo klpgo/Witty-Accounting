@@ -119,6 +119,11 @@ function AdminSettingsPage() {
   )
 
   const [
+    invoiceGirocodeEnabled,
+    setInvoiceGirocodeEnabled,
+  ] = useState(false)
+
+  const [
     currentEnergyPrice,
     setCurrentEnergyPrice,
   ] = useState<EnergyPrice | null>(null)
@@ -286,6 +291,9 @@ function AdminSettingsPage() {
         )
         setInvoicePdfFormat(
           loadedSettings.invoice_pdf_format,
+        )
+        setInvoiceGirocodeEnabled(
+          loadedSettings.invoice_girocode_enabled,
         )
         if (loadedEnergyPrice !== null) {
           setCurrentEnergyPrice(
@@ -559,6 +567,8 @@ function AdminSettingsPage() {
               normalizedNumberPrefix,
             invoice_pdf_format:
               invoicePdfFormat,
+            invoice_girocode_enabled:
+              invoiceGirocodeEnabled,
           },
         )
 
@@ -608,6 +618,9 @@ function AdminSettingsPage() {
       )
       setInvoicePdfFormat(
         updatedSettings.invoice_pdf_format,
+      )
+      setInvoiceGirocodeEnabled(
+        updatedSettings.invoice_girocode_enabled,
       )
 
       await refreshSettings()
@@ -842,6 +855,31 @@ function AdminSettingsPage() {
               <small className="muted">
                 Wird als Browser-Titel und in E-Mails
                 angezeigt.
+              </small>
+            </label>
+
+            <label className="form-field settings-name-field">
+              <span>Girocode auf Rechnungen</span>
+
+              <select
+                value={invoiceGirocodeEnabled ? 'yes' : 'no'}
+                onChange={(event) => {
+                  setInvoiceGirocodeEnabled(
+                    event.target.value === 'yes',
+                  )
+                }}
+              >
+                <option value="no">Nein</option>
+                <option value="yes">Ja</option>
+              </select>
+
+              <small className="muted">
+                Fügt einen Zahlungs-QR-Code für die
+                Banking-App hinzu. Verwendet Name,
+                Bankverbindung, Betrag und Nummer der
+                Rechnung. Gilt für neu erzeugte PDFs
+                mit positivem Zahlbetrag. Bereits
+                archivierte PDFs bleiben unverändert.
               </small>
             </label>
           </section>

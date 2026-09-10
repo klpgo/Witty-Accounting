@@ -362,7 +362,14 @@ def archive_invoice_pdf(
             "ungültig."
         )
 
-    pdf_bytes = build_invoice_pdf(invoice)
+    pdf_bytes = build_invoice_pdf(
+        invoice,
+        girocode_enabled=(
+            global_settings.invoice_girocode_enabled
+            if global_settings is not None
+            else False
+        ),
+    )
 
     if pdf_format == PDF_FORMAT_PDFA_2B:
         try:

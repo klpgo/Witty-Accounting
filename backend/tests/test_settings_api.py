@@ -388,6 +388,7 @@ def test_reads_admin_settings(
         "invoice_bic": None,
         "invoice_number_prefix": "RE",
         "invoice_pdf_format": "standard",
+        "invoice_girocode_enabled": False,
         "password_min_length": 8,
         "password_require_uppercase": True,
         "password_require_lowercase": True,
@@ -444,6 +445,7 @@ def test_updates_admin_settings(
         "invoice_bic": None,
         "invoice_number_prefix": "RE",
         "invoice_pdf_format": "standard",
+        "invoice_girocode_enabled": False,
         "password_min_length": 8,
         "password_require_uppercase": True,
         "password_require_lowercase": True,
@@ -641,6 +643,7 @@ def test_updates_invoice_business_settings(
             "invoice_bic": "cobadeffxxx",
             "invoice_number_prefix": " re ",
             "invoice_pdf_format": "pdfa-2b",
+            "invoice_girocode_enabled": True,
         },
     )
 
@@ -671,12 +674,14 @@ def test_updates_invoice_business_settings(
     )
     assert body["invoice_number_prefix"] == "RE"
     assert body["invoice_pdf_format"] == "pdfa-2b"
+    assert body["invoice_girocode_enabled"] is True
 
     database_session.refresh(global_settings)
 
     assert global_settings.invoice_iban == (
         "DE89370400440532013000"
     )
+    assert global_settings.invoice_girocode_enabled is True
     assert global_settings.invoice_bic == (
         "COBADEFFXXX"
     )
@@ -775,6 +780,8 @@ def test_clears_optional_invoice_business_settings(
             "invoice_pdf_format",
             None,
         ),
+        ("invoice_girocode_enabled", None),
+        ("invoice_girocode_enabled", "invalid"),
     ],
 )
 def test_rejects_invalid_invoice_business_settings(
@@ -793,6 +800,109 @@ def test_rejects_invalid_invoice_business_settings(
     )
 
     assert response.status_code == 422
+
+
+def test_enables_girocode_using_existing_bank_details(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+        invoice_issuer_name="Müller & Söhne GmbH",
+        invoice_iban="DE89370400440532013000",
+    )
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={"invoice_girocode_enabled": True},
+    )
+    assert response.status_code == 200
+    assert response.json()["invoice_girocode_enabled"] is True
+    database_session.refresh(global_settings)
+    assert global_settings.invoice_girocode_enabled is True
+    assert admin_client.get("/api/settings").json()[
+        "invoice_girocode_enabled"
+    ] is True
+
+    # Unrelated settings forms send partial updates.
+    response = admin_client.patch(
+        "/api/settings",
+        json={"app_name": "Neue Abrechnung"},
+    )
+    assert response.status_code == 200
+    assert response.json()["invoice_girocode_enabled"] is True
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={
+            "invoice_girocode_enabled": False,
+            "invoice_iban": None,
+        },
+    )
+    assert response.status_code == 200
+    database_session.refresh(global_settings)
+    assert global_settings.invoice_girocode_enabled is False
+    assert global_settings.invoice_iban is None
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"invoice_issuer_name": None},
+        {"invoice_issuer_name": "A" * 71},
+        {"invoice_iban": None},
+        {"invoice_iban": "DE89370400440532013001"},
+        {"invoice_bic": "12345678"},
+        {"invoice_iban": "CH9300762011623852957"},
+    ],
+)
+def test_rejects_invalid_girocode_settings_atomically(
+    admin_client: TestClient,
+    database_session: Session,
+    overrides: dict,
+) -> None:
+    global_settings = add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={
+            "app_name": "Must not be saved",
+            "invoice_girocode_enabled": True,
+            "invoice_issuer_name": "Müller & Söhne GmbH",
+            "invoice_iban": "DE89370400440532013000",
+            **overrides,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "Girocode" in response.json()["detail"]
+    database_session.refresh(global_settings)
+    assert global_settings.invoice_girocode_enabled is False
+    assert global_settings.app_name == "Witty-Accounting"
+    assert global_settings.invoice_iban is None
+
+
+def test_cannot_clear_bank_details_while_girocode_is_enabled(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+        invoice_issuer_name="Müller & Söhne GmbH",
+        invoice_iban="DE89370400440532013000",
+    )
+    global_settings.invoice_girocode_enabled = True
+    database_session.commit()
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={"invoice_iban": None},
+    )
+
+    assert response.status_code == 422
+    database_session.refresh(global_settings)
+    assert global_settings.invoice_iban == "DE89370400440532013000"
+    assert global_settings.invoice_girocode_enabled is True
 
 
 def test_updates_smtp_settings_and_encrypts_password(

@@ -5,6 +5,9 @@ from io import BytesIO
 from functools import partial
 
 from reportlab.lib import colors
+from reportlab.graphics.barcode.qr import QrCodeWidget
+from reportlab.graphics.barcode.qrencoder import QR8bitByte
+from reportlab.graphics.shapes import Drawing, Group, Rect, String
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import (
@@ -12,7 +15,9 @@ from reportlab.lib.styles import (
     getSampleStyleSheet,
 )
 from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import (
+    KeepTogether,
     LongTable,
     Paragraph,
     SimpleDocTemplate,
@@ -23,6 +28,10 @@ from reportlab.platypus import (
 from reportlab.pdfgen import canvas as pdf_canvas
 
 from app.models.invoice import Invoice
+from app.services.invoice_girocode import (
+    GirocodeError,
+    build_girocode_payload,
+)
 
 class InvoicePdfError(Exception):
     """Base exception for invoice PDF generation."""
@@ -195,8 +204,77 @@ class InvoiceCanvas(pdf_canvas.Canvas):
         self.restoreState()
 
 
-def build_invoice_pdf(invoice: Invoice) -> bytes:
+def build_invoice_pdf(
+    invoice: Invoice,
+    *,
+    girocode_enabled: bool = False,
+) -> bytes:
     validate_invoice(invoice)
+
+    girocode = None
+    girocode_label = None
+    if (
+        girocode_enabled
+        and invoice.document_type != "cancellation"
+        and invoice.total_gross > 0
+    ):
+        try:
+            payload = build_girocode_payload(
+                beneficiary=invoice.issuer_name,
+                iban=invoice.issuer_iban,
+                bic=invoice.issuer_bic,
+                amount=invoice.total_gross,
+                reference=invoice.invoice_number,
+                currency=invoice.currency,
+            )
+        except GirocodeError as exc:
+            raise InvoicePdfError(str(exc)) from exc
+
+        # Force UTF-8 byte mode and EPC error level M. The 331-byte
+        # payload limit fits QR version 13; reserve four quiet modules.
+        # Rendered at 75% of the original 40mm size.
+        code_size = 30 * mm
+        girocode = Drawing(code_size, code_size)
+        girocode.add(Rect(
+            0, 0, code_size, code_size,
+            fillColor=colors.white,
+            strokeColor=None,
+        ))
+        girocode.add(QrCodeWidget(
+            [QR8bitByte(payload.encode("utf-8"))],
+            barLevel="M",
+            barBorder=4,
+            barWidth=code_size,
+            barHeight=code_size,
+        ))
+
+        # "Girocode" rotated 90° (reading bottom-to-top), rendered as a
+        # standalone strip that sits flush against the QR code's left
+        # edge with no gap in between.
+        girocode_label_font = "Helvetica-Bold"
+        girocode_label_size = 9
+        girocode_label_text = "Girocode"
+        girocode_label_len = stringWidth(
+            girocode_label_text, girocode_label_font, girocode_label_size,
+        )
+        girocode_label_thickness = girocode_label_size + 4
+
+        # The string is positioned so that, after the 90° rotation,
+        # its right-hand edge (descent side) lands exactly on the
+        # right edge of this box — i.e. flush against the QR code's
+        # own left edge, with no unused space in between.
+        girocode_label = Drawing(girocode_label_thickness, code_size)
+        label_string = String(
+            (code_size - girocode_label_len) / 2,
+            -girocode_label_thickness,
+            girocode_label_text,
+            fontName=girocode_label_font,
+            fontSize=girocode_label_size,
+            fillColor=colors.black,
+        )
+        label_group = Group(label_string)
+        label_group.rotate(90)
+        girocode_label.add(label_group)
 
     buffer = BytesIO()
 
@@ -963,28 +1041,86 @@ def build_invoice_pdf(invoice: Invoice) -> bytes:
                 f"{format_date(invoice.due_date)}."
             )
 
-    story.append(totals_table)
-    story.append(Spacer(1, 7 * mm))
-
-    story.append(
+    payment_details: list[object] = [
         Paragraph(
             (
                 f"<b>{payment_heading}</b><br/>"
                 f"{payment_text}"
             ),
             body_style,
-        )
-    )
-
-    story.append(Spacer(1, 6 * mm))
+        ),
+        Spacer(1, 6 * mm),
+    ]
 
     if issuer_identifiers:
-        story.append(
+        payment_details.append(
             Paragraph(
                 "<br/>".join(issuer_identifiers),
                 small_style,
             )
         )
+
+    if girocode is not None:
+        caption_style = ParagraphStyle(
+            "GirocodeCaption",
+            parent=small_style,
+            alignment=TA_CENTER,
+        )
+
+        girocode_group_width = girocode_label_thickness + code_size
+
+        # Row 1: label and QR code flush against each other, no gap.
+        # Row 2: caption, centered under the QR code column only (not
+        # under the label column), with a small gap above it.
+        girocode_group = Table(
+            [
+                [girocode_label, girocode],
+                [
+                    "",
+                    Paragraph(
+                        "Für Ihre Banking-App",
+                        caption_style,
+                    ),
+                ],
+            ],
+            colWidths=[girocode_label_thickness, code_size],
+            hAlign="LEFT",
+        )
+        girocode_group.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, 0), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, 0), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 0),
+            ("TOPPADDING", (0, 1), (-1, 1), 2 * mm),
+            ("BOTTOMPADDING", (0, 1), (-1, 1), 0),
+        ]))
+
+        payment_table = Table(
+            [[payment_details, girocode_group]],
+            colWidths=[
+                CONTENT_WIDTH - girocode_group_width,
+                girocode_group_width,
+            ],
+            hAlign="LEFT",
+        )
+        payment_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (0, 0), 6 * mm),
+            ("RIGHTPADDING", (1, 0), (1, 0), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        story.append(KeepTogether([
+            totals_table,
+            Spacer(1, 7 * mm),
+            payment_table,
+        ]))
+    else:
+        story.append(totals_table)
+        story.append(Spacer(1, 7 * mm))
+        story.extend(payment_details)
 
     footer_text = (
         (

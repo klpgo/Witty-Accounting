@@ -60,6 +60,10 @@ from app.services.invoice_export import (
     invoice_export_secret_status,
     test_sftp_connection,
 )
+from app.services.invoice_girocode import (
+    GirocodeError,
+    validate_girocode_bank_details,
+)
 
 
 router = APIRouter(
@@ -948,6 +952,31 @@ def update_global_settings(
     updates = data.model_dump(
         exclude_unset=True,
     )
+
+    if updates.get(
+        "invoice_girocode_enabled",
+        global_settings.invoice_girocode_enabled,
+    ):
+        try:
+            validate_girocode_bank_details(
+                beneficiary=updates.get(
+                    "invoice_issuer_name",
+                    global_settings.invoice_issuer_name,
+                ),
+                iban=updates.get(
+                    "invoice_iban",
+                    global_settings.invoice_iban,
+                ),
+                bic=updates.get(
+                    "invoice_bic",
+                    global_settings.invoice_bic,
+                ),
+            )
+        except GirocodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
 
     for field_name, value in updates.items():
         setattr(

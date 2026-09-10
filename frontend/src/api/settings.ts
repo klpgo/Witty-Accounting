@@ -25,6 +25,7 @@ export interface GlobalSettings {
   invoice_bic: string | null
   invoice_number_prefix: string
   invoice_pdf_format: 'standard' | 'pdfa-2b'
+  invoice_girocode_enabled: boolean
   password_min_length: number
   password_require_uppercase: boolean
   password_require_lowercase: boolean
@@ -52,6 +53,7 @@ export interface GlobalSettingsUpdate {
   invoice_bic?: string | null
   invoice_number_prefix?: string
   invoice_pdf_format?: 'standard' | 'pdfa-2b'
+  invoice_girocode_enabled?: boolean
   password_min_length?: number
   password_require_uppercase?: boolean
   password_require_lowercase?: boolean

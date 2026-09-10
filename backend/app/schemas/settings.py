@@ -159,6 +159,7 @@ class GlobalSettingsResponse(BaseModel):
     invoice_bic: str | None
     invoice_number_prefix: str
     invoice_pdf_format: InvoicePdfFormat
+    invoice_girocode_enabled: bool
     password_min_length: int
     password_require_uppercase: bool
     password_require_lowercase: bool
@@ -194,6 +195,7 @@ class GlobalSettingsUpdate(BaseModel):
         InvoiceNumberPrefix | None
     ) = None
     invoice_pdf_format: InvoicePdfFormat | None = None
+    invoice_girocode_enabled: bool | None = None
     password_min_length: (
         PasswordMinLength | None
     ) = None
@@ -214,6 +216,7 @@ class GlobalSettingsUpdate(BaseModel):
         "invoice_payment_term_days",
         "invoice_number_prefix",
         "invoice_pdf_format",
+        "invoice_girocode_enabled",
         "password_min_length",
         "password_require_uppercase",
         "password_require_lowercase",

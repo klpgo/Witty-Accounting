@@ -17,6 +17,15 @@ by it can be priced with a different amount.
 The app includes admin pages for user, charging events and invoices. Users can
 view own charging events, view and download invoices.
 
+The global setting "Girocode auf Rechnungen" under "Allgemein" optionally
+adds an EPC069-12 SEPA payment QR code to newly generated invoice PDFs
+(standard PDF and PDF/A-2b). It is disabled by default. The code uses the
+issuer name and bank details stored on the invoice, its gross amount in EUR
+and its invoice number. A valid IBAN and an issuer name of at most 70
+characters are required; a BIC is required for accounts outside the EEA.
+Cancellations and invoices without a positive amount do not get a Girocode.
+Already archived PDFs remain unchanged when the setting changes.
+
 Finalized invoice PDFs can also be exported manually by an administrator to
 an SFTP server. The connection data is configured on the settings page. The
 private client key and the SSH host-key list stay outside the database and are

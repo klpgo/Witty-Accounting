@@ -140,6 +140,13 @@ class GlobalSettings(Base):
         server_default="standard",
     )
 
+    invoice_girocode_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+
     invoice_export_sftp_enabled: Mapped[bool] = (
         mapped_column(
             Boolean,
