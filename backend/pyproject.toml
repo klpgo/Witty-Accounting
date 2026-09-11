@@ -1,6 +1,6 @@
 [project]
 name = "witty-accounting"
-version = "0.1.0"
+version = "1.2.0"
 description = "Witty Accounting Backend"
 requires-python = ">=3.12"
 
