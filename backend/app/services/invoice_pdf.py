@@ -8,7 +8,7 @@ from reportlab.lib import colors
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.barcode.qrencoder import QR8bitByte
 from reportlab.graphics.shapes import Drawing, Group, Rect, String
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import (
     ParagraphStyle,
@@ -84,6 +84,18 @@ def multiline_text(value: str) -> str:
         escape(value)
         .replace("\\n", "<br/>")
         .replace("\n", "<br/>")
+    )
+
+
+def format_iban_display(value: str) -> str:
+    # Nur für die Anzeige: Gruppierung in 4er-Blöcken
+    # (übliche IBAN-Schreibweise). Der für den Girocode
+    # verwendete Rohwert bleibt davon unberührt.
+    compact = "".join(value.split())
+
+    return " ".join(
+        compact[i : i + 4]
+        for i in range(0, len(compact), 4)
     )
 
 
@@ -208,6 +220,7 @@ def build_invoice_pdf(
     invoice: Invoice,
     *,
     girocode_enabled: bool = False,
+    issuer_email: str | None = None,
 ) -> bytes:
     validate_invoice(invoice)
 
@@ -251,7 +264,7 @@ def build_invoice_pdf(
         # "Girocode" rotated 90° (reading bottom-to-top), rendered as a
         # standalone strip that sits flush against the QR code's left
         # edge with no gap in between.
-        girocode_label_font = "Helvetica-Bold"
+        girocode_label_font = "Helvetica"
         girocode_label_size = 9
         girocode_label_text = "Girocode"
         girocode_label_len = stringWidth(
@@ -307,13 +320,12 @@ def build_invoice_pdf(
         leading=10,
     )
 
-    title_style = ParagraphStyle(
-        "InvoiceTitle",
+    header_title_style = ParagraphStyle(
+        "InvoiceHeaderTitle",
         parent=styles["Heading1"],
         fontName="Helvetica-Bold",
-        fontSize=20,
-        leading=24,
-        alignment=TA_RIGHT,
+        fontSize=16,
+        leading=19,
         textColor=colors.HexColor("#222222"),
     )
 
@@ -321,6 +333,11 @@ def build_invoice_pdf(
         "InvoiceRight",
         parent=body_style,
         alignment=TA_RIGHT,
+    )
+
+    right_small_style = ParagraphStyle(
+        "InvoiceRightSmall",
+        parent=right_style,
     )
 
     table_header_style = ParagraphStyle(
@@ -339,16 +356,10 @@ def build_invoice_pdf(
         invoice.document_type == "cancellation"
     )
 
-    document_title = (
-        "STORNORECHNUNG"
+    header_title_text = (
+        "Ladestromrechnung – Storno"
         if is_cancellation
-        else "RECHNUNG"
-    )
-
-    recipient_heading = (
-        "Stornorechnung an"
-        if is_cancellation
-        else "Rechnung an"
+        else "Ladestromrechnung"
     )
 
     issue_date_label = (
@@ -388,7 +399,11 @@ def build_invoice_pdf(
         if invoice.issuer_iban:
             bank_details.append(
                 "IBAN: "
-                + escape(invoice.issuer_iban)
+                + escape(
+                    format_iban_display(
+                        invoice.issuer_iban
+                    )
+                )
             )
 
         if invoice.issuer_bic:
@@ -403,50 +418,132 @@ def build_invoice_pdf(
                 + " | ".join(bank_details)
             )
 
+    # --- Right header block: issuer identity -----------------------
+    # Name + Anschrift (+ Telefon, falls konfiguriert, + E-Mail,
+    # falls konfiguriert), kleiner Absatz, Steuernummer/USt-IdNr.,
+    # kleiner Absatz, IBAN/BIC (nur bei Rechnungen, nicht bei
+    # Storno).
+    normalized_issuer_email = (
+        issuer_email.strip()
+        if issuer_email
+        else None
+    )
+
+    right_cell_items: list[object] = [
+        Paragraph(
+            (
+                f"<b>{escape(invoice.issuer_name)}</b><br/>"
+                f"{multiline_text(invoice.issuer_address)}"
+                + (
+                    "<br/>Tel.: "
+                    + escape(invoice.issuer_phone)
+                    if invoice.issuer_phone
+                    else ""
+                )
+                + (
+                    "<br/>"
+                    + escape(normalized_issuer_email)
+                    if normalized_issuer_email
+                    else ""
+                )
+            ),
+            right_style,
+        )
+    ]
+
+    tax_lines: list[str] = []
+
     if invoice.issuer_tax_number:
-        issuer_identifiers.append(
+        tax_lines.append(
             "Steuernummer: "
             + escape(invoice.issuer_tax_number)
         )
 
     if invoice.issuer_vat_id:
-        issuer_identifiers.append(
+        tax_lines.append(
             "USt-IdNr.: "
             + escape(invoice.issuer_vat_id)
         )
 
-    issuer_block = Paragraph(
+    if tax_lines:
+        right_cell_items.append(Spacer(1, 1 * mm))
+        right_cell_items.append(
+            Paragraph(
+                "<br/>".join(tax_lines),
+                right_small_style,
+            )
+        )
+
+    bank_lines: list[str] = []
+
+    if not is_cancellation:
+        if invoice.issuer_iban:
+            bank_lines.append(
+                "IBAN: "
+                + escape(
+                    format_iban_display(
+                        invoice.issuer_iban
+                    )
+                )
+            )
+
+        if invoice.issuer_bic:
+            bank_lines.append(
+                "BIC: "
+                + escape(invoice.issuer_bic)
+            )
+
+    if bank_lines:
+        right_cell_items.append(Spacer(1, 1 * mm))
+        right_cell_items.append(
+            Paragraph(
+                "<br/>".join(bank_lines),
+                right_small_style,
+            )
+        )
+
+    # --- Left header block: title + recipient address --------------
+    # Die Empfängeradresse wird so plaziert, dass sie im
+    # Sichtfenster eines Fensterkuverts (DIN 5008 Form A, Fenster ab
+    # ca. 45mm Blattoberkante) erscheint.
+    title_block = Paragraph(
+        escape(header_title_text),
+        header_title_style,
+    )
+
+    recipient_block = Paragraph(
         (
-            f"<b>{escape(invoice.issuer_name)}</b><br/>"
-            f"{multiline_text(invoice.issuer_address)}"
+            f"<b>{escape(invoice.recipient_name)}<br/>"
+            f"{multiline_text(invoice.recipient_address)}</b>"
         ),
         body_style,
     )
 
-    title_font_size = (
-        16
-        if is_cancellation
-        else 20
+    header_col_widths = [95 * mm, 79 * mm]
+
+    _, title_height = title_block.wrap(
+        header_col_widths[0],
+        1000 * mm,
     )
 
-    title_block = Paragraph(
-        (
-            f"<font size='{title_font_size}'>"
-            f"{document_title}"
-            "</font><br/>"
-            f"<font size='10'>"
-            f"{escape(invoice.invoice_number)}"
-            "</font>"
-        ),
-        title_style,
+    recipient_window_top = 45 * mm
+    recipient_offset = (
+        recipient_window_top - document.topMargin
     )
+    recipient_spacer_height = max(
+        2 * mm,
+        recipient_offset - title_height,
+    )
+
+    left_cell_items: list[object] = [
+        title_block,
+        Spacer(1, recipient_spacer_height),
+        recipient_block,
+    ]
 
     header_table = Table(
-        [[issuer_block, title_block]],
-        colWidths=[
-            105 * mm,
-            69 * mm,
-        ],
+        [[left_cell_items, right_cell_items]],
+        colWidths=header_col_widths,
         hAlign="LEFT",
     )
     header_table.setStyle(
@@ -487,48 +584,133 @@ def build_invoice_pdf(
     )
 
     story.append(header_table)
-    story.append(Spacer(1, 12 * mm))
+    story.append(Spacer(1, 10 * mm))
 
-    story.append(
-        Paragraph(
-            f"<b>{recipient_heading}</b>",
-            body_style,
+    # --- Full-width metadata row -------------------------------------
+    # Kein Kasten/Grid mehr: pro Feld eine kleine, rechtsbündige
+    # Überschrift, darunter fett der Feldinhalt.
+    service_period_text = (
+        format_date(
+            invoice.service_period_start.date()
+        )
+        + " – "
+        + format_date(
+            invoice.service_period_end.date()
         )
     )
 
-    story.append(
-        Paragraph(
-            (
-                f"{escape(invoice.recipient_name)}<br/>"
-                f"{multiline_text(invoice.recipient_address)}"
+    meta_label_style = ParagraphStyle(
+        "InvoiceMetaLabel",
+        parent=small_style,
+        fontSize=7.5,
+        leading=9,
+        alignment=TA_LEFT,
+        textColor=colors.HexColor("#666666"),
+        spaceAfter=0,
+    )
+
+    meta_label_right_style = ParagraphStyle(
+        "InvoiceMetaLabelRight",
+        parent=meta_label_style,
+        alignment=TA_RIGHT,
+    )
+
+    meta_value_style = ParagraphStyle(
+        "InvoiceMetaValue",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+        fontSize=10.5,
+        leading=12.5,
+        alignment=TA_LEFT,
+        spaceAfter=0,
+    )
+
+    meta_value_right_style = ParagraphStyle(
+        "InvoiceMetaValueRight",
+        parent=meta_value_style,
+        alignment=TA_RIGHT,
+    )
+
+    def meta_field(
+        label: str,
+        value: str,
+        *,
+        align_right: bool = False,
+    ) -> list[object]:
+        return [
+            Paragraph(
+                escape(label),
+                (
+                    meta_label_right_style
+                    if align_right
+                    else meta_label_style
+                ),
             ),
-            body_style,
-        )
-    )
+            Paragraph(
+                escape(value),
+                (
+                    meta_value_right_style
+                    if align_right
+                    else meta_value_style
+                ),
+            ),
+        ]
 
-    story.append(Spacer(1, 5 * mm))
+    metadata_col_widths = [
+        58 * mm,
+        58 * mm,
+        58 * mm,
+    ]
 
     metadata = [
         [
-            issue_date_label,
-            format_date(invoice.issue_date),
-            "Leistungszeitraum",
-            (
-                format_date(
-                    invoice.service_period_start.date()
-                )
-                + " bis "
-                + format_date(
-                    invoice.service_period_end.date()
-                )
+            meta_field(
+                document_number_label,
+                invoice.invoice_number,
+            ),
+            meta_field(
+                "Leistungszeitraum",
+                service_period_text,
+            ),
+            meta_field(
+                issue_date_label,
+                format_date(invoice.issue_date),
+                align_right=True,
             ),
         ],
-        [
-            document_number_label,
-            invoice.invoice_number,
-            "Währung",
-            invoice.currency,
-        ],
+    ]
+
+    metadata_style_commands = [
+        (
+            "VALIGN",
+            (0, 0),
+            (-1, -1),
+            "TOP",
+        ),
+        (
+            "LEFTPADDING",
+            (0, 0),
+            (-1, -1),
+            0,
+        ),
+        (
+            "RIGHTPADDING",
+            (0, 0),
+            (-1, -1),
+            0,
+        ),
+        (
+            "TOPPADDING",
+            (0, 0),
+            (-1, -1),
+            0,
+        ),
+        (
+            "BOTTOMPADDING",
+            (0, 0),
+            (-1, -1),
+            4 * mm,
+        ),
     ]
 
     if is_cancellation:
@@ -540,104 +722,94 @@ def build_invoice_pdf(
 
         metadata.append(
             [
-                "Originalrechnung",
-                original_number or "-",
-                "Stornierungsgrund",
-                invoice.cancellation_reason or "-",
+                meta_field(
+                    "Originalrechnung",
+                    original_number or "-",
+                ),
+                meta_field(
+                    "Stornierungsgrund",
+                    invoice.cancellation_reason or "-",
+                ),
+                "",
             ]
+        )
+
+        metadata_style_commands.append(
+            (
+                "SPAN",
+                (1, 1),
+                (2, 1),
+            )
         )
 
     metadata_table = Table(
         metadata,
-        colWidths=[
-            35 * mm,
-            43 * mm,
-            40 * mm,
-            56 * mm,
-        ],
+        colWidths=metadata_col_widths,
         hAlign="LEFT",
     )
     metadata_table.setStyle(
-        TableStyle(
-            [
-                (
-                    "BACKGROUND",
-                    (0, 0),
-                    (0, -1),
-                    colors.HexColor("#EEEEEE"),
-                ),
-                (
-                    "BACKGROUND",
-                    (2, 0),
-                    (2, -1),
-                    colors.HexColor("#EEEEEE"),
-                ),
-                (
-                    "FONTNAME",
-                    (0, 0),
-                    (-1, -1),
-                    "Helvetica",
-                ),
-                (
-                    "FONTNAME",
-                    (0, 0),
-                    (0, -1),
-                    "Helvetica-Bold",
-                ),
-                (
-                    "FONTNAME",
-                    (2, 0),
-                    (2, -1),
-                    "Helvetica-Bold",
-                ),
-                (
-                    "FONTSIZE",
-                    (0, 0),
-                    (-1, -1),
-                    8,
-                ),
-                (
-                    "VALIGN",
-                    (0, 0),
-                    (-1, -1),
-                    "MIDDLE",
-                ),
-                (
-                    "GRID",
-                    (0, 0),
-                    (-1, -1),
-                    0.25,
-                    colors.HexColor("#BBBBBB"),
-                ),
-                (
-                    "LEFTPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    5,
-                ),
-                (
-                    "RIGHTPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    5,
-                ),
-                (
-                    "TOPPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    5,
-                ),
-                (
-                    "BOTTOMPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    5,
-                ),
-            ]
-        )
+        TableStyle(metadata_style_commands)
     )
 
     story.append(metadata_table)
+
+    # --- Optional Hinweis-Zeile aus den RFID-Kartenzuordnungen ------
+    # Zeigt z.B. Zuordnungsmerkmale wie ein Kfz-Kennzeichen, die bei
+    # der jeweiligen Ladekarten-Zuordnung hinterlegt wurden.
+    assignment_notes: list[str] = []
+    seen_assignment_notes: set[str] = set()
+
+    for item in invoice.items:
+        charging_session = getattr(
+            item,
+            "charging_session",
+            None,
+        )
+
+        if charging_session is None:
+            continue
+
+        rfid_assignment = getattr(
+            charging_session,
+            "rfid_assignment",
+            None,
+        )
+
+        if rfid_assignment is None:
+            continue
+
+        note = rfid_assignment.note
+
+        if not note:
+            continue
+
+        normalized_note = note.strip()
+
+        if (
+            not normalized_note
+            or normalized_note
+            in seen_assignment_notes
+        ):
+            continue
+
+        seen_assignment_notes.add(normalized_note)
+        assignment_notes.append(normalized_note)
+
+    if assignment_notes:
+        story.append(Spacer(1, 4 * mm))
+        story.append(
+            Paragraph(
+                (
+                    "<b>Hinweis:</b> "
+                    + "<br/>".join(
+                        escape(note)
+                        for note in assignment_notes
+                    )
+                ),
+                small_style,
+            )
+        )
+
     story.append(Spacer(1, 8 * mm))
 
     item_rows: list[list[object]] = [
@@ -1028,17 +1200,17 @@ def build_invoice_pdf(
         if payment_term_days == 0:
             payment_text = (
                 "Der Rechnungsbetrag ist sofort "
-                "ohne Abzug fällig.<br/>"
-                "Zahlbar bis "
-                f"{format_date(invoice.due_date)}."
+                "(bis "
+                f"{format_date(invoice.due_date)}"
+                ") ohne Abzug fällig."
             )
         else:
             payment_text = (
                 "Der Rechnungsbetrag ist innerhalb "
                 f"von {payment_term_days} Tagen "
-                "ohne Abzug fällig.<br/>"
-                "Zahlbar bis "
-                f"{format_date(invoice.due_date)}."
+                "(bis "
+                f"{format_date(invoice.due_date)}"
+                ") ohne Abzug fällig."
             )
 
     payment_details: list[object] = [
@@ -1056,7 +1228,7 @@ def build_invoice_pdf(
         payment_details.append(
             Paragraph(
                 "<br/>".join(issuer_identifiers),
-                small_style,
+                body_style,
             )
         )
 

@@ -27,8 +27,6 @@ function ProfilePage() {
   } = useAuth()
 
   const [email, setEmail] = useState('')
-  const [salutation, setSalutation] =
-    useState('')
   const [firstName, setFirstName] =
     useState('')
   const [lastName, setLastName] =
@@ -110,9 +108,6 @@ function ProfilePage() {
         )
 
         setEmail(profile.email)
-        setSalutation(
-          profile.salutation ?? '',
-        )
         setFirstName(profile.first_name)
         setLastName(profile.last_name)
         setAddress(profile.address ?? '')
@@ -177,8 +172,6 @@ function ProfilePage() {
           accessToken,
           {
             email,
-            salutation:
-              salutation.trim() || null,
             first_name: firstName,
             last_name: lastName,
             address:
@@ -192,9 +185,6 @@ function ProfilePage() {
         )
 
       setEmail(updatedProfile.email)
-      setSalutation(
-        updatedProfile.salutation ?? '',
-      )
       setFirstName(
         updatedProfile.first_name,
       )
@@ -351,21 +341,6 @@ function ProfilePage() {
             )}
 
             <div className="form-grid">
-              <label className="form-field profile-salutation-field">
-                Anrede
-                <input
-                  type="text"
-                  value={salutation}
-                  maxLength={50}
-                  autoComplete="honorific-prefix"
-                  onChange={(event) =>
-                    setSalutation(
-                      event.target.value,
-                    )
-                  }
-                />
-              </label>
-
               <label className="form-field">
                 Vorname
                 <input

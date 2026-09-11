@@ -4,6 +4,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    String,
     UniqueConstraint,
 )
 from sqlalchemy.orm import (
@@ -60,6 +61,11 @@ class RFIDCardAssignment(Base):
             DateTime,
             nullable=True,
         )
+    )
+
+    note: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(

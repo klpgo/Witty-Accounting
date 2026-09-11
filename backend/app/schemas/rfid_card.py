@@ -32,6 +32,7 @@ class RFIDCardAssignmentResponse(BaseModel):
     user_id: int
     valid_from: datetime
     valid_to: datetime | None
+    note: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -156,6 +157,23 @@ class RFIDCardAssignmentCreate(BaseModel):
     )
     valid_from: datetime
     valid_to: datetime | None = None
+    note: str | None = Field(
+        default=None,
+        max_length=255,
+    )
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        normalized = value.strip()
+
+        return normalized or None
 
     @model_validator(mode="after")
     def validate_period(self):
@@ -182,6 +200,23 @@ class RFIDCardAssignmentUpdate(BaseModel):
     )
     valid_from: datetime | None = None
     valid_to: datetime | None = None
+    note: str | None = Field(
+        default=None,
+        max_length=255,
+    )
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        normalized = value.strip()
+
+        return normalized or None
 
     @model_validator(mode="after")
     def validate_update(self):

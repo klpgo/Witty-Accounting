@@ -10,8 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
+from app.models.charging_session import ChargingSession
 from app.models.global_settings import GlobalSettings
-from app.models.invoice import Invoice
+from app.models.invoice import Invoice, InvoiceItem
 from app.services.invoice_pdf import build_invoice_pdf
 from app.services.invoice_pdfa import (
     InvoicePdfAError,
@@ -299,7 +300,13 @@ def archive_invoice_pdf(
     invoice = db.scalar(
         select(Invoice)
         .options(
-            selectinload(Invoice.items),
+            selectinload(Invoice.items)
+            .selectinload(
+                InvoiceItem.charging_session
+            )
+            .selectinload(
+                ChargingSession.rfid_assignment
+            ),
             selectinload(Invoice.original_invoice),
         )
         .where(Invoice.id == invoice_id)
@@ -362,6 +369,22 @@ def archive_invoice_pdf(
             "ungültig."
         )
 
+    if (
+        global_settings is not None
+        and global_settings.smtp_use_database_settings
+    ):
+        raw_issuer_email = (
+            global_settings.mail_from_address
+        )
+    else:
+        raw_issuer_email = settings.mail_from_address
+
+    issuer_email = (
+        raw_issuer_email.strip()
+        if raw_issuer_email
+        else None
+    ) or None
+
     pdf_bytes = build_invoice_pdf(
         invoice,
         girocode_enabled=(
@@ -369,6 +392,7 @@ def archive_invoice_pdf(
             if global_settings is not None
             else False
         ),
+        issuer_email=issuer_email,
     )
 
     if pdf_format == PDF_FORMAT_PDFA_2B:

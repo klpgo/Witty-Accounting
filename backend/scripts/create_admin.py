@@ -183,7 +183,6 @@ def create_first_admin_with_values(
     user = User(
         email=normalized_email,
         password_hash=password_hash,
-        salutation=None,
         first_name=normalized_first_name,
         last_name=normalized_last_name,
         address=None,

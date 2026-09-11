@@ -196,9 +196,6 @@ def update_own_profile(
 
         current_user.email = payload.email
 
-    if "salutation" in payload.model_fields_set:
-        current_user.salutation = payload.salutation
-
     if "first_name" in payload.model_fields_set:
         assert payload.first_name is not None
         current_user.first_name = (
@@ -363,7 +360,6 @@ def create_new_user(
         password_hash=hash_password(
             temporary_password
         ),
-        salutation=payload.salutation,
         first_name=payload.first_name,
         last_name=payload.last_name,
         address=payload.address,
@@ -485,9 +481,6 @@ def update_user(
         )
 
         user.email = payload.email
-
-    if "salutation" in payload.model_fields_set:
-        user.salutation = payload.salutation
 
     if "first_name" in payload.model_fields_set:
         assert payload.first_name is not None

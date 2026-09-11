@@ -81,7 +81,6 @@ def create_user_with_rfid(
     user = User(
         email="max.mustermann@example.invalid",
         password_hash="test-password-hash",
-        salutation=None,
         first_name="Max",
         last_name="Mustermann",
         address=None,

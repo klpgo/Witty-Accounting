@@ -107,6 +107,11 @@ function AdminSettingsPage() {
   ] = useState('')
 
   const [
+    invoiceIssuerPhone,
+    setInvoiceIssuerPhone,
+  ] = useState('')
+
+  const [
     invoiceNumberPrefix,
     setInvoiceNumberPrefix,
   ] = useState('RE')
@@ -286,6 +291,10 @@ function AdminSettingsPage() {
         setInvoiceBic(
           loadedSettings.invoice_bic ?? '',
         )
+        setInvoiceIssuerPhone(
+          loadedSettings.invoice_issuer_phone ??
+            '',
+        )
         setInvoiceNumberPrefix(
           loadedSettings.invoice_number_prefix,
         )
@@ -370,6 +379,8 @@ function AdminSettingsPage() {
     const normalizedBic = invoiceBic
       .trim()
       .toUpperCase()
+    const normalizedIssuerPhone =
+      invoiceIssuerPhone.trim()
     const normalizedNumberPrefix =
       invoiceNumberPrefix
         .trim()
@@ -563,6 +574,8 @@ function AdminSettingsPage() {
               normalizedIban || null,
             invoice_bic:
               normalizedBic || null,
+            invoice_issuer_phone:
+              normalizedIssuerPhone || null,
             invoice_number_prefix:
               normalizedNumberPrefix,
             invoice_pdf_format:
@@ -612,6 +625,10 @@ function AdminSettingsPage() {
       )
       setInvoiceBic(
         updatedSettings.invoice_bic ?? '',
+      )
+      setInvoiceIssuerPhone(
+        updatedSettings.invoice_issuer_phone ??
+          '',
       )
       setInvoiceNumberPrefix(
         updatedSettings.invoice_number_prefix,
@@ -911,7 +928,7 @@ function AdminSettingsPage() {
                 />
               </label>
 
-              <label className="form-field settings-wide-field">
+              <label className="form-field">
                 <span>Anschrift des Rechnungsausstellers</span>
 
                 <textarea
@@ -927,6 +944,26 @@ function AdminSettingsPage() {
 
                 <small className="muted">
                   Mehrzeilige Anschriften sind möglich.
+                </small>
+              </label>
+
+              <label className="form-field">
+                <span>Telefon</span>
+
+                <input
+                  type="text"
+                  value={invoiceIssuerPhone}
+                  maxLength={50}
+                  onChange={(event) => {
+                    setInvoiceIssuerPhone(
+                      event.target.value,
+                    )
+                  }}
+                />
+
+                <small className="muted">
+                  Optional. Erscheint auf der Rechnung,
+                  wenn gesetzt.
                 </small>
               </label>
 

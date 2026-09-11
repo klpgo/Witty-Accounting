@@ -120,6 +120,8 @@ function AdminRFIDCardsPage() {
     useState('')
   const [validFrom, setValidFrom] = useState('')
   const [validTo, setValidTo] = useState('')
+  const [assignmentNote, setAssignmentNote] =
+    useState('')
 
   const [isLoading, setIsLoading] =
     useState(true)
@@ -203,6 +205,7 @@ function AdminRFIDCardsPage() {
     setAssignmentUserId('')
     setValidFrom(currentDateTimeInputValue())
     setValidTo('')
+    setAssignmentNote('')
   }
 
   useEffect(() => {
@@ -485,6 +488,7 @@ function AdminRFIDCardsPage() {
         assignment.valid_to,
       ),
     )
+    setAssignmentNote(assignment.note ?? '')
     clearMessages()
   }
 
@@ -554,6 +558,7 @@ function AdminRFIDCardsPage() {
               user_id: userId,
               valid_from: validFrom,
               valid_to: validTo || null,
+              note: assignmentNote.trim() || null,
             },
           )
 
@@ -581,6 +586,7 @@ function AdminRFIDCardsPage() {
               user_id: userId,
               valid_from: validFrom,
               valid_to: validTo || null,
+              note: assignmentNote.trim() || null,
             },
           )
 
@@ -880,6 +886,7 @@ function AdminRFIDCardsPage() {
                               <th>Benutzer</th>
                               <th>Von</th>
                               <th>Bis</th>
+                              <th>Hinweis</th>
                               <th />
                             </tr>
                           </thead>
@@ -920,6 +927,11 @@ function AdminRFIDCardsPage() {
                                             assignment.valid_to,
                                           )
                                         : 'Offen'}
+                                    </td>
+
+                                    <td>
+                                      {assignment.note ??
+                                        '–'}
                                     </td>
 
                                     <td>
@@ -1030,6 +1042,27 @@ function AdminRFIDCardsPage() {
                       Ein leeres Enddatum bedeutet,
                       dass die Zuordnung zeitlich
                       offen bleibt.
+                    </p>
+
+                    <label className="form-field">
+                      Hinweis
+                      <input
+                        type="text"
+                        value={assignmentNote}
+                        maxLength={255}
+                        placeholder="z. B. Kfz-Kennzeichen"
+                        onChange={(event) =>
+                          setAssignmentNote(
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </label>
+
+                    <p className="form-hint">
+                      Optional. Erscheint auf der
+                      Rechnung unterhalb der
+                      Rechnungsnummer, wenn gesetzt.
                     </p>
 
                     <div className="form-actions">

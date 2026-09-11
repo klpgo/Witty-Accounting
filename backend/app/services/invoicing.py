@@ -244,6 +244,38 @@ def format_billed_days(value: Decimal) -> str:
     )
 
 
+def _effective_assignment_start_date(
+    valid_from: datetime,
+) -> date:
+    # Wechseltag zählt voll für die ALTE Zuordnung: eine
+    # Zuordnung, die mitten am Tag beginnt, zählt diesen
+    # Tag noch nicht mit - erst der Folgetag ist ein
+    # voller Tag der neuen Zuordnung. Beginnt sie exakt um
+    # Mitternacht, gibt es keinen Wechsel mitten im Tag und
+    # der Tag zählt sofort voll.
+    if valid_from.time() == time.min:
+        return valid_from.date()
+
+    return valid_from.date() + timedelta(days=1)
+
+
+def _effective_assignment_end_date_exclusive(
+    valid_to: datetime | None,
+) -> date | None:
+    # Symmetrisch zum Start: endet eine Zuordnung mitten am
+    # Tag, gehört dieser Tag noch vollständig der ALTEN
+    # (endenden) Zuordnung - die Grenze liegt also erst am
+    # Folgetag. Endet sie exakt um Mitternacht, ist dieser
+    # Tag schon nicht mehr Teil der Zuordnung.
+    if valid_to is None:
+        return None
+
+    if valid_to.time() == time.min:
+        return valid_to.date()
+
+    return valid_to.date() + timedelta(days=1)
+
+
 def find_monthly_base_fee_assignments(
     db: Session,
     *,
@@ -293,35 +325,43 @@ def find_monthly_base_fee_assignments(
             ).all()
         )
 
+        month_start_date = month_start.date()
+        next_month_start_date = (
+            next_month_start.date()
+        )
+
         for assignment in assignments:
-            assignment_period_start = max(
-                month_start,
-                assignment.valid_from,
+            effective_start = max(
+                month_start_date,
+                _effective_assignment_start_date(
+                    assignment.valid_from
+                ),
             )
-            assignment_period_end = min(
-                next_month_start,
-                assignment.valid_to
-                if assignment.valid_to is not None
-                else next_month_start,
+
+            effective_end_exclusive = (
+                _effective_assignment_end_date_exclusive(
+                    assignment.valid_to
+                )
+            )
+            effective_end_exclusive = min(
+                next_month_start_date,
+                effective_end_exclusive
+                if effective_end_exclusive
+                is not None
+                else next_month_start_date,
             )
 
             if (
-                assignment_period_start
-                >= assignment_period_end
+                effective_start
+                >= effective_end_exclusive
             ):
                 continue
 
-            billed_seconds = Decimal(
-                str(
-                    (
-                        assignment_period_end
-                        - assignment_period_start
-                    ).total_seconds()
-                )
-            )
-            billed_days = (
-                billed_seconds
-                / Decimal("86400")
+            billed_days = Decimal(
+                (
+                    effective_end_exclusive
+                    - effective_start
+                ).days
             )
 
             result.append(
@@ -722,7 +762,6 @@ def create_invoice_draft(
     recipient_name = " ".join(
         part
         for part in (
-            user.salutation,
             user.first_name,
             user.last_name,
         )
@@ -748,6 +787,7 @@ def create_invoice_draft(
                 global_settings.invoice_bank_name,
                 global_settings.invoice_iban,
                 global_settings.invoice_bic,
+                global_settings.invoice_issuer_phone,
             )
         )
     )
@@ -774,6 +814,9 @@ def create_invoice_draft(
         issuer_bic = normalize_optional_text(
             global_settings.invoice_bic
         )
+        issuer_phone = normalize_optional_text(
+            global_settings.invoice_issuer_phone
+        )
     else:
         issuer_name = normalize_optional_text(
             settings.invoice_issuer_name
@@ -790,6 +833,7 @@ def create_invoice_draft(
         issuer_bank_name = None
         issuer_iban = None
         issuer_bic = None
+        issuer_phone = None
 
     if issuer_name is None:
         raise InvoiceDraftError(
@@ -824,6 +868,7 @@ def create_invoice_draft(
         issuer_bank_name=issuer_bank_name,
         issuer_iban=issuer_iban,
         issuer_bic=issuer_bic,
+        issuer_phone=issuer_phone,
         recipient_name=recipient_name,
         recipient_address=user.address,
         status="draft",
@@ -1080,7 +1125,7 @@ def create_invoice_draft(
                     ),
                     position_number=position_number,
                     description=(
-                        "Monatsgebühr RFID-Karte "
+                        "Monatsgebühr Ladekarte "
                         f"{card_label} - "
                         f"{month_name} "
                         f"{candidate.fee_month.year}"

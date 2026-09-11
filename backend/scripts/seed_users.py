@@ -88,7 +88,6 @@ def seed_users(db: Session) -> dict[str, int]:
             user = User(
                 email=user_seed["email"],
                 password_hash=SEED_PASSWORD_HASH,
-                salutation=None,
                 first_name=user_seed["first_name"],
                 last_name=user_seed["last_name"],
                 address=None,

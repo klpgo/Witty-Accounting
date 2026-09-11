@@ -23,6 +23,7 @@ export interface GlobalSettings {
   invoice_bank_name: string | null
   invoice_iban: string | null
   invoice_bic: string | null
+  invoice_issuer_phone: string | null
   invoice_number_prefix: string
   invoice_pdf_format: 'standard' | 'pdfa-2b'
   invoice_girocode_enabled: boolean
@@ -51,6 +52,7 @@ export interface GlobalSettingsUpdate {
   invoice_bank_name?: string | null
   invoice_iban?: string | null
   invoice_bic?: string | null
+  invoice_issuer_phone?: string | null
   invoice_number_prefix?: string
   invoice_pdf_format?: 'standard' | 'pdfa-2b'
   invoice_girocode_enabled?: boolean

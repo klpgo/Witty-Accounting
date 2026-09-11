@@ -34,11 +34,6 @@ class User(Base):
         nullable=False
     )
 
-    salutation: Mapped[str | None] = mapped_column(
-        String(50),
-        nullable=True
-    )
-
     first_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False

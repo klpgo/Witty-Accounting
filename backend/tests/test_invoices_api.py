@@ -114,7 +114,6 @@ def client(
             id=0,
             email="admin@example.com",
             password_hash="not-used",
-            salutation=None,
             first_name="Admin",
             last_name="Test",
             address=None,
@@ -160,7 +159,6 @@ def create_billable_session(
         user = User(
             email=email,
             password_hash="not-used",
-            salutation=None,
             first_name="Billing",
             last_name="User",
             address=(
@@ -345,7 +343,7 @@ def test_creates_base_fee_only_draft_via_api(
     assert item["monthly_base_fee_charge_id"] is not None
     assert item["charging_session_id"] is None
     assert item["description"] == (
-        "Monatsgebühr RFID-Karte "
+        "Monatsgebühr Ladekarte "
         "Rechnungstest - Juli 2026"
     )
     assert item["session_start"] is None
@@ -1211,12 +1209,16 @@ def test_finalizes_cancellation_draft(
         pdf_text.split()
     )
 
-    assert "STORNORECHNUNG" in pdf_text
+    assert "Ladestromrechnung" in pdf_text
+    assert "Storno" in pdf_text
     assert "Stornodatum" in pdf_text
     assert "Stornonummer" in pdf_text
     assert "Stornobetrag" in pdf_text
     assert "Originalrechnung" in pdf_text
-    assert "STORNORECHNUNG" in normalized_pdf_text
+    assert (
+        "Ladestromrechnung–Storno"
+        in normalized_pdf_text
+    )
     assert "Fehlerhafte Abrechnung" in pdf_text
     assert "Hinweis" in pdf_text
     assert "Zahlungsbedingung" not in pdf_text

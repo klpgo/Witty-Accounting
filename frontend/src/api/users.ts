@@ -5,7 +5,6 @@ const API_BASE_URL =
 export interface User {
   id: number
   email: string
-  salutation: string | null
   first_name: string
   last_name: string
   address: string | null
@@ -21,7 +20,6 @@ export interface User {
 
 export interface UserProfileUpdate {
   email?: string
-  salutation?: string | null
   first_name?: string
   last_name?: string
   address?: string | null

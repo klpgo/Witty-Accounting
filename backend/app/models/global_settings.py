@@ -126,6 +126,13 @@ class GlobalSettings(Base):
         nullable=True,
     )
 
+    invoice_issuer_phone: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
     invoice_number_prefix: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

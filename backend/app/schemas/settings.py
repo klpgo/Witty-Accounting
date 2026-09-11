@@ -157,6 +157,7 @@ class GlobalSettingsResponse(BaseModel):
     invoice_bank_name: str | None
     invoice_iban: str | None
     invoice_bic: str | None
+    invoice_issuer_phone: str | None
     invoice_number_prefix: str
     invoice_pdf_format: InvoicePdfFormat
     invoice_girocode_enabled: bool
@@ -191,6 +192,9 @@ class GlobalSettingsUpdate(BaseModel):
     invoice_bank_name: OptionalShortText | None = None
     invoice_iban: InvoiceIban | None = None
     invoice_bic: InvoiceBic | None = None
+    invoice_issuer_phone: (
+        OptionalShortText | None
+    ) = None
     invoice_number_prefix: (
         InvoiceNumberPrefix | None
     ) = None
@@ -287,6 +291,7 @@ class GlobalSettingsUpdate(BaseModel):
         "invoice_tax_number",
         "invoice_vat_id",
         "invoice_bank_name",
+        "invoice_issuer_phone",
         mode="before",
     )
     @classmethod

@@ -77,7 +77,6 @@ def create_user(
         password_hash=hash_password(
             TEST_PASSWORD
         ),
-        salutation=None,
         first_name="Test",
         last_name="User",
         address=None,

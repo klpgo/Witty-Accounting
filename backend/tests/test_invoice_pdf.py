@@ -157,13 +157,13 @@ def test_builds_readable_invoice_pdf() -> None:
         in extracted_text
     )
     assert (
-        "Zahlbar bis 19.07.2026"
+        "(bis 19.07.2026)"
         in extracted_text
     )
     assert "Bankverbindung" in extracted_text
     assert "Musterbank" in extracted_text
     assert (
-        "DE89370400440532013000"
+        "DE89 3704 0044 0532 0130 00"
         in extracted_text
     )
     assert "COBADEFFXXX" in extracted_text
@@ -350,7 +350,7 @@ def test_renders_optional_girocode(girocode_enabled: bool) -> None:
     extracted_text = reader.pages[0].extract_text()
     assert ("Girocode" in extracted_text) is girocode_enabled
     assert "Müller & Söhne GmbH" in extracted_text
-    assert "DE89370400440532013000" in extracted_text
+    assert "DE89 3704 0044 0532 0130 00" in extracted_text
     assert "2,62 EUR" in extracted_text
 
 

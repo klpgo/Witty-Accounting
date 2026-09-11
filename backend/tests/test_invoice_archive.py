@@ -55,7 +55,6 @@ def create_finalized_invoice(
     user = User(
         email="archive@example.com",
         password_hash="not-used",
-        salutation=None,
         first_name="Archive",
         last_name="User",
         address=(

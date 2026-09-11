@@ -95,7 +95,6 @@ def create_test_data(
     user = User(
         email="invoice@example.com",
         password_hash="not-used",
-        salutation=None,
         first_name="Invoice",
         last_name="User",
         address="Teststraße 1, 12345 Teststadt",
@@ -599,7 +598,7 @@ def test_places_monthly_base_fee_before_charging_session(
     monthly_base_fee_item = invoice.items[0]
 
     assert monthly_base_fee_item.description == (
-        "Monatsgebühr RFID-Karte "
+        "Monatsgebühr Ladekarte "
         "Testkarte - Juni 2026"
     )
 
@@ -2048,6 +2047,92 @@ def test_monthly_assignment_uses_half_open_period(
     ]
 
 
+def test_mid_day_change_counts_for_old_assignment(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+
+    old_assignment = database_session.scalar(
+        select(RFIDCardAssignment).where(
+            RFIDCardAssignment.user_id
+            == user.id
+        )
+    )
+
+    assert old_assignment is not None
+
+    card = old_assignment.rfid_card
+
+    # Alte Zuordnung endet mitten am Tag (15.06. 14:00) -
+    # dieser Tag muss noch voll der alten Zuordnung gehören.
+    old_assignment.valid_from = datetime(
+        2026,
+        6,
+        1,
+    )
+    old_assignment.valid_to = datetime(
+        2026,
+        6,
+        15,
+        14,
+        0,
+    )
+
+    new_assignment = RFIDCardAssignment(
+        rfid_card_id=card.id,
+        user_id=user.id,
+        valid_from=datetime(
+            2026,
+            6,
+            15,
+            14,
+            0,
+        ),
+        valid_to=None,
+    )
+    database_session.add(new_assignment)
+    database_session.flush()
+
+    assignments = (
+        find_monthly_base_fee_assignments(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(
+                2026,
+                6,
+                1,
+            ),
+            service_period_end=datetime(
+                2026,
+                7,
+                1,
+            ),
+        )
+    )
+
+    by_assignment_id = {
+        period.assignment.id: period.billed_days
+        for period in assignments
+    }
+
+    # 15.06. zählt voll für die alte Zuordnung: alt bekommt
+    # 1.-15.06. (15 Tage), neu bekommt erst ab 16.06. bis
+    # Monatsende (15 Tage). Zusammen exakt 30 Tage, kein Tag
+    # doppelt oder gar nicht gezählt.
+    assert (
+        by_assignment_id[old_assignment.id]
+        == Decimal("15")
+    )
+    assert (
+        by_assignment_id[new_assignment.id]
+        == Decimal("15")
+    )
+    assert sum(
+        by_assignment_id.values(),
+        Decimal("0"),
+    ) == Decimal("30")
+
+
 def test_creates_base_fee_only_invoice_draft(
     database_session: Session,
 ) -> None:
@@ -2085,7 +2170,7 @@ def test_creates_base_fee_only_invoice_draft(
     assert item.charging_session_id is None
     assert item.monthly_base_fee_charge_id is not None
     assert item.description == (
-        "Monatsgebühr RFID-Karte "
+        "Monatsgebühr Ladekarte "
         "Testkarte - Juli 2026"
     )
     assert item.session_start is None
@@ -2156,7 +2241,6 @@ def test_splits_monthly_base_fee_between_assignments(
     second_user = User(
         email="second-invoice@example.com",
         password_hash="not-used",
-        salutation=None,
         first_name="Second",
         last_name="User",
         address="Teststraße 2, 12345 Teststadt",

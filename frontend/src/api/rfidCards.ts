@@ -17,6 +17,7 @@ export interface RFIDCardAssignment {
   user_id: number
   valid_from: string
   valid_to: string | null
+  note: string | null
   created_at: string
   updated_at: string
 }
@@ -37,12 +38,14 @@ export interface RFIDCardAssignmentCreate {
   user_id: number
   valid_from: string
   valid_to?: string | null
+  note?: string | null
 }
 
 export interface RFIDCardAssignmentUpdate {
   user_id?: number
   valid_from?: string
   valid_to?: string | null
+  note?: string | null
 }
 
 interface ApiErrorResponse {

@@ -50,7 +50,6 @@ def create_user(
     user = User(
         email=email,
         password_hash="not-used",
-        salutation=None,
         first_name=first_name,
         last_name="Test",
         address=None,
