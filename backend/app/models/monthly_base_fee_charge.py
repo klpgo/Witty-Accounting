@@ -25,11 +25,11 @@ class MonthlyBaseFeeCharge(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "rfid_card_id",
+            "rfid_assignment_id",
             "fee_month",
             name=(
                 "uq_monthly_base_fee_charges_"
-                "card_month"
+                "assignment_month"
             ),
         ),
         Index(
@@ -49,6 +49,7 @@ class MonthlyBaseFeeCharge(Base):
             ondelete="RESTRICT",
         ),
         nullable=False,
+        index=True,
     )
 
     rfid_assignment_id: Mapped[int] = mapped_column(

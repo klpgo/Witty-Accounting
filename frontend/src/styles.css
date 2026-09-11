@@ -625,6 +625,29 @@ h2 {
   gap: 24px;
 }
 
+.billing-start-notice {
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  padding: 12px 14px;
+  color: #1e3a8a;
+  line-height: 1.5;
+}
+
+.billing-start-notice-warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.billing-start-notice a {
+  display: block;
+  width: fit-content;
+  margin-top: 6px;
+  color: inherit;
+  font-weight: 700;
+}
+
 .form-field select {
   width: 100%;
   border: 1px solid #cfd6e2;
@@ -652,10 +675,6 @@ h2 {
   grid-template-columns:
     repeat(2, minmax(0, 1fr));
   gap: 20px;
-}
-
-.profile-salutation-field {
-  grid-column: 1 / -1;
 }
 
 .form-actions {
@@ -913,6 +932,16 @@ select {
   padding: 12px 14px;
 }
 
+.charging-sessions-table {
+  font-size: 0.9rem;
+}
+
+.charging-sessions-table th,
+.charging-sessions-table td {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
 @media (max-width: 640px) {
   .admin-section-header {
     align-items: stretch;
@@ -1036,6 +1065,16 @@ select {
 
 .settings-checkbox-field {
   align-content: start;
+}
+
+.settings-secret-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2rem;
+}
+
+.settings-secret-status p {
+  margin: 0;
 }
 
 .settings-checkbox-control {

@@ -84,7 +84,6 @@ def create_user(
             if password is not None
             else "not-used"
         ),
-        salutation=None,
         first_name=first_name,
         last_name=last_name,
         address=None,
@@ -222,7 +221,6 @@ def test_admin_creates_user(
         headers=authorization_header(admin),
         json={
             "email": " NEW@example.com ",
-            "salutation": " Frau ",
             "first_name": " Erika ",
             "last_name": " Musterfrau ",
             "address": " Musterstraße 1 ",
@@ -239,7 +237,6 @@ def test_admin_creates_user(
     body = response.json()
 
     assert body["email"] == "new@example.com"
-    assert body["salutation"] == "Frau"
     assert body["first_name"] == "Erika"
     assert body["last_name"] == "Musterfrau"
     assert body["address"] == "Musterstraße 1"
@@ -455,7 +452,6 @@ def test_updates_own_profile(
         headers=authorization_header(user),
         json={
             "email": "NEW@example.com",
-            "salutation": " Frau ",
             "first_name": " Erika ",
             "last_name": " Musterfrau ",
             "address": (
@@ -479,7 +475,6 @@ def test_updates_own_profile(
         "Musterstraße 2\n"
         "12345 Musterstadt"
     )
-    assert body["salutation"] == "Frau"
     assert body["phone"] == "+49 123 456"
     assert body["invoice_delivery_email"] is False
     assert body["invoice_delivery_post"] is True
@@ -489,7 +484,6 @@ def test_updates_own_profile(
     assert user.email == "new@example.com"
     assert user.first_name == "Erika"
     assert user.last_name == "Musterfrau"
-    assert user.salutation == "Frau"
     assert user.phone == "+49 123 456"
     assert user.invoice_delivery_email is False
     assert user.invoice_delivery_post is True

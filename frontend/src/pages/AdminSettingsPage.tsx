@@ -20,6 +20,7 @@ import { useAppSettings } from '../settings/useAppSettings'
 import AdminSmtpSettingsForm from './AdminSmtpSettingsForm'
 import AdminPasswordPolicyForm from './AdminPasswordPolicyForm'
 import AdminAccessSettingsForm from './AdminAccessSettingsForm'
+import AdminInvoiceExportSettingsForm from './AdminInvoiceExportSettingsForm'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
@@ -63,6 +64,10 @@ function AdminSettingsPage() {
     setPostalDeliveryFeeNet,
   ] = useState('')
   const [
+    billingStartDate,
+    setBillingStartDate,
+  ] = useState('')
+  const [
     invoicePaymentTermDays,
     setInvoicePaymentTermDays,
   ] = useState('')
@@ -102,6 +107,11 @@ function AdminSettingsPage() {
   ] = useState('')
 
   const [
+    invoiceIssuerPhone,
+    setInvoiceIssuerPhone,
+  ] = useState('')
+
+  const [
     invoiceNumberPrefix,
     setInvoiceNumberPrefix,
   ] = useState('RE')
@@ -112,6 +122,11 @@ function AdminSettingsPage() {
   ] = useState<'standard' | 'pdfa-2b'>(
     'standard',
   )
+
+  const [
+    invoiceGirocodeEnabled,
+    setInvoiceGirocodeEnabled,
+  ] = useState(false)
 
   const [
     currentEnergyPrice,
@@ -246,6 +261,9 @@ function AdminSettingsPage() {
         setPostalDeliveryFeeNet(
           loadedSettings.postal_delivery_fee_net,
         )
+        setBillingStartDate(
+          loadedSettings.billing_start_date ?? '',
+        )
         setInvoicePaymentTermDays(
           String(
             loadedSettings
@@ -273,11 +291,18 @@ function AdminSettingsPage() {
         setInvoiceBic(
           loadedSettings.invoice_bic ?? '',
         )
+        setInvoiceIssuerPhone(
+          loadedSettings.invoice_issuer_phone ??
+            '',
+        )
         setInvoiceNumberPrefix(
           loadedSettings.invoice_number_prefix,
         )
         setInvoicePdfFormat(
           loadedSettings.invoice_pdf_format,
+        )
+        setInvoiceGirocodeEnabled(
+          loadedSettings.invoice_girocode_enabled,
         )
         if (loadedEnergyPrice !== null) {
           setCurrentEnergyPrice(
@@ -354,6 +379,8 @@ function AdminSettingsPage() {
     const normalizedBic = invoiceBic
       .trim()
       .toUpperCase()
+    const normalizedIssuerPhone =
+      invoiceIssuerPhone.trim()
     const normalizedNumberPrefix =
       invoiceNumberPrefix
         .trim()
@@ -529,6 +556,8 @@ function AdminSettingsPage() {
               normalizedVatRate,
             postal_delivery_fee_net:
               normalizedPostalDeliveryFee,
+            billing_start_date:
+              billingStartDate || null,
             invoice_payment_term_days:
               paymentTermDays,
             invoice_issuer_name:
@@ -545,10 +574,14 @@ function AdminSettingsPage() {
               normalizedIban || null,
             invoice_bic:
               normalizedBic || null,
+            invoice_issuer_phone:
+              normalizedIssuerPhone || null,
             invoice_number_prefix:
               normalizedNumberPrefix,
             invoice_pdf_format:
               invoicePdfFormat,
+            invoice_girocode_enabled:
+              invoiceGirocodeEnabled,
           },
         )
 
@@ -562,6 +595,9 @@ function AdminSettingsPage() {
       )
       setPostalDeliveryFeeNet(
         updatedSettings.postal_delivery_fee_net,
+      )
+      setBillingStartDate(
+        updatedSettings.billing_start_date ?? '',
       )
       setInvoicePaymentTermDays(
         String(
@@ -590,11 +626,18 @@ function AdminSettingsPage() {
       setInvoiceBic(
         updatedSettings.invoice_bic ?? '',
       )
+      setInvoiceIssuerPhone(
+        updatedSettings.invoice_issuer_phone ??
+          '',
+      )
       setInvoiceNumberPrefix(
         updatedSettings.invoice_number_prefix,
       )
       setInvoicePdfFormat(
         updatedSettings.invoice_pdf_format,
+      )
+      setInvoiceGirocodeEnabled(
+        updatedSettings.invoice_girocode_enabled,
       )
 
       await refreshSettings()
@@ -827,8 +870,33 @@ function AdminSettingsPage() {
               />
 
               <small className="muted">
-                Wird im Login, in der Kopfzeile und
-                als Browser-Titel angezeigt.
+                Wird als Browser-Titel und in E-Mails
+                angezeigt.
+              </small>
+            </label>
+
+            <label className="form-field settings-name-field">
+              <span>Girocode auf Rechnungen</span>
+
+              <select
+                value={invoiceGirocodeEnabled ? 'yes' : 'no'}
+                onChange={(event) => {
+                  setInvoiceGirocodeEnabled(
+                    event.target.value === 'yes',
+                  )
+                }}
+              >
+                <option value="no">Nein</option>
+                <option value="yes">Ja</option>
+              </select>
+
+              <small className="muted">
+                Fügt einen Zahlungs-QR-Code für die
+                Banking-App hinzu. Verwendet Name,
+                Bankverbindung, Betrag und Nummer der
+                Rechnung. Gilt für neu erzeugte PDFs
+                mit positivem Zahlbetrag. Bereits
+                archivierte PDFs bleiben unverändert.
               </small>
             </label>
           </section>
@@ -860,7 +928,7 @@ function AdminSettingsPage() {
                 />
               </label>
 
-              <label className="form-field settings-wide-field">
+              <label className="form-field">
                 <span>Anschrift des Rechnungsausstellers</span>
 
                 <textarea
@@ -876,6 +944,26 @@ function AdminSettingsPage() {
 
                 <small className="muted">
                   Mehrzeilige Anschriften sind möglich.
+                </small>
+              </label>
+
+              <label className="form-field">
+                <span>Telefon</span>
+
+                <input
+                  type="text"
+                  value={invoiceIssuerPhone}
+                  maxLength={50}
+                  onChange={(event) => {
+                    setInvoiceIssuerPhone(
+                      event.target.value,
+                    )
+                  }}
+                />
+
+                <small className="muted">
+                  Optional. Erscheint auf der Rechnung,
+                  wenn gesetzt.
                 </small>
               </label>
 
@@ -979,6 +1067,27 @@ function AdminSettingsPage() {
           <h2>Abrechnung</h2>
 
           <div className="form-grid settings-billing-grid">
+            <label className="form-field">
+              <span>Abrechnungs-Startdatum</span>
+
+              <input
+                type="date"
+                value={billingStartDate}
+                onChange={(event) => {
+                  setBillingStartDate(
+                    event.target.value,
+                  )
+                }}
+              />
+
+              <small className="muted">
+                Ladevorgänge vor diesem Datum und
+                Grundgebühren für frühere Monate werden
+                bei neuen Rechnungen ignoriert. Leer
+                bedeutet: kein Stichtag.
+              </small>
+            </label>
+
               <label className="form-field">
               <span>
                 Monatliche Grundgebühr netto
@@ -1262,6 +1371,9 @@ function AdminSettingsPage() {
       )}
       {!isLoading && (
         <AdminPasswordPolicyForm />
+      )}
+      {!isLoading && (
+        <AdminInvoiceExportSettingsForm />
       )}
       {!isLoading && (
         <AdminSmtpSettingsForm />

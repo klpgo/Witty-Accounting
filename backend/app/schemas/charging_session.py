@@ -8,6 +8,7 @@ class ChargingSessionResponse(BaseModel):
     id: int
     user_id: int | None
     user_name: str | None
+    rfid_number: str | None
     station_id: str
     start_time: datetime
     end_time: datetime

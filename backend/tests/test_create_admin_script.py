@@ -66,7 +66,6 @@ def add_user(
         password_hash=hash_password(
             "Existing1!"
         ),
-        salutation=None,
         first_name="Existing",
         last_name="User",
         address=None,

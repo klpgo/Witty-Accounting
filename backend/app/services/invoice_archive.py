@@ -10,8 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
+from app.models.charging_session import ChargingSession
 from app.models.global_settings import GlobalSettings
-from app.models.invoice import Invoice
+from app.models.invoice import Invoice, InvoiceItem
 from app.services.invoice_pdf import build_invoice_pdf
 from app.services.invoice_pdfa import (
     InvoicePdfAError,
@@ -25,6 +26,9 @@ from app.utils.utc import utc_now
 
 SAFE_INVOICE_NUMBER = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$"
+)
+SAFE_ARCHIVE_NAMESPACE = re.compile(
+    r"^[a-z0-9][a-z0-9_-]{0,99}$"
 )
 
 
@@ -71,6 +75,8 @@ def calculate_sha256(data: bytes) -> str:
 
 def get_archive_root(
     archive_root: Path | None,
+    *,
+    db: Session | None = None,
 ) -> Path:
     configured_root = (
         archive_root
@@ -78,7 +84,48 @@ def get_archive_root(
         else settings.invoice_pdf_archive_dir
     )
 
-    return Path(configured_root).expanduser().resolve()
+    resolved_root = (
+        Path(configured_root)
+        .expanduser()
+        .resolve()
+    )
+
+    if archive_root is not None or db is None:
+        return resolved_root
+
+    tenant = db.info.get("tenant")
+
+    if tenant is None:
+        if settings.tenancy_enabled:
+            raise InvoiceArchiveMetadataError(
+                "Beim Zugriff auf das "
+                "Rechnungsarchiv fehlt der "
+                "Mandantenkontext."
+            )
+
+        return resolved_root
+
+    namespace = tenant.archive_namespace
+
+    if namespace is None:
+        if settings.tenancy_enabled:
+            raise InvoiceArchiveMetadataError(
+                "Beim Zugriff auf das "
+                "Rechnungsarchiv fehlt der "
+                "Archiv-Namespace des Mandanten."
+            )
+
+        return resolved_root
+
+    if not SAFE_ARCHIVE_NAMESPACE.fullmatch(
+        namespace
+    ):
+        raise InvoiceArchiveMetadataError(
+            "Der konfigurierte Mandanten-Pfad für "
+            "das Rechnungsarchiv ist ungültig."
+        )
+
+    return (resolved_root / namespace).resolve()
 
 
 def resolve_archive_path(
@@ -253,7 +300,13 @@ def archive_invoice_pdf(
     invoice = db.scalar(
         select(Invoice)
         .options(
-            selectinload(Invoice.items),
+            selectinload(Invoice.items)
+            .selectinload(
+                InvoiceItem.charging_session
+            )
+            .selectinload(
+                ChargingSession.rfid_assignment
+            ),
             selectinload(Invoice.original_invoice),
         )
         .where(Invoice.id == invoice_id)
@@ -267,7 +320,8 @@ def archive_invoice_pdf(
         )
 
     resolved_root = get_archive_root(
-        archive_root
+        archive_root,
+        db=db,
     )
 
     archive_metadata = (
@@ -315,7 +369,31 @@ def archive_invoice_pdf(
             "ungültig."
         )
 
-    pdf_bytes = build_invoice_pdf(invoice)
+    if (
+        global_settings is not None
+        and global_settings.smtp_use_database_settings
+    ):
+        raw_issuer_email = (
+            global_settings.mail_from_address
+        )
+    else:
+        raw_issuer_email = settings.mail_from_address
+
+    issuer_email = (
+        raw_issuer_email.strip()
+        if raw_issuer_email
+        else None
+    ) or None
+
+    pdf_bytes = build_invoice_pdf(
+        invoice,
+        girocode_enabled=(
+            global_settings.invoice_girocode_enabled
+            if global_settings is not None
+            else False
+        ),
+        issuer_email=issuer_email,
+    )
 
     if pdf_format == PDF_FORMAT_PDFA_2B:
         try:
@@ -410,5 +488,8 @@ def get_archived_invoice_pdf(
 
     return archived_result(
         invoice,
-        get_archive_root(archive_root),
+        get_archive_root(
+            archive_root,
+            db=db,
+        ),
     )

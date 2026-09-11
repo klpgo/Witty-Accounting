@@ -6,6 +6,7 @@ export type AppSettingsStatus =
 
 export interface AppSettingsContextValue {
   appName: string
+  tenantName: string
   status: AppSettingsStatus
   refreshSettings: () => Promise<void>
 }

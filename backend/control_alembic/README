@@ -1,0 +1,11 @@
+This Alembic environment manages only the central Witty control database.
+
+For normal operation use the tenant migration command. It upgrades the
+control database first and then every active tenant database:
+
+    python -m scripts.migrate_tenants
+
+During first-tenant setup the bootstrap command applies this migration
+automatically:
+
+    python -m scripts.bootstrap_tenancy ...

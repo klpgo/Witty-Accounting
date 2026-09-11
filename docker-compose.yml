@@ -52,6 +52,40 @@ services:
     volumes:
       - /srv/witty/logs:/app/logs
       - /srv/witty/invoices:/app/data/invoices
+      - /srv/witty/secrets:/run/secrets:ro
+
+  control:
+    container_name: witty-control
+    profiles:
+        - control
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        WITTY_UID: "${WITTY_UID:-1000}"
+        WITTY_GID: "${WITTY_GID:-1000}"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      WITTY_CONTROL_PASSWORD: "${WITTY_CONTROL_PASSWORD:-}"
+      WITTY_CONTROL_SESSION_SECRET: "${WITTY_CONTROL_SESSION_SECRET:-}"
+      TENANT_PROVISION_DB_PASSWORD: "${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD muss in .env gesetzt sein}"
+    depends_on:
+      - db
+    ports:
+      - "127.0.0.1:${WITTY_CONTROL_PORT:-8001}:8001"
+    volumes:
+      - /srv/witty/invoices:/app/data/invoices
+    command:
+      - uvicorn
+      - app.control.main:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
 
 volumes:
   mariadb_data:

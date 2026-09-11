@@ -1,4 +1,5 @@
-from datetime import date, datetime, timedelta
+from calendar import monthrange
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import dataclass
 
@@ -16,6 +17,7 @@ from app.models.global_settings import GlobalSettings
 from app.models.monthly_base_fee_charge import (
     MonthlyBaseFeeCharge,
 )
+from app.services.pricing import price_charging_session
 
 from app.utils.utc import utc_now
 
@@ -57,10 +59,20 @@ def normalize_optional_text(
 class MonthlyBaseFeeCandidate:
     assignment: RFIDCardAssignment
     fee_month: date
+    billed_days: Decimal
+    days_in_month: int
     charge: MonthlyBaseFeeCharge | None
     rebill_source_item_id: int | None
     net_amount: Decimal
     vat_rate: Decimal
+
+
+@dataclass(frozen=True)
+class MonthlyBaseFeeAssignmentPeriod:
+    assignment: RFIDCardAssignment
+    fee_month: date
+    billed_days: Decimal
+    days_in_month: int
 
 
 class InvoiceDraftError(Exception):
@@ -220,13 +232,57 @@ def _next_month_start(value: datetime) -> datetime:
     )
 
 
+def format_billed_days(value: Decimal) -> str:
+    normalized = value.quantize(
+        FOUR_DECIMALS,
+        rounding=ROUND_HALF_UP,
+    ).normalize()
+
+    return format(normalized, "f").replace(
+        ".",
+        ",",
+    )
+
+
+def _effective_assignment_start_date(
+    valid_from: datetime,
+) -> date:
+    # Wechseltag zählt voll für die ALTE Zuordnung: eine
+    # Zuordnung, die mitten am Tag beginnt, zählt diesen
+    # Tag noch nicht mit - erst der Folgetag ist ein
+    # voller Tag der neuen Zuordnung. Beginnt sie exakt um
+    # Mitternacht, gibt es keinen Wechsel mitten im Tag und
+    # der Tag zählt sofort voll.
+    if valid_from.time() == time.min:
+        return valid_from.date()
+
+    return valid_from.date() + timedelta(days=1)
+
+
+def _effective_assignment_end_date_exclusive(
+    valid_to: datetime | None,
+) -> date | None:
+    # Symmetrisch zum Start: endet eine Zuordnung mitten am
+    # Tag, gehört dieser Tag noch vollständig der ALTEN
+    # (endenden) Zuordnung - die Grenze liegt also erst am
+    # Folgetag. Endet sie exakt um Mitternacht, ist dieser
+    # Tag schon nicht mehr Teil der Zuordnung.
+    if valid_to is None:
+        return None
+
+    if valid_to.time() == time.min:
+        return valid_to.date()
+
+    return valid_to.date() + timedelta(days=1)
+
+
 def find_monthly_base_fee_assignments(
     db: Session,
     *,
     user_id: int,
     service_period_start: datetime,
     service_period_end: datetime,
-) -> list[tuple[RFIDCardAssignment, date]]:
+) -> list[MonthlyBaseFeeAssignmentPeriod]:
     month_start = service_period_start.replace(
         day=1,
         hour=0,
@@ -240,11 +296,13 @@ def find_monthly_base_fee_assignments(
             month_start
         )
 
-    result: list[
-        tuple[RFIDCardAssignment, date]
-    ] = []
+    result: list[MonthlyBaseFeeAssignmentPeriod] = []
 
     while month_start < service_period_end:
+        next_month_start = _next_month_start(
+            month_start
+        )
+
         assignments = list(
             db.scalars(
                 select(RFIDCardAssignment)
@@ -252,7 +310,7 @@ def find_monthly_base_fee_assignments(
                     RFIDCardAssignment.user_id
                     == user_id,
                     RFIDCardAssignment.valid_from
-                    <= month_start,
+                    < next_month_start,
                     or_(
                         RFIDCardAssignment.valid_to
                         .is_(None),
@@ -267,17 +325,58 @@ def find_monthly_base_fee_assignments(
             ).all()
         )
 
-        result.extend(
-            (
-                assignment,
-                month_start.date(),
-            )
-            for assignment in assignments
+        month_start_date = month_start.date()
+        next_month_start_date = (
+            next_month_start.date()
         )
 
-        month_start = _next_month_start(
-            month_start
-        )
+        for assignment in assignments:
+            effective_start = max(
+                month_start_date,
+                _effective_assignment_start_date(
+                    assignment.valid_from
+                ),
+            )
+
+            effective_end_exclusive = (
+                _effective_assignment_end_date_exclusive(
+                    assignment.valid_to
+                )
+            )
+            effective_end_exclusive = min(
+                next_month_start_date,
+                effective_end_exclusive
+                if effective_end_exclusive
+                is not None
+                else next_month_start_date,
+            )
+
+            if (
+                effective_start
+                >= effective_end_exclusive
+            ):
+                continue
+
+            billed_days = Decimal(
+                (
+                    effective_end_exclusive
+                    - effective_start
+                ).days
+            )
+
+            result.append(
+                MonthlyBaseFeeAssignmentPeriod(
+                    assignment=assignment,
+                    fee_month=month_start.date(),
+                    billed_days=billed_days,
+                    days_in_month=monthrange(
+                        month_start.year,
+                        month_start.month,
+                    )[1],
+                )
+            )
+
+        month_start = next_month_start
 
     return result
 
@@ -388,7 +487,7 @@ def find_billable_monthly_base_fee_candidates(
         MonthlyBaseFeeCandidate
     ] = []
 
-    for assignment, fee_month in (
+    for assignment_period in (
         find_monthly_base_fee_assignments(
             db,
             user_id=user_id,
@@ -396,11 +495,13 @@ def find_billable_monthly_base_fee_candidates(
             service_period_end=service_period_end,
         )
     ):
+        assignment = assignment_period.assignment
+        fee_month = assignment_period.fee_month
         charge = db.scalar(
             select(MonthlyBaseFeeCharge)
             .where(
-                MonthlyBaseFeeCharge.rfid_card_id
-                == assignment.rfid_card_id,
+                MonthlyBaseFeeCharge.rfid_assignment_id
+                == assignment.id,
                 MonthlyBaseFeeCharge.fee_month
                 == fee_month,
             )
@@ -415,13 +516,33 @@ def find_billable_monthly_base_fee_candidates(
             ):
                 continue
 
+            prorated_net_amount = (
+                configured_net_amount
+                * assignment_period.billed_days
+                / Decimal(
+                    assignment_period.days_in_month
+                )
+            ).quantize(
+                FOUR_DECIMALS,
+                rounding=ROUND_HALF_UP,
+            )
+
+            if prorated_net_amount <= 0:
+                continue
+
             candidates.append(
                 MonthlyBaseFeeCandidate(
                     assignment=assignment,
                     fee_month=fee_month,
+                    billed_days=(
+                        assignment_period.billed_days
+                    ),
+                    days_in_month=(
+                        assignment_period.days_in_month
+                    ),
                     charge=None,
                     rebill_source_item_id=None,
-                    net_amount=configured_net_amount,
+                    net_amount=prorated_net_amount,
                     vat_rate=configured_vat_rate,
                 )
             )
@@ -465,6 +586,12 @@ def find_billable_monthly_base_fee_candidates(
             MonthlyBaseFeeCandidate(
                 assignment=assignment,
                 fee_month=fee_month,
+                billed_days=(
+                    assignment_period.billed_days
+                ),
+                days_in_month=(
+                    assignment_period.days_in_month
+                ),
                 charge=charge,
                 rebill_source_item_id=(
                     rebill_source_item_id
@@ -502,6 +629,40 @@ def create_invoice_draft(
             f"Benutzer {user_id} wurde nicht gefunden."
         )
 
+    global_settings = db.get(
+        GlobalSettings,
+        1,
+    )
+
+    effective_service_period_start = (
+        service_period_start
+    )
+
+    if (
+        global_settings is not None
+        and global_settings.billing_start_date
+        is not None
+    ):
+        billing_start = datetime.combine(
+            global_settings.billing_start_date,
+            time.min,
+        )
+
+        if service_period_end <= billing_start:
+            raise NoBillableSessionsError(
+                "Der gewählte Leistungszeitraum liegt "
+                "vollständig vor dem Abrechnungs-"
+                "Startdatum "
+                f"{global_settings.billing_start_date:%d.%m.%Y}. "
+                "Ladevorgänge und Grundgebühren vor "
+                "diesem Datum werden nicht abgerechnet."
+            )
+
+        effective_service_period_start = max(
+            service_period_start,
+            billing_start,
+        )
+
     candidate_sessions = list(
         db.scalars(
             select(ChargingSession)
@@ -514,19 +675,10 @@ def create_invoice_draft(
             .where(
                 RFIDCardAssignment.user_id == user_id,
                 ChargingSession.start_time
-                >= service_period_start,
+                >= effective_service_period_start,
                 ChargingSession.end_time
                 <= service_period_end,
                 ChargingSession.invoiced.is_(False),
-                ChargingSession.cost_grid_net.is_not(
-                    None
-                ),
-                ChargingSession.cost_pv_net.is_not(
-                    None
-                ),
-                ChargingSession.vat_rate.is_not(
-                    None
-                ),
             )
             .order_by(
                 ChargingSession.start_time,
@@ -551,6 +703,33 @@ def create_invoice_draft(
         )
 
         if is_billable:
+            if (
+                charging_session.cost_grid_net
+                is None
+                or charging_session.cost_pv_net
+                is None
+                or charging_session.vat_rate is None
+            ):
+                pricing_status = price_charging_session(
+                    db,
+                    charging_session,
+                )
+
+                if pricing_status == "missing_price":
+                    raise MissingEnergyPriceError(
+                        "Kein gültiger Tarif für "
+                        "Ladevorgang "
+                        f"{charging_session.id} vom "
+                        f"{charging_session.start_time:%d.%m.%Y}."
+                    )
+
+                if pricing_status == "invalid_energy":
+                    raise InvalidChargingSessionError(
+                        "Ungültige Energiemengen bei "
+                        "Ladevorgang "
+                        f"{charging_session.id}."
+                    )
+
             charging_sessions.append(
                 (
                     charging_session,
@@ -562,7 +741,9 @@ def create_invoice_draft(
         find_billable_monthly_base_fee_candidates(
             db,
             user_id=user_id,
-            service_period_start=service_period_start,
+            service_period_start=(
+                effective_service_period_start
+            ),
             service_period_end=service_period_end,
         )
     )
@@ -581,7 +762,6 @@ def create_invoice_draft(
     recipient_name = " ".join(
         part
         for part in (
-            user.salutation,
             user.first_name,
             user.last_name,
         )
@@ -593,11 +773,6 @@ def create_invoice_draft(
             "Für den Rechnungsempfänger ist "
             "keine Anschrift hinterlegt."
         )
-
-    global_settings = db.get(
-        GlobalSettings,
-        1,
-    )
 
     database_business_settings_configured = (
         global_settings is not None
@@ -612,6 +787,7 @@ def create_invoice_draft(
                 global_settings.invoice_bank_name,
                 global_settings.invoice_iban,
                 global_settings.invoice_bic,
+                global_settings.invoice_issuer_phone,
             )
         )
     )
@@ -638,6 +814,9 @@ def create_invoice_draft(
         issuer_bic = normalize_optional_text(
             global_settings.invoice_bic
         )
+        issuer_phone = normalize_optional_text(
+            global_settings.invoice_issuer_phone
+        )
     else:
         issuer_name = normalize_optional_text(
             settings.invoice_issuer_name
@@ -654,6 +833,7 @@ def create_invoice_draft(
         issuer_bank_name = None
         issuer_iban = None
         issuer_bic = None
+        issuer_phone = None
 
     if issuer_name is None:
         raise InvoiceDraftError(
@@ -688,6 +868,7 @@ def create_invoice_draft(
         issuer_bank_name=issuer_bank_name,
         issuer_iban=issuer_iban,
         issuer_bic=issuer_bic,
+        issuer_phone=issuer_phone,
         recipient_name=recipient_name,
         recipient_address=user.address,
         status="draft",
@@ -919,6 +1100,16 @@ def create_invoice_draft(
             month_name = MONTH_NAMES_DE[
                 candidate.fee_month.month
             ]
+            proration_suffix = ""
+
+            if candidate.billed_days != Decimal(
+                candidate.days_in_month
+            ):
+                proration_suffix = (
+                    " (anteilig "
+                    f"{format_billed_days(candidate.billed_days)}"
+                    f"/{candidate.days_in_month} Tage)"
+                )
 
             db.add(
                 InvoiceItem(
@@ -934,10 +1125,11 @@ def create_invoice_draft(
                     ),
                     position_number=position_number,
                     description=(
-                        "Monatsgebühr RFID-Karte "
+                        "Monatsgebühr Ladekarte "
                         f"{card_label} - "
                         f"{month_name} "
                         f"{candidate.fee_month.year}"
+                        f"{proration_suffix}"
                     ),
                     session_start=None,
                     session_end=None,

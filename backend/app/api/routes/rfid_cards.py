@@ -290,6 +290,7 @@ def create_rfid_card_assignment(
         user_id=user.id,
         valid_from=payload.valid_from,
         valid_to=payload.valid_to,
+        note=payload.note,
     )
 
     db.add(assignment)
@@ -488,6 +489,9 @@ def update_rfid_card_assignment(
     assignment.user_id = candidate_user_id
     assignment.valid_from = candidate_valid_from
     assignment.valid_to = candidate_valid_to
+
+    if "note" in fields:
+        assignment.note = payload.note
 
     try:
         db.commit()

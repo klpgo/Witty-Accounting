@@ -11,16 +11,25 @@ from fastapi import (
 from sqlalchemy.orm import Session
 from typing import Annotated
 
-from app.api.dependencies import get_db
+from app.api.dependencies import (
+    get_db,
+    get_tenant_context,
+)
 from app.auth import require_admin
 from app.config import settings as app_settings
 from app.models.global_settings import GlobalSettings
 from app.models.user import User
+from app.tenancy.context import TenantContext
 
 from app.schemas.settings import (
     GlobalSettingsResponse,
     GlobalSettingsUpdate,
     PublicSettingsResponse,
+)
+from app.schemas.invoice_export import (
+    InvoiceExportSettingsResponse,
+    InvoiceExportSettingsUpdate,
+    InvoiceExportTestResponse,
 )
 from app.schemas.smtp_settings import (
     SmtpSettingsResponse,
@@ -44,6 +53,16 @@ from app.services.invoice_email import (
     InvoiceEmailRecipientError,
     send_smime_test_email,
     send_smtp_test_email,
+)
+from app.services.invoice_export import (
+    InvoiceExportConfigurationError,
+    InvoiceExportConnectionError,
+    invoice_export_secret_status,
+    test_sftp_connection,
+)
+from app.services.invoice_girocode import (
+    GirocodeError,
+    validate_girocode_bank_details,
 )
 
 
@@ -73,6 +92,44 @@ def get_global_settings(
         )
 
     return global_settings
+
+
+def build_invoice_export_settings_response(
+    global_settings: GlobalSettings,
+) -> InvoiceExportSettingsResponse:
+    (
+        private_key_configured,
+        known_hosts_configured,
+    ) = invoice_export_secret_status()
+
+    return InvoiceExportSettingsResponse(
+        enabled=(
+            global_settings
+            .invoice_export_sftp_enabled
+        ),
+        host=(
+            global_settings
+            .invoice_export_sftp_host
+        ),
+        port=(
+            global_settings
+            .invoice_export_sftp_port
+        ),
+        username=(
+            global_settings
+            .invoice_export_sftp_username
+        ),
+        directory=(
+            global_settings
+            .invoice_export_sftp_directory
+        ),
+        private_key_configured=(
+            private_key_configured
+        ),
+        known_hosts_configured=(
+            known_hosts_configured
+        ),
+    )
 
 
 def build_smtp_settings_response(
@@ -254,6 +311,9 @@ def build_smtp_settings_response(
 )
 def read_public_settings(
     db: Session = Depends(get_db),
+    tenant: TenantContext = Depends(
+        get_tenant_context
+    ),
 ) -> PublicSettingsResponse:
     global_settings = db.get(
         GlobalSettings,
@@ -266,10 +326,12 @@ def read_public_settings(
         if app_name:
             return PublicSettingsResponse(
                 app_name=app_name,
+                tenant_name=tenant.name,
             )
 
     return PublicSettingsResponse(
         app_name=app_settings.app_name,
+        tenant_name=tenant.name,
     )
 
 
@@ -295,6 +357,159 @@ def read_smtp_settings(
 
     return build_smtp_settings_response(
         global_settings
+    )
+
+
+@router.get(
+    "/invoice-export",
+    response_model=InvoiceExportSettingsResponse,
+    dependencies=[Depends(require_admin)],
+)
+def read_invoice_export_settings(
+    db: Session = Depends(get_db),
+) -> InvoiceExportSettingsResponse:
+    return build_invoice_export_settings_response(
+        get_global_settings(db)
+    )
+
+
+@router.patch(
+    "/invoice-export",
+    response_model=InvoiceExportSettingsResponse,
+    dependencies=[Depends(require_admin)],
+)
+def update_invoice_export_settings(
+    data: InvoiceExportSettingsUpdate,
+    db: Session = Depends(get_db),
+) -> InvoiceExportSettingsResponse:
+    global_settings = get_global_settings(db)
+    updates = data.model_dump(exclude_unset=True)
+    field_mapping = {
+        "enabled": "invoice_export_sftp_enabled",
+        "host": "invoice_export_sftp_host",
+        "port": "invoice_export_sftp_port",
+        "username": (
+            "invoice_export_sftp_username"
+        ),
+        "directory": (
+            "invoice_export_sftp_directory"
+        ),
+    }
+
+    candidate_enabled = updates.get(
+        "enabled",
+        global_settings.invoice_export_sftp_enabled,
+    )
+    candidate_values = {
+        "SFTP-Host": updates.get(
+            "host",
+            global_settings.invoice_export_sftp_host,
+        ),
+        "SFTP-Benutzer": updates.get(
+            "username",
+            global_settings
+            .invoice_export_sftp_username,
+        ),
+        "SFTP-Zielverzeichnis": updates.get(
+            "directory",
+            global_settings
+            .invoice_export_sftp_directory,
+        ),
+    }
+
+    if candidate_enabled:
+        missing = [
+            name
+            for name, value
+            in candidate_values.items()
+            if value is None or not str(value).strip()
+        ]
+
+        if missing:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT
+                ),
+                detail=(
+                    "Zum Aktivieren des SFTP-Exports "
+                    "fehlen: " + ", ".join(missing)
+                ),
+            )
+
+        (
+            private_key_configured,
+            known_hosts_configured,
+        ) = invoice_export_secret_status()
+
+        if not private_key_configured:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT
+                ),
+                detail=(
+                    "Der private Schlüssel für den "
+                    "SFTP-Export ist nicht "
+                    "eingerichtet."
+                ),
+            )
+
+        if not known_hosts_configured:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT
+                ),
+                detail=(
+                    "Die known_hosts-Datei für den "
+                    "SFTP-Export ist nicht "
+                    "eingerichtet."
+                ),
+            )
+
+    for field_name, value in updates.items():
+        setattr(
+            global_settings,
+            field_mapping[field_name],
+            value,
+        )
+
+    try:
+        db.commit()
+        db.refresh(global_settings)
+    except Exception:
+        db.rollback()
+        raise
+
+    return build_invoice_export_settings_response(
+        global_settings
+    )
+
+
+@router.post(
+    "/invoice-export/test",
+    response_model=InvoiceExportTestResponse,
+    dependencies=[Depends(require_admin)],
+)
+def test_invoice_export_settings(
+    db: Session = Depends(get_db),
+) -> InvoiceExportTestResponse:
+    try:
+        configuration = test_sftp_connection(db)
+    except InvoiceExportConfigurationError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_CONTENT
+            ),
+            detail=str(exc),
+        ) from exc
+    except InvoiceExportConnectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    return InvoiceExportTestResponse(
+        host=configuration.host,
+        directory=configuration.directory,
     )
 
 @router.patch(
@@ -737,6 +952,31 @@ def update_global_settings(
     updates = data.model_dump(
         exclude_unset=True,
     )
+
+    if updates.get(
+        "invoice_girocode_enabled",
+        global_settings.invoice_girocode_enabled,
+    ):
+        try:
+            validate_girocode_bank_details(
+                beneficiary=updates.get(
+                    "invoice_issuer_name",
+                    global_settings.invoice_issuer_name,
+                ),
+                iban=updates.get(
+                    "invoice_iban",
+                    global_settings.invoice_iban,
+                ),
+                bic=updates.get(
+                    "invoice_bic",
+                    global_settings.invoice_bic,
+                ),
+            )
+        except GirocodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
 
     for field_name, value in updates.items():
         setattr(

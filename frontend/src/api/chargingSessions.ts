@@ -8,6 +8,7 @@ export interface ChargingSession {
   id: number
   user_id: number | null
   user_name: string | null
+  rfid_number: string | null
   station_id: string
   start_time: string
   end_time: string

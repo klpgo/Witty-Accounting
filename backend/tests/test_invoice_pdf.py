@@ -8,6 +8,7 @@ from pypdf import PdfReader
 from app.models.invoice import Invoice, InvoiceItem
 from app.services.invoice_pdf import (
     InvoiceNotFinalizedError,
+    InvoicePdfError,
     build_invoice_pdf,
 )
 from app.services.invoice_pdfa import (
@@ -156,13 +157,13 @@ def test_builds_readable_invoice_pdf() -> None:
         in extracted_text
     )
     assert (
-        "Zahlbar bis 19.07.2026"
+        "(bis 19.07.2026)"
         in extracted_text
     )
     assert "Bankverbindung" in extracted_text
     assert "Musterbank" in extracted_text
     assert (
-        "DE89370400440532013000"
+        "DE89 3704 0044 0532 0130 00"
         in extracted_text
     )
     assert "COBADEFFXXX" in extracted_text
@@ -283,11 +284,12 @@ def test_builds_invoice_pdf_with_postal_delivery_fee() -> None:
     assert "1,90" in extracted_text
 
 
-def test_converts_invoice_to_pdfa_2b() -> None:
+@pytest.mark.parametrize("girocode_enabled", [False, True])
+def test_converts_invoice_to_pdfa_2b(girocode_enabled: bool) -> None:
     invoice = create_finalized_invoice()
 
     pdf_bytes = convert_to_pdfa_2b(
-        build_invoice_pdf(invoice)
+        build_invoice_pdf(invoice, girocode_enabled=girocode_enabled)
     )
 
     validate_pdfa_2b_structure(pdf_bytes)
@@ -314,6 +316,8 @@ def test_converts_invoice_to_pdfa_2b() -> None:
     assert "RE-2026-000001" in extracted_text
     assert "Max Mustermann" in extracted_text
 
+    assert ("Girocode" in extracted_text) is girocode_enabled
+
 
 def test_rejects_standard_pdf_as_pdfa_2b() -> None:
     invoice = create_finalized_invoice()
@@ -332,3 +336,48 @@ def test_rejects_draft_invoice() -> None:
         InvoiceNotFinalizedError
     ):
         build_invoice_pdf(invoice)
+
+
+@pytest.mark.parametrize("girocode_enabled", [False, True])
+def test_renders_optional_girocode(girocode_enabled: bool) -> None:
+    invoice = create_finalized_invoice()
+    invoice.issuer_name = "Müller & Söhne GmbH"
+    invoice.issuer_bic = None
+
+    pdf_bytes = build_invoice_pdf(invoice, girocode_enabled=girocode_enabled)
+    reader = PdfReader(BytesIO(pdf_bytes))
+    assert len(reader.pages) == 1
+    extracted_text = reader.pages[0].extract_text()
+    assert ("Girocode" in extracted_text) is girocode_enabled
+    assert "Müller & Söhne GmbH" in extracted_text
+    assert "DE89 3704 0044 0532 0130 00" in extracted_text
+    assert "2,62 EUR" in extracted_text
+
+
+@pytest.mark.parametrize(
+    ("document_type", "amount"),
+    [("cancellation", "2.62"), ("invoice", "0.00"), ("invoice", "-2.62")],
+)
+def test_omits_girocode_for_cancellations_and_nonpositive_amounts(
+    document_type: str,
+    amount: str,
+) -> None:
+    invoice = create_finalized_invoice()
+    invoice.document_type = document_type
+    invoice.total_gross = Decimal(amount)
+    invoice.issuer_iban = None
+
+    pdf_bytes = build_invoice_pdf(invoice, girocode_enabled=True)
+    reader = PdfReader(BytesIO(pdf_bytes))
+    assert all("Girocode" not in page.extract_text() for page in reader.pages)
+
+
+def test_reports_invalid_invoice_bank_snapshot() -> None:
+    invoice = create_finalized_invoice()
+    invoice.issuer_iban = "DE89370400440532013001"
+
+    with pytest.raises(InvoicePdfError, match="Girocode.*IBAN"):
+        build_invoice_pdf(invoice, girocode_enabled=True)
+
+    # The optional feature must not prevent legacy PDF generation.
+    assert build_invoice_pdf(invoice).startswith(b"%PDF-")

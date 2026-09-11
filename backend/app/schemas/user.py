@@ -15,7 +15,6 @@ class UserResponse(BaseModel):
 
     id: int
     email: str
-    salutation: str | None
     first_name: str
     last_name: str
     address: str | None
@@ -36,10 +35,6 @@ class UserProfileUpdate(BaseModel):
     email: str | None = Field(
         default=None,
         max_length=255,
-    )
-    salutation: str | None = Field(
-        default=None,
-        max_length=50,
     )
     first_name: str | None = Field(
         default=None,
@@ -110,7 +105,6 @@ class UserProfileUpdate(BaseModel):
         return normalized
 
     @field_validator(
-        "salutation",
         "address",
         "phone",
     )

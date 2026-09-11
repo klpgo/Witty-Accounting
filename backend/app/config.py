@@ -24,6 +24,28 @@ class Settings(BaseSettings):
     db_user: str
     db_password: str
 
+    tenancy_enabled: bool = False
+
+    control_db_host: str | None = None
+    control_db_port: int = 3306
+    control_db_name: str | None = None
+    control_db_user: str | None = None
+    control_db_password: SecretStr | None = None
+
+    tenant_db_encryption_key: SecretStr | None = None
+    tenant_registry_cache_seconds: int = 30
+    tenant_engine_cache_size: int = 20
+
+    witty_control_password: SecretStr | None = None
+    witty_control_session_secret: SecretStr | None = None
+    witty_control_session_minutes: int = 30
+
+    tenant_provision_db_host: str | None = None
+    tenant_provision_db_port: int | None = None
+    tenant_provision_db_user: str = "root"
+    tenant_provision_db_password: SecretStr | None = None
+    tenant_provision_db_allowed_host: str = "%"
+
     log_level: str = "INFO"
 
     jwt_secret_key: SecretStr
@@ -51,6 +73,19 @@ class Settings(BaseSettings):
 
     invoice_pdf_archive_dir: Path = Path(
         "data/invoices"
+    )
+
+    invoice_export_sftp_private_key_path: Path = (
+        Path("/run/secrets/invoice-export-key")
+    )
+    invoice_export_sftp_known_hosts_path: Path = (
+        Path(
+            "/run/secrets/"
+            "invoice-export-known-hosts"
+        )
+    )
+    invoice_export_sftp_timeout_seconds: float = (
+        10.0
     )
 
     ghostscript_executable: str = "gs"

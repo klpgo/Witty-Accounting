@@ -77,7 +77,6 @@ def create_user(
         password_hash=hash_password(
             TEST_PASSWORD
         ),
-        salutation=None,
         first_name="Test",
         last_name="User",
         address=None,
@@ -215,6 +214,30 @@ def test_reprice_rejects_invalid_token(
     assert response.headers[
         "www-authenticate"
     ] == "Bearer"
+
+
+def test_rejects_token_from_different_tenant(
+    unauthenticated_client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="admin@example.com",
+        is_admin=True,
+    )
+    token = create_access_token(
+        user,
+        tenant_id=2,
+    )
+
+    response = unauthenticated_client.post(
+        "/api/energy-prices/reprice",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+    assert response.status_code == 401
 
 
 def test_reprice_rejects_non_admin_user(

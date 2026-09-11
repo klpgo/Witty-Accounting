@@ -1,5 +1,6 @@
 from collections.abc import Generator
 import base64
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -8,13 +9,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.api.dependencies import get_db
+from app.api.dependencies import (
+    get_db,
+    get_tenant_context,
+)
 from app.auth import require_admin
 from app.config import settings
 from app.database import Base
 from app.main import app
 from app.models.global_settings import GlobalSettings
 from app.models.user import User
+from app.tenancy.context import TenantContext
 
 from app.services.invoice_email import (
     InvoiceEmailConfigurationError,
@@ -65,6 +70,20 @@ def client(
         yield database_session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[
+        get_tenant_context
+    ] = lambda: TenantContext(
+        id=42,
+        slug="testmandant",
+        name="Witty Testmandant",
+        db_host="db",
+        db_port=3306,
+        db_name="testmandant",
+        db_user="testmandant",
+        db_password="not-used",
+        archive_namespace="testmandant",
+        canonical_hostname="test.example.de",
+    )
 
     try:
         with TestClient(app) as test_client:
@@ -129,6 +148,7 @@ def add_global_settings(
     postal_delivery_fee_net: Decimal = Decimal(
         "0.0000"
     ),
+    billing_start_date: date | None = None,
     invoice_payment_term_days: int = 0,
     invoice_issuer_name: str | None = None,
     invoice_issuer_address: str | None = None,
@@ -155,6 +175,7 @@ def add_global_settings(
         postal_delivery_fee_net=(
             postal_delivery_fee_net
         ),
+        billing_start_date=billing_start_date,
         invoice_payment_term_days=(
             invoice_payment_term_days
         ),
@@ -199,7 +220,123 @@ def test_reads_public_application_name(
     assert response.status_code == 200
     assert response.json() == {
         "app_name": "Meine Wallbox-Abrechnung",
+        "tenant_name": "Witty Testmandant",
     }
+
+
+def test_reads_invoice_export_settings_and_secret_status(
+    admin_client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    private_key = tmp_path / "export-key"
+    known_hosts = tmp_path / "known-hosts"
+    private_key.write_text("test-key")
+    known_hosts.write_text("test-host-key")
+
+    monkeypatch.setattr(
+        settings,
+        "invoice_export_sftp_private_key_path",
+        private_key,
+    )
+    monkeypatch.setattr(
+        settings,
+        "invoice_export_sftp_known_hosts_path",
+        known_hosts,
+    )
+
+    global_settings = add_global_settings(
+        database_session
+    )
+    global_settings.invoice_export_sftp_enabled = True
+    global_settings.invoice_export_sftp_host = (
+        "sftp.example.test"
+    )
+    global_settings.invoice_export_sftp_port = 2222
+    global_settings.invoice_export_sftp_username = (
+        "witty-export"
+    )
+    global_settings.invoice_export_sftp_directory = (
+        "/invoices"
+    )
+    database_session.commit()
+
+    response = admin_client.get(
+        "/api/settings/invoice-export"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "host": "sftp.example.test",
+        "port": 2222,
+        "username": "witty-export",
+        "directory": "/invoices",
+        "private_key_configured": True,
+        "known_hosts_configured": True,
+    }
+
+
+def test_cannot_enable_invoice_export_without_secret_files(
+    admin_client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_export_sftp_private_key_path",
+        tmp_path / "missing-key",
+    )
+    monkeypatch.setattr(
+        settings,
+        "invoice_export_sftp_known_hosts_path",
+        tmp_path / "missing-known-hosts",
+    )
+    add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings/invoice-export",
+        json={
+            "enabled": True,
+            "host": "sftp.example.test",
+            "port": 22,
+            "username": "witty-export",
+            "directory": "/invoices",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "private Schlüssel" in response.json()[
+        "detail"
+    ]
+
+
+def test_updates_disabled_invoice_export_settings(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings/invoice-export",
+        json={
+            "enabled": False,
+            "host": " sftp.example.test ",
+            "port": 2222,
+            "username": " export-user ",
+            "directory": "/invoices/",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is False
+    assert body["host"] == "sftp.example.test"
+    assert body["port"] == 2222
+    assert body["username"] == "export-user"
+    assert body["directory"] == "/invoices"
 
 
 def test_public_settings_uses_configuration_fallback(
@@ -212,6 +349,7 @@ def test_public_settings_uses_configuration_fallback(
     assert response.status_code == 200
     assert response.json() == {
         "app_name": settings.app_name,
+        "tenant_name": "Witty Testmandant",
     }
 
 
@@ -239,6 +377,7 @@ def test_reads_admin_settings(
         "monthly_base_fee_net": "12.5000",
         "monthly_base_fee_vat_rate": "19.00",
         "postal_delivery_fee_net": "0.0000",
+        "billing_start_date": None,
         "invoice_payment_term_days": 14,
         "invoice_issuer_name": None,
         "invoice_issuer_address": None,
@@ -247,8 +386,10 @@ def test_reads_admin_settings(
         "invoice_bank_name": None,
         "invoice_iban": None,
         "invoice_bic": None,
+        "invoice_issuer_phone": None,
         "invoice_number_prefix": "RE",
         "invoice_pdf_format": "standard",
+        "invoice_girocode_enabled": False,
         "password_min_length": 8,
         "password_require_uppercase": True,
         "password_require_lowercase": True,
@@ -276,6 +417,7 @@ def test_updates_admin_settings(
             "monthly_base_fee_net": "9.9900",
             "monthly_base_fee_vat_rate": "7.00",
             "postal_delivery_fee_net": "1.6000",
+            "billing_start_date": "2026-07-01",
             "invoice_payment_term_days": 21,
             "dashboard_note": "  Wartung am Freitag  ",
             "frontend_base_url": (
@@ -293,6 +435,7 @@ def test_updates_admin_settings(
         "monthly_base_fee_net": "9.9900",
         "monthly_base_fee_vat_rate": "7.00",
         "postal_delivery_fee_net": "1.6000",
+        "billing_start_date": "2026-07-01",
         "invoice_payment_term_days": 21,
         "invoice_issuer_name": None,
         "invoice_issuer_address": None,
@@ -301,8 +444,10 @@ def test_updates_admin_settings(
         "invoice_bank_name": None,
         "invoice_iban": None,
         "invoice_bic": None,
+        "invoice_issuer_phone": None,
         "invoice_number_prefix": "RE",
         "invoice_pdf_format": "standard",
+        "invoice_girocode_enabled": False,
         "password_min_length": 8,
         "password_require_uppercase": True,
         "password_require_lowercase": True,
@@ -334,6 +479,11 @@ def test_updates_admin_settings(
         global_settings.postal_delivery_fee_net
         == Decimal("1.6000")
     )
+    assert global_settings.billing_start_date == date(
+        2026,
+        7,
+        1,
+    )
     assert (
         global_settings.invoice_payment_term_days
         == 21
@@ -363,6 +513,9 @@ def test_rejects_invalid_admin_settings(
         },
         {
             "postal_delivery_fee_net": "-0.0001",
+        },
+        {
+            "billing_start_date": "2026-02-30",
         },
         {
             "invoice_payment_term_days": -1,
@@ -396,6 +549,31 @@ def test_rejects_invalid_admin_settings(
         )
 
         assert response.status_code == 422
+
+
+def test_clears_billing_start_date(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+        billing_start_date=date(2026, 7, 1),
+    )
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={
+            "billing_start_date": None,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()[
+        "billing_start_date"
+    ] is None
+
+    database_session.refresh(global_settings)
+    assert global_settings.billing_start_date is None
 
 
 def test_rejects_blank_application_name(
@@ -467,6 +645,7 @@ def test_updates_invoice_business_settings(
             "invoice_bic": "cobadeffxxx",
             "invoice_number_prefix": " re ",
             "invoice_pdf_format": "pdfa-2b",
+            "invoice_girocode_enabled": True,
         },
     )
 
@@ -497,12 +676,14 @@ def test_updates_invoice_business_settings(
     )
     assert body["invoice_number_prefix"] == "RE"
     assert body["invoice_pdf_format"] == "pdfa-2b"
+    assert body["invoice_girocode_enabled"] is True
 
     database_session.refresh(global_settings)
 
     assert global_settings.invoice_iban == (
         "DE89370400440532013000"
     )
+    assert global_settings.invoice_girocode_enabled is True
     assert global_settings.invoice_bic == (
         "COBADEFFXXX"
     )
@@ -601,6 +782,8 @@ def test_clears_optional_invoice_business_settings(
             "invoice_pdf_format",
             None,
         ),
+        ("invoice_girocode_enabled", None),
+        ("invoice_girocode_enabled", "invalid"),
     ],
 )
 def test_rejects_invalid_invoice_business_settings(
@@ -619,6 +802,109 @@ def test_rejects_invalid_invoice_business_settings(
     )
 
     assert response.status_code == 422
+
+
+def test_enables_girocode_using_existing_bank_details(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+        invoice_issuer_name="Müller & Söhne GmbH",
+        invoice_iban="DE89370400440532013000",
+    )
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={"invoice_girocode_enabled": True},
+    )
+    assert response.status_code == 200
+    assert response.json()["invoice_girocode_enabled"] is True
+    database_session.refresh(global_settings)
+    assert global_settings.invoice_girocode_enabled is True
+    assert admin_client.get("/api/settings").json()[
+        "invoice_girocode_enabled"
+    ] is True
+
+    # Unrelated settings forms send partial updates.
+    response = admin_client.patch(
+        "/api/settings",
+        json={"app_name": "Neue Abrechnung"},
+    )
+    assert response.status_code == 200
+    assert response.json()["invoice_girocode_enabled"] is True
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={
+            "invoice_girocode_enabled": False,
+            "invoice_iban": None,
+        },
+    )
+    assert response.status_code == 200
+    database_session.refresh(global_settings)
+    assert global_settings.invoice_girocode_enabled is False
+    assert global_settings.invoice_iban is None
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"invoice_issuer_name": None},
+        {"invoice_issuer_name": "A" * 71},
+        {"invoice_iban": None},
+        {"invoice_iban": "DE89370400440532013001"},
+        {"invoice_bic": "12345678"},
+        {"invoice_iban": "CH9300762011623852957"},
+    ],
+)
+def test_rejects_invalid_girocode_settings_atomically(
+    admin_client: TestClient,
+    database_session: Session,
+    overrides: dict,
+) -> None:
+    global_settings = add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={
+            "app_name": "Must not be saved",
+            "invoice_girocode_enabled": True,
+            "invoice_issuer_name": "Müller & Söhne GmbH",
+            "invoice_iban": "DE89370400440532013000",
+            **overrides,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "Girocode" in response.json()["detail"]
+    database_session.refresh(global_settings)
+    assert global_settings.invoice_girocode_enabled is False
+    assert global_settings.app_name == "Witty-Accounting"
+    assert global_settings.invoice_iban is None
+
+
+def test_cannot_clear_bank_details_while_girocode_is_enabled(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+        invoice_issuer_name="Müller & Söhne GmbH",
+        invoice_iban="DE89370400440532013000",
+    )
+    global_settings.invoice_girocode_enabled = True
+    database_session.commit()
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={"invoice_iban": None},
+    )
+
+    assert response.status_code == 422
+    database_session.refresh(global_settings)
+    assert global_settings.invoice_iban == "DE89370400440532013000"
+    assert global_settings.invoice_girocode_enabled is True
 
 
 def test_updates_smtp_settings_and_encrypts_password(

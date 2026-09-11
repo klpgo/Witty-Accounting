@@ -250,7 +250,6 @@ def create_finalized_invoice(
     user = User(
         email="recipient@example.test",
         password_hash="not-used",
-        salutation=None,
         first_name="Mail",
         last_name="Empfänger",
         address=(

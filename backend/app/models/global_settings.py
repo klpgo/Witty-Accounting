@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Date,
     DateTime,
     Integer,
     LargeBinary,
@@ -58,6 +59,13 @@ class GlobalSettings(Base):
         nullable=False,
         default=Decimal("0.0000"),
         server_default="0.0000",
+    )
+
+    billing_start_date: Mapped[
+        date | None
+    ] = mapped_column(
+        Date,
+        nullable=True,
     )
 
     invoice_payment_term_days: Mapped[int] = (
@@ -118,6 +126,13 @@ class GlobalSettings(Base):
         nullable=True,
     )
 
+    invoice_issuer_phone: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
     invoice_number_prefix: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -130,6 +145,52 @@ class GlobalSettings(Base):
         nullable=False,
         default="standard",
         server_default="standard",
+    )
+
+    invoice_girocode_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+
+    invoice_export_sftp_enabled: Mapped[bool] = (
+        mapped_column(
+            Boolean,
+            nullable=False,
+            default=False,
+            server_default="0",
+        )
+    )
+
+    invoice_export_sftp_host: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    invoice_export_sftp_port: Mapped[int] = (
+        mapped_column(
+            Integer,
+            nullable=False,
+            default=22,
+            server_default="22",
+        )
+    )
+
+    invoice_export_sftp_username: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    invoice_export_sftp_directory: Mapped[
+        str | None
+    ] = mapped_column(
+        String(1024),
+        nullable=True,
     )
 
     maintenance_mode: Mapped[bool] = mapped_column(

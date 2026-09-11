@@ -127,15 +127,10 @@ def ensure_no_admin_exists(
         )
 
 
-def create_first_admin(
+def ensure_email_is_available(
     db: Session,
-) -> User:
-    ensure_no_admin_exists(db)
-
-    email = read_required(
-        "E-Mail-Adresse: "
-    ).lower()
-
+    email: str,
+) -> None:
     existing_user_id = db.scalar(
         select(User.id).where(
             User.email == email
@@ -149,25 +144,47 @@ def create_first_admin(
             "ändert keine vorhandenen Konten."
         )
 
-    first_name = read_required(
-        "Vorname: "
+
+def create_first_admin_with_values(
+    db: Session,
+    *,
+    email: str,
+    first_name: str,
+    last_name: str,
+    password: str,
+) -> User:
+    ensure_no_admin_exists(db)
+    normalized_email = email.strip().lower()
+
+    if not normalized_email:
+        raise BootstrapRefusedError(
+            "Die E-Mail-Adresse darf nicht leer sein."
+        )
+
+    normalized_first_name = first_name.strip()
+    normalized_last_name = last_name.strip()
+
+    if not normalized_first_name or not normalized_last_name:
+        raise BootstrapRefusedError(
+            "Vor- und Nachname dürfen nicht leer sein."
+        )
+
+    ensure_email_is_available(
+        db,
+        normalized_email,
     )
 
-    last_name = read_required(
-        "Nachname: "
-    )
-
-    password = read_password(
-        load_password_policy(db)
+    validate_password(
+        password,
+        load_password_policy(db),
     )
     password_hash = hash_password(password)
 
     user = User(
-        email=email,
+        email=normalized_email,
         password_hash=password_hash,
-        salutation=None,
-        first_name=first_name,
-        last_name=last_name,
+        first_name=normalized_first_name,
+        last_name=normalized_last_name,
         address=None,
         phone=None,
         invoice_delivery_email=False,
@@ -187,6 +204,33 @@ def create_first_admin(
     db.refresh(user)
 
     return user
+
+
+def create_first_admin(
+    db: Session,
+) -> User:
+    ensure_no_admin_exists(db)
+    email = read_required(
+        "E-Mail-Adresse: "
+    ).lower()
+    ensure_email_is_available(db, email)
+    first_name = read_required(
+        "Vorname: "
+    )
+    last_name = read_required(
+        "Nachname: "
+    )
+    password = read_password(
+        load_password_policy(db)
+    )
+
+    return create_first_admin_with_values(
+        db,
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        password=password,
+    )
 
 
 def main() -> None:

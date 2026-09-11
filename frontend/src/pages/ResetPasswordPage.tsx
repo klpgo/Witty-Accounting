@@ -14,7 +14,7 @@ import { useAppSettings } from '../settings/useAppSettings'
 
 
 function ResetPasswordPage() {
-  const { appName } = useAppSettings()
+  const { tenantName } = useAppSettings()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
@@ -67,7 +67,7 @@ function ResetPasswordPage() {
   return (
     <main className="page page-centered">
       <section className="card login-card">
-        <p className="eyebrow">{appName}</p>
+        <p className="eyebrow">{tenantName}</p>
 
         <h1>Neues Passwort</h1>
 

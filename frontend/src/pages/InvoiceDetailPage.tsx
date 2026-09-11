@@ -13,6 +13,7 @@ import {
   getInvoice,
   InvoiceApiError,
   deleteInvoiceDraft,
+  exportInvoiceSftp,
   sendInvoiceEmail,
   type Invoice,
 } from '../api/invoices'
@@ -187,6 +188,19 @@ function InvoiceDetailPage() {
   const [
     emailSuccessMessage,
     setEmailSuccessMessage,
+  ] = useState<string | null>(null)
+
+  const [isExporting, setIsExporting] =
+    useState(false)
+
+  const [
+    exportErrorMessage,
+    setExportErrorMessage,
+  ] = useState<string | null>(null)
+
+  const [
+    exportSuccessMessage,
+    setExportSuccessMessage,
   ] = useState<string | null>(null)
 
   useEffect(() => {
@@ -571,6 +585,77 @@ function InvoiceDetailPage() {
     }
   }
 
+  async function handleSftpExport(): Promise<void> {
+    if (
+      !isAdmin ||
+      invoice === null ||
+      invoice.status !== 'finalized' ||
+      invoice.pdf_storage_path === null
+    ) {
+      return
+    }
+
+    const documentNumber =
+      invoice.invoice_number ?? `#${invoice.id}`
+    const confirmed = window.confirm(
+      `PDF ${documentNumber} per SFTP exportieren?`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+      navigate('/login', { replace: true })
+      return
+    }
+
+    setIsExporting(true)
+    setExportErrorMessage(null)
+    setExportSuccessMessage(null)
+
+    try {
+      const result = await exportInvoiceSftp(
+        accessToken,
+        invoice.id,
+      )
+
+      setInvoice((currentInvoice) =>
+        currentInvoice === null
+          ? null
+          : {
+              ...currentInvoice,
+              pdf_exported_at: result.exported_at,
+              pdf_export_remote_path:
+                result.remote_path,
+            },
+      )
+      setExportSuccessMessage(
+        `Die PDF wurde nach ${result.remote_path} exportiert.`,
+      )
+    } catch (error) {
+      if (
+        error instanceof InvoiceApiError &&
+        error.status === 401
+      ) {
+        signOut()
+        navigate('/login', { replace: true })
+        return
+      }
+
+      setExportErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Die PDF konnte nicht per SFTP exportiert werden.',
+      )
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   async function handleDeleteDraft(): Promise<void> {
     if (
       !isAdmin ||
@@ -760,6 +845,25 @@ function InvoiceDetailPage() {
           </button>
         )}
 
+        {isAdmin &&
+          invoice.status === 'finalized' && (
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={
+              !hasArchivedPdf ||
+              isExporting
+            }
+            onClick={() => {
+              void handleSftpExport()
+            }}
+          >
+            {isExporting
+              ? 'PDF wird exportiert …'
+              : 'PDF per SFTP exportieren'}
+          </button>
+        )}
+
         <button
           className="button button-primary"
           type="button"
@@ -842,6 +946,24 @@ function InvoiceDetailPage() {
         </section>
       )}
 
+      {exportErrorMessage && (
+        <section
+          className="form-error detail-error"
+          role="alert"
+        >
+          {exportErrorMessage}
+        </section>
+      )}
+
+      {exportSuccessMessage && (
+        <section
+          className="form-success detail-error"
+          role="status"
+        >
+          {exportSuccessMessage}
+        </section>
+      )}
+
       <section className="invoice-summary-grid">
         <article className="card">
           <p className="eyebrow">
@@ -888,6 +1010,26 @@ function InvoiceDetailPage() {
                 )}
               </dd>
             </div>
+
+            {isAdmin &&
+              invoice.pdf_exported_at !== null && (
+              <div>
+                <dt>Zuletzt per SFTP exportiert</dt>
+                <dd>
+                  {formatDateTime(
+                    invoice.pdf_exported_at,
+                  )}
+                  {invoice.pdf_export_remote_path && (
+                    <>
+                      <br />
+                      <span className="muted">
+                        {invoice.pdf_export_remote_path}
+                      </span>
+                    </>
+                  )}
+                </dd>
+              </div>
+            )}
           </dl>
         </article>
 

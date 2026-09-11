@@ -17,8 +17,46 @@ by it can be priced with a different amount.
 The app includes admin pages for user, charging events and invoices. Users can
 view own charging events, view and download invoices.
 
+The global setting "Girocode auf Rechnungen" under "Allgemein" optionally
+adds an EPC069-12 SEPA payment QR code to newly generated invoice PDFs
+(standard PDF and PDF/A-2b). It is disabled by default. The code uses the
+issuer name and bank details stored on the invoice, its gross amount in EUR
+and its invoice number. A valid IBAN and an issuer name of at most 70
+characters are required; a BIC is required for accounts outside the EEA.
+Cancellations and invoices without a positive amount do not get a Girocode.
+Already archived PDFs remain unchanged when the setting changes.
+
+Finalized invoice PDFs can also be exported manually by an administrator to
+an SFTP server. The connection data is configured on the settings page. The
+private client key and the SSH host-key list stay outside the database and are
+mounted read-only from `/srv/witty/secrets`:
+
+```text
+/srv/witty/secrets/invoice-export-key
+/srv/witty/secrets/invoice-export-known-hosts
+```
+
+Both files must be readable by the container user configured through
+`WITTY_UID` and `WITTY_GID`; the private key should use mode `0600`.
+
+The public client key must be installed for the configured account on the
+SFTP server. Create the known-hosts file with `ssh-keyscan`, for example:
+
+```bash
+ssh-keyscan -p 22 sftp.example.org \
+  > /srv/witty/secrets/invoice-export-known-hosts
+```
+
+Verify the displayed fingerprint independently before enabling the export.
+The file locations and connection timeout can be changed in `.env` with
+`INVOICE_EXPORT_SFTP_PRIVATE_KEY_PATH`,
+`INVOICE_EXPORT_SFTP_KNOWN_HOSTS_PATH` and
+`INVOICE_EXPORT_SFTP_TIMEOUT_SECONDS`.
+
 Data ist stored in a volume atted to a MariaDB container. On rebuils reuse the
 data container to keep all data.
+
+The Witty app is in German.
 
 
 INSTALLTION
@@ -57,8 +95,8 @@ $ vi .env
 
 Build and Run Witty-Accounting 
 ------------------------------
-$ docker compose --env-file .env build
-$ docker compose --env-file .env up -d
+$ docker compose build
+$ docker compose up -d
 
 
 Add the first Admin User
@@ -82,4 +120,47 @@ Use your browser to access the Witty-Accounting app by pointin
 it to http://<docker host>:8000.
 
 
+Multi-tenant operation
+----------------------
+The operating mode is selected through TENANCY_ENABLED during setup.
+With TENANCY_ENABLED=false Witty runs as a standalone installation and
+uses the configured database and invoice archive directly. With
+TENANCY_ENABLED=true Witty uses one shared frontend and backend with a
+separate MariaDB database and invoice archive subdirectory for every
+tenant. The tenant is selected through the request hostname.
 
+The preparation and activation procedure is documented in
+docs/multi-tenancy.md.
+
+
+Local tenant administration
+---------------------------
+The separate `witty-control` service manages tenants and is bound only to the
+server loopback address at `http://127.0.0.1:8001`. Add a long control password
+and an independent session secret (at least 32 characters) to `.env`:
+
+```dotenv
+WITTY_CONTROL_PASSWORD=<long-random-password>
+WITTY_CONTROL_SESSION_SECRET=<independent-random-secret>
+WITTY_CONTROL_SESSION_MINUTES=30
+WITTY_CONTROL_PORT=8001
+```
+
+Build and start it with:
+
+```bash
+docker compose --env-file .env build control
+docker compose --env-file .env up -d control
+```
+
+For a remote server use an SSH tunnel and then open
+`http://127.0.0.1:8001` locally:
+
+```bash
+ssh -L 8001:127.0.0.1:8001 <server>
+```
+
+Creating a tenant creates its database, a random database password, all schema
+migrations and the first administrator. Deleting a tenant permanently removes
+its registry entry, database, database user and invoice archive. Create an
+external backup first; this deletion cannot be undone.

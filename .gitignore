@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.swp
+*.md
 
 # Virtual Environments
 .venv/
@@ -41,5 +43,5 @@ backups/
 
 /secrets/
 
-#
-*.md
+# Test data delete scripts
+sql/

@@ -31,9 +31,15 @@ RUN pip install --no-cache-dir uv \
 
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
+COPY backend/control_alembic.ini ./control_alembic.ini
+COPY backend/control_alembic ./control_alembic
 COPY backend/app ./app
 COPY backend/scripts/__init__.py ./scripts/__init__.py
 COPY backend/scripts/create_admin.py ./scripts/create_admin.py
+COPY backend/scripts/register_tenant.py ./scripts/register_tenant.py
+COPY backend/scripts/bootstrap_tenancy.py ./scripts/bootstrap_tenancy.py
+COPY backend/scripts/create_control_database.py ./scripts/create_control_database.py
+COPY backend/scripts/migrate_tenants.py ./scripts/migrate_tenants.py
 
 COPY --from=frontend-build /build/frontend/dist ./frontend
 

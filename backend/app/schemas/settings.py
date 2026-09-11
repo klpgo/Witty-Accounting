@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -133,6 +134,7 @@ InvoicePdfFormat = Literal[
 
 class PublicSettingsResponse(BaseModel):
     app_name: str
+    tenant_name: str
 
 
 class GlobalSettingsResponse(BaseModel):
@@ -146,6 +148,7 @@ class GlobalSettingsResponse(BaseModel):
     monthly_base_fee_net: Decimal
     monthly_base_fee_vat_rate: Decimal
     postal_delivery_fee_net: Decimal
+    billing_start_date: date | None
     invoice_payment_term_days: int
     invoice_issuer_name: str | None
     invoice_issuer_address: str | None
@@ -154,8 +157,10 @@ class GlobalSettingsResponse(BaseModel):
     invoice_bank_name: str | None
     invoice_iban: str | None
     invoice_bic: str | None
+    invoice_issuer_phone: str | None
     invoice_number_prefix: str
     invoice_pdf_format: InvoicePdfFormat
+    invoice_girocode_enabled: bool
     password_min_length: int
     password_require_uppercase: bool
     password_require_lowercase: bool
@@ -176,6 +181,7 @@ class GlobalSettingsUpdate(BaseModel):
     monthly_base_fee_net: BaseFeeDecimal | None = None
     monthly_base_fee_vat_rate: VatDecimal | None = None
     postal_delivery_fee_net: BaseFeeDecimal | None = None
+    billing_start_date: date | None = None
     invoice_payment_term_days: (
         PaymentTermDays | None
     ) = None
@@ -186,10 +192,14 @@ class GlobalSettingsUpdate(BaseModel):
     invoice_bank_name: OptionalShortText | None = None
     invoice_iban: InvoiceIban | None = None
     invoice_bic: InvoiceBic | None = None
+    invoice_issuer_phone: (
+        OptionalShortText | None
+    ) = None
     invoice_number_prefix: (
         InvoiceNumberPrefix | None
     ) = None
     invoice_pdf_format: InvoicePdfFormat | None = None
+    invoice_girocode_enabled: bool | None = None
     password_min_length: (
         PasswordMinLength | None
     ) = None
@@ -210,6 +220,7 @@ class GlobalSettingsUpdate(BaseModel):
         "invoice_payment_term_days",
         "invoice_number_prefix",
         "invoice_pdf_format",
+        "invoice_girocode_enabled",
         "password_min_length",
         "password_require_uppercase",
         "password_require_lowercase",
@@ -280,6 +291,7 @@ class GlobalSettingsUpdate(BaseModel):
         "invoice_tax_number",
         "invoice_vat_id",
         "invoice_bank_name",
+        "invoice_issuer_phone",
         mode="before",
     )
     @classmethod

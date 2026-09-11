@@ -23,6 +23,7 @@ from app.services.invoice_archive import (
     InvoicePdfIntegrityError,
     archive_invoice_pdf,
 )
+from app.services.invoice_pdf import InvoicePdfError
 
 
 @pytest.fixture
@@ -54,7 +55,6 @@ def create_finalized_invoice(
     user = User(
         email="archive@example.com",
         password_hash="not-used",
-        salutation=None,
         first_name="Archive",
         last_name="User",
         address=(
@@ -317,6 +317,92 @@ def test_archiving_is_idempotent(
         .st_mtime_ns
         == first_modified_time
     )
+
+
+@pytest.mark.parametrize("pdf_format", ["standard", "pdfa-2b"])
+def test_archives_girocode_from_invoice_snapshot(
+    database_session: Session,
+    tmp_path: Path,
+    pdf_format: str,
+) -> None:
+    global_settings = GlobalSettings(
+        id=1,
+        invoice_pdf_format=pdf_format,
+        invoice_girocode_enabled=True,
+        invoice_issuer_name="Changed issuer",
+        invoice_iban="invalid-current-iban",
+    )
+    database_session.add(global_settings)
+    invoice = create_finalized_invoice(database_session)
+    invoice.issuer_iban = "DE89370400440532013000"
+    database_session.commit()
+
+    result = archive_invoice_pdf(
+        database_session,
+        invoice_id=invoice.id,
+        archive_root=tmp_path,
+    )
+    pdf_bytes = result.absolute_path.read_bytes()
+    reader = PdfReader(BytesIO(pdf_bytes))
+    extracted_text = "\n".join(page.extract_text() for page in reader.pages)
+    assert "Girocode" in extracted_text
+    assert "Witty Accounting GmbH" in extracted_text
+    assert "Changed issuer" not in extracted_text
+
+    global_settings.invoice_girocode_enabled = False
+    database_session.commit()
+    archived_again = archive_invoice_pdf(
+        database_session,
+        invoice_id=invoice.id,
+        archive_root=tmp_path,
+    )
+    assert archived_again.sha256 == result.sha256
+    assert archived_again.absolute_path.read_bytes() == pdf_bytes
+
+
+def test_enabling_girocode_does_not_change_archived_pdf(
+    database_session: Session,
+    tmp_path: Path,
+) -> None:
+    invoice = create_finalized_invoice(database_session)
+    first = archive_invoice_pdf(
+        database_session,
+        invoice_id=invoice.id,
+        archive_root=tmp_path,
+    )
+    original = first.absolute_path.read_bytes()
+    database_session.add(GlobalSettings(id=1, invoice_girocode_enabled=True))
+    database_session.commit()
+
+    second = archive_invoice_pdf(
+        database_session,
+        invoice_id=invoice.id,
+        archive_root=tmp_path,
+    )
+    assert second.sha256 == first.sha256
+    assert second.absolute_path.read_bytes() == original
+
+
+def test_invalid_girocode_leaves_no_archive_metadata_or_file(
+    database_session: Session,
+    tmp_path: Path,
+) -> None:
+    database_session.add(GlobalSettings(id=1, invoice_girocode_enabled=True))
+    invoice = create_finalized_invoice(database_session)
+
+    with pytest.raises(InvoicePdfError, match="Girocode.*IBAN"):
+        archive_invoice_pdf(
+            database_session,
+            invoice_id=invoice.id,
+            archive_root=tmp_path,
+        )
+
+    database_session.refresh(invoice)
+    assert invoice.pdf_storage_path is None
+    assert invoice.pdf_sha256 is None
+    assert invoice.pdf_size_bytes is None
+    assert invoice.pdf_created_at is None
+    assert not list(tmp_path.rglob("*.pdf"))
 
 
 def test_detects_modified_archived_pdf(

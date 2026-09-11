@@ -9,8 +9,7 @@ from logging.config import fileConfig
 
 target_metadata = Base.metadata
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import create_engine, pool
 
 from alembic import context
 
@@ -61,6 +60,17 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def get_database_url():
+    configured_url = config.get_main_option(
+        "sqlalchemy.url"
+    )
+
+    if configured_url:
+        return configured_url
+
+    return DATABASE_URL
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -68,17 +78,36 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    from app.database import engine
+    supplied_connection = config.attributes.get(
+        "connection"
+    )
 
-    connectable = engine
-
-    with connectable.connect() as connection:
+    if supplied_connection is not None:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=supplied_connection,
+            target_metadata=target_metadata,
         )
 
         with context.begin_transaction():
             context.run_migrations()
+
+        return
+
+    connectable = create_engine(
+        get_database_url(),
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+    connectable.dispose()
 
 
 if context.is_offline_mode():

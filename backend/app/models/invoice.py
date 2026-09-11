@@ -96,6 +96,13 @@ class Invoice(Base):
         nullable=True,
     )
 
+    issuer_phone: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
     recipient_name: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -208,6 +215,27 @@ class Invoice(Base):
 
     pdf_created_at: Mapped[datetime | None] = mapped_column(
         DateTime,
+        nullable=True,
+    )
+
+    pdf_exported_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    pdf_exported_by_user_id: Mapped[
+        int | None
+    ] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    pdf_export_remote_path: Mapped[
+        str | None
+    ] = mapped_column(
+        String(1200),
         nullable=True,
     )
 
