@@ -786,7 +786,7 @@ function AdminUsersPage() {
                       }
                     />
 
-                    Manueller Download aus dem Portal
+                    Download aus dem Portal
                     nach Benachrichtigung per E-Mail
                   </label>
                   </div>

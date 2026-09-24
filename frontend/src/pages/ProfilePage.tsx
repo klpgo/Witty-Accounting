@@ -468,7 +468,7 @@ function ProfilePage() {
                   }
                 />
 
-                Manueller Download aus dem Portal nach
+                Download aus dem Portal nach
                 Benachrichtigung per E-Mail
               </label>
             </div>
