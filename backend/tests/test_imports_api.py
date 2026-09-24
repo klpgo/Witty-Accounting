@@ -115,6 +115,12 @@ def test_upload_xlsx_returns_import_result(
         "priced": 2,
         "missing_price": 0,
         "invalid_energy": 0,
+        "unknown_rfid_cards": [],
+        "inactive_rfid_cards": [],
+        "unassigned_rfid_numbers": [],
+        "backfilled_rfid_numbers": 0,
+        "reassigned_sessions": 0,
+        "fetched_from": None,
     }
 
 

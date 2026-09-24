@@ -30,6 +30,9 @@ from app.services.rfid_assignments import (
     RFIDAssignmentOverlapError,
     ensure_rfid_assignment_period_available,
 )
+from app.services.rfid_reassignment import (
+    reassign_after_change,
+)
 
 
 router = APIRouter(
@@ -234,6 +237,7 @@ def update_rfid_card(
             ),
         ) from exc
 
+    reassign_after_change(db)
     db.refresh(card)
 
     return card
@@ -295,6 +299,7 @@ def create_rfid_card_assignment(
 
     db.add(assignment)
     db.commit()
+    reassign_after_change(db)
     db.refresh(assignment)
 
     return assignment
@@ -507,6 +512,7 @@ def update_rfid_card_assignment(
             ),
         ) from exc
 
+    reassign_after_change(db)
     db.refresh(assignment)
 
     return assignment

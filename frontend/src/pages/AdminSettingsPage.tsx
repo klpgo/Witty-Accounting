@@ -21,6 +21,7 @@ import AdminSmtpSettingsForm from './AdminSmtpSettingsForm'
 import AdminPasswordPolicyForm from './AdminPasswordPolicyForm'
 import AdminAccessSettingsForm from './AdminAccessSettingsForm'
 import AdminInvoiceExportSettingsForm from './AdminInvoiceExportSettingsForm'
+import AdminHagerSettingsForm from './AdminHagerSettingsForm'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
@@ -1371,6 +1372,9 @@ function AdminSettingsPage() {
       )}
       {!isLoading && (
         <AdminPasswordPolicyForm />
+      )}
+      {!isLoading && (
+        <AdminHagerSettingsForm />
       )}
       {!isLoading && (
         <AdminInvoiceExportSettingsForm />

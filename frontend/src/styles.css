@@ -1253,3 +1253,31 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* Status des automatischen Hager-Abrufs */
+.settings-status-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.settings-status-list > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) 1fr;
+  gap: 1rem;
+}
+
+.settings-status-list dt {
+  font-weight: 600;
+}
+
+.settings-status-list dd {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .settings-status-list > div {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+}

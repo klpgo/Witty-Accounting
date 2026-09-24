@@ -15,6 +15,11 @@ def heartbeat():
         "Scheduler heartbeat"
     )
 
+    # Zeitpläne der Mandanten prüfen und fällige Hager-Abrufe starten
+    from app.services.hager_auto_import import check_all_tenants
+
+    check_all_tenants()
+
 
 def start_scheduler() -> None:
     if scheduler.running:
@@ -39,5 +44,9 @@ def stop_scheduler() -> None:
         return
 
     scheduler.shutdown(wait=False)
+
+    from app.services.hager_auto_import import shutdown
+
+    shutdown()
 
     logger.info("Scheduler gestoppt")

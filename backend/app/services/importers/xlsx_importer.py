@@ -12,8 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.charging_session import ChargingSession
-from app.services.rfid_assignments import (
-    resolve_rfid_assignment,
+from app.services.rfid_reassignment import (
+    ASSIGNED,
+    RFIDIssueCollector,
+    classify_rfid,
+    reassign_open_sessions,
 )
 #from app.models.rfid_card import RFIDCard
 
@@ -327,27 +330,41 @@ def import_xlsx_to_db(
     Existiert zum Startzeitpunkt eine gültige Zuordnung
     einer aktiven RFID-Karte, wird sie gespeichert.
     Unbekannte, deaktivierte oder nicht zugeordnete
-    RFID-Karten bleiben ohne Zuordnung.
+    RFID-Karten bleiben ohne Zuordnung; die RFID-Nummer
+    wird trotzdem gespeichert, damit der Ladevorgang
+    später nachträglich zugeordnet werden kann.
     """
     parsed_sessions = import_xlsx(path)
 
     imported = 0
     skipped = 0
-    unknown_rfid_sessions = 0
-    unknown_rfid_numbers: set[str] = set()
+    backfilled = 0
+    issues = RFIDIssueCollector()
     imported_hashes: list[str] = []
 
     for session_data in parsed_sessions:
         import_hash = session_data["import_hash"]
 
         existing_session = db.scalar(
-            select(ChargingSession.id).where(
+            select(ChargingSession).where(
                 ChargingSession.import_hash == import_hash
             )
         )
 
         if existing_session is not None:
             skipped += 1
+
+            # Fehlende RFID-Nummer bei nicht abgerechneten
+            # Ladevorgängen ergänzen
+            if (
+                existing_session.rfid_number is None
+                and session_data["rfid"] is not None
+                and not existing_session.invoiced
+                and existing_session.invoice_id is None
+            ):
+                existing_session.rfid_number = session_data["rfid"]
+                backfilled += 1
+
             continue
 
         rfid_number = session_data["rfid"]
@@ -355,28 +372,26 @@ def import_xlsx_to_db(
         rfid_assignment_id: int | None = None
 
         if rfid_number is not None:
-            assignment = resolve_rfid_assignment(
+            status, assignment = classify_rfid(
                 db,
-                rfid_number=rfid_number,
-                at=session_data["start_time"],
+                rfid_number,
+                session_data["start_time"],
             )
 
-            if assignment is not None:
+            if status == ASSIGNED and assignment is not None:
                 rfid_card_id = (
                     assignment.rfid_card_id
                 )
                 rfid_assignment_id = assignment.id
             else:
-                unknown_rfid_sessions += 1
-                unknown_rfid_numbers.add(
-                    rfid_number
-                )
+                issues.add(status, rfid_number)
 
         charging_session = ChargingSession(
             hager_session_id=None,
             station_id=session_data["station_id"],
             start_time=session_data["start_time"],
             end_time=session_data["end_time"],
+            rfid_number=rfid_number,
             rfid_card_id=rfid_card_id,
             rfid_assignment_id=(
                 rfid_assignment_id
@@ -396,6 +411,9 @@ def import_xlsx_to_db(
         imported += 1
         imported_hashes.append(import_hash)
 
+    db.flush()
+    reassigned = reassign_open_sessions(db)
+
     try:
         db.commit()
     except Exception:
@@ -406,7 +424,8 @@ def import_xlsx_to_db(
         "read": len(parsed_sessions),
         "imported": imported,
         "skipped": skipped,
-        "unknown_rfid_sessions": unknown_rfid_sessions,
-        "unknown_rfid_numbers": sorted(unknown_rfid_numbers),
+        **issues.as_result(),
+        "backfilled_rfid_numbers": backfilled,
+        "reassigned_sessions": reassigned,
         "imported_hashes": imported_hashes,
     }

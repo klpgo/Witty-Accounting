@@ -1414,13 +1414,14 @@ wheels = [
 
 [[package]]
 name = "witty-accounting"
-version = "0.1.0"
+version = "1.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
     { name = "apscheduler" },
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "openpyxl" },
     { name = "paramiko" },
     { name = "pwdlib", extra = ["argon2"] },
@@ -1448,6 +1449,7 @@ requires-dist = [
     { name = "apscheduler" },
     { name = "cryptography", specifier = ">=49.0.0" },
     { name = "fastapi" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "paramiko", specifier = ">=4.0.0" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3.0" },

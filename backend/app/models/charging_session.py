@@ -53,6 +53,14 @@ class ChargingSession(Base):
         nullable=False
     )
 
+    # RFID-Nummer laut Import – auch ohne Zuordnung gespeichert,
+    # damit Ladevorgänge später nachträglich zugeordnet werden können
+    rfid_number: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        index=True,
+    )
+
     # Zuordnung zur RFID-Karte
     rfid_card_id: Mapped[int | None] = mapped_column(
         ForeignKey("rfid_cards.id"),

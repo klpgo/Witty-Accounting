@@ -133,6 +133,38 @@ export interface InvoiceExportTestResponse {
   directory: string
 }
 
+export type HagerAutoImportStatus = 'running' | 'success' | 'error'
+
+export interface HagerSettings {
+  username: string | null
+  installation_id: string | null
+  password_configured: boolean
+  auto_import_enabled: boolean
+  auto_import_interval_hours: number
+  auto_import_start_time: string
+  auto_import_next_run_at: string | null
+  auto_import_last_started_at: string | null
+  auto_import_last_finished_at: string | null
+  auto_import_last_status: HagerAutoImportStatus | null
+  auto_import_last_message: string | null
+  last_successful_fetch_at: string | null
+}
+
+export interface HagerConnectionTestResponse {
+  sessions: number
+  latest_session_start: string | null
+}
+
+export interface HagerSettingsUpdate {
+  username?: string
+  installation_id?: string
+  password?: string
+  clear_password?: boolean
+  auto_import_enabled?: boolean
+  auto_import_interval_hours?: number
+  auto_import_start_time?: string
+}
+
 export interface EnergyPrice {
   id: number
   valid_from: string
@@ -507,4 +539,79 @@ export async function updateCurrentEnergyPrice(
   return (
     await response.json()
   ) as EnergyPrice
+}
+
+export async function getHagerSettings(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<HagerSettings> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/hager`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as HagerSettings
+}
+
+export async function updateHagerSettings(
+  accessToken: string,
+  payload: HagerSettingsUpdate,
+): Promise<HagerSettings> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/hager`,
+    {
+      method: 'PATCH',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as HagerSettings
+}
+
+export async function testHagerSettings(
+  accessToken: string,
+): Promise<HagerConnectionTestResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/hager/test`,
+    {
+      method: 'POST',
+      headers: createHeaders(accessToken),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as HagerConnectionTestResponse
 }
