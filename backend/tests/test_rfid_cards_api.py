@@ -1328,3 +1328,45 @@ def test_used_assignment_allows_safe_end_change(
         6,
         16,
     )
+
+
+def test_admin_lists_rfid_cards_sorted_by_description(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+
+    for rfid_number, description in [
+        ("AAA001", None),
+        ("BBB002", "Karte 10"),
+        ("CCC003", "Wartung"),
+        ("DDD004", "Karte 2"),
+        ("EEE005", "karte 1"),
+    ]:
+        card = create_card(
+            database_session,
+            user=admin,
+            rfid_number=rfid_number,
+        )
+        card.description = description
+        database_session.commit()
+
+    response = client.get(
+        "/api/rfid-cards",
+        headers=authorization_header(admin),
+    )
+
+    assert response.status_code == 200
+    # natürliche Sortierung, ohne Beschreibung zuletzt
+    assert [card["description"] for card in response.json()] == [
+        "karte 1",
+        "Karte 2",
+        "Karte 10",
+        "Wartung",
+        None,
+    ]

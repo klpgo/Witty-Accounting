@@ -1,3 +1,4 @@
+import re
 from typing import Annotated
 
 from fastapi import (
@@ -117,6 +118,27 @@ def ensure_rfid_number_available(
         )
 
 
+
+def natural_sort_key(value: str) -> tuple:
+    """"Karte 2" vor "Karte 10": Zahlen als Zahlen vergleichen."""
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in re.split(r"(\d+)", value.casefold())
+        if part
+    )
+
+
+def rfid_card_sort_key(card: RFIDCard) -> tuple:
+    """Nach Beschreibung; Karten ohne Beschreibung zuletzt."""
+    description = (card.description or "").strip()
+
+    return (
+        description == "",
+        natural_sort_key(description),
+        card.rfid_number,
+        card.id,
+    )
+
 @router.get(
     "",
     response_model=list[RFIDCardResponse],
@@ -128,13 +150,9 @@ def list_rfid_cards(
         Depends(get_db),
     ],
 ) -> list[RFIDCard]:
-    return list(
-        db.scalars(
-            select(RFIDCard).order_by(
-                RFIDCard.rfid_number,
-                RFIDCard.id,
-            )
-        ).all()
+    return sorted(
+        db.scalars(select(RFIDCard)).all(),
+        key=rfid_card_sort_key,
     )
 
 

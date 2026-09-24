@@ -1744,3 +1744,60 @@ def test_maps_invoice_email_errors(
     assert response.json() == {
         "detail": message,
     }
+
+
+def test_lists_invoices_newest_first(
+    client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+
+    def create_draft(suffix: str) -> int:
+        user, _ = create_billable_session(
+            database_session,
+            suffix=suffix,
+        )
+        response = client.post(
+            "/api/invoices/drafts",
+            json={
+                "user_id": user.id,
+                "service_period_start": "2026-06-01T00:00:00",
+                "service_period_end": "2026-07-01T00:00:00",
+            },
+        )
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def finalize(invoice_id: int, issue_date: str) -> None:
+        response = client.post(
+            f"/api/invoices/{invoice_id}/finalize",
+            json={
+                "issue_date": issue_date,
+                "due_date": "2026-08-31",
+            },
+        )
+        assert response.status_code == 200
+
+    # zuerst angelegt, aber jüngeres Rechnungsdatum
+    later_dated = create_draft("-later")
+    finalize(later_dated, "2026-07-20")
+
+    earlier_dated = create_draft("-earlier")
+    finalize(earlier_dated, "2026-07-05")
+
+    draft = create_draft("-draft")
+
+    response = client.get("/api/invoices")
+
+    assert response.status_code == 200
+    assert [invoice["id"] for invoice in response.json()] == [
+        draft,
+        later_dated,
+        earlier_dated,
+    ]

@@ -163,7 +163,12 @@ def list_invoices(
         .options(
             selectinload(Invoice.items)
         )
+        # Neueste oben: Entwürfe (noch ohne Rechnungsdatum) zuerst,
+        # dann nach Rechnungsdatum absteigend. "IS NULL DESC" statt
+        # NULLS FIRST, weil MariaDB das nicht unterstützt.
         .order_by(
+            Invoice.issue_date.is_(None).desc(),
+            Invoice.issue_date.desc(),
             Invoice.created_at.desc(),
             Invoice.id.desc(),
         )

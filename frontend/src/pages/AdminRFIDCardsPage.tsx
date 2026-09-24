@@ -26,13 +26,25 @@ import {
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 
+// Nach Beschreibung ("Karte 2" vor "Karte 10"), Karten ohne
+// Beschreibung zuletzt, bei Gleichstand nach RFID-Nummer
 function sortCards(cards: RFIDCard[]): RFIDCard[] {
-  return [...cards].sort((first, second) =>
-    first.rfid_number.localeCompare(
-      second.rfid_number,
-      'de',
-    ),
-  )
+  return [...cards].sort((first, second) => {
+    const firstDescription = (first.description ?? '').trim()
+    const secondDescription = (second.description ?? '').trim()
+
+    if (!firstDescription !== !secondDescription) {
+      return firstDescription ? -1 : 1
+    }
+
+    return (
+      firstDescription.localeCompare(secondDescription, 'de', {
+        numeric: true,
+        sensitivity: 'base',
+      }) ||
+      first.rfid_number.localeCompare(second.rfid_number, 'de')
+    )
+  })
 }
 
 function sortAssignments(
