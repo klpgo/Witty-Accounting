@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from html import escape
 from io import BytesIO
@@ -73,6 +73,23 @@ def format_energy(value: Decimal) -> str:
 
 def format_date(value: date) -> str:
     return value.strftime("%d.%m.%Y")
+
+
+def format_service_period(
+    start: datetime,
+    end: datetime,
+) -> str:
+    """
+    Leistungszeitraum für die Rechnung. Das gespeicherte Ende ist
+    exklusiv (z. B. 01.08. 00:00 für den Monat Juli); angezeigt wird
+    der letzte Tag der Leistung: "01.07.2026 – 31.07.2026".
+    """
+    last_day = end.date()
+
+    if end.time() == time(0, 0) and end > start:
+        last_day = (end - timedelta(days=1)).date()
+
+    return f"{format_date(start.date())} – {format_date(last_day)}"
 
 
 def format_unit_price(value: Decimal) -> str:
@@ -589,14 +606,9 @@ def build_invoice_pdf(
     # --- Full-width metadata row -------------------------------------
     # Kein Kasten/Grid mehr: pro Feld eine kleine, rechtsbündige
     # Überschrift, darunter fett der Feldinhalt.
-    service_period_text = (
-        format_date(
-            invoice.service_period_start.date()
-        )
-        + " – "
-        + format_date(
-            invoice.service_period_end.date()
-        )
+    service_period_text = format_service_period(
+        invoice.service_period_start,
+        invoice.service_period_end,
     )
 
     meta_label_style = ParagraphStyle(

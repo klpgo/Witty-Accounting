@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom'
 
 import {
+  archiveInvoicePdf,
   downloadInvoicePdf,
   getInvoice,
   InvoiceApiError,
@@ -28,6 +29,12 @@ import {
   UserApiError,
   type User,
 } from '../api/users'
+import {
+  formatDate,
+  formatLocalDateTime,
+  formatServicePeriod,
+  formatUtcDateTime,
+} from '../utils/dateFormat'
 
 function formatCurrency(
   value: string | number,
@@ -63,47 +70,6 @@ function formatNumber(
     minimumFractionDigits: 0,
     maximumFractionDigits,
   }).format(numericValue)
-}
-
-function formatDate(
-  value: string | null,
-): string {
-  if (value === null) {
-    return '–'
-  }
-
-  const date = new Date(
-    value.length === 10
-      ? `${value}T00:00:00`
-      : value,
-  )
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat(
-    'de-DE',
-  ).format(date)
-}
-
-function formatDateTime(
-  value: string | null,
-): string {
-  if (value === null) {
-    return '–'
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
 }
 
 function getStatusLabel(
@@ -158,6 +124,14 @@ function InvoiceDetailPage() {
     pdfErrorMessage,
     setPdfErrorMessage,
   ] = useState<string | null>(null)
+
+  const [
+    pdfSuccessMessage,
+    setPdfSuccessMessage,
+  ] = useState<string | null>(null)
+
+  const [isArchiving, setIsArchiving] =
+    useState(false)
 
   const [isDeleting, setIsDeleting] =
     useState(false)
@@ -369,6 +343,70 @@ function InvoiceDetailPage() {
       )
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  function handleFinalized(
+    finalizedInvoice: Invoice,
+    warning?: string,
+  ): void {
+    setInvoice(finalizedInvoice)
+    setPdfSuccessMessage(null)
+    setPdfErrorMessage(warning ?? null)
+  }
+
+  async function handleArchivePdf(): Promise<void> {
+    if (invoice === null) {
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+
+      navigate('/login', {
+        replace: true,
+      })
+
+      return
+    }
+
+    setPdfErrorMessage(null)
+    setPdfSuccessMessage(null)
+    setIsArchiving(true)
+
+    try {
+      setInvoice(
+        await archiveInvoicePdf(
+          accessToken,
+          invoice.id,
+        ),
+      )
+      setPdfSuccessMessage(
+        'Das PDF wurde erzeugt und archiviert.',
+      )
+    } catch (error) {
+      if (
+        error instanceof InvoiceApiError &&
+        error.status === 401
+      ) {
+        signOut()
+
+        navigate('/login', {
+          replace: true,
+        })
+
+        return
+      }
+
+      setPdfErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Das PDF konnte nicht erzeugt werden.',
+      )
+    } finally {
+      setIsArchiving(false)
     }
   }
 
@@ -864,6 +902,23 @@ function InvoiceDetailPage() {
           </button>
         )}
 
+        {isAdmin &&
+          invoice.status === 'finalized' &&
+          !hasArchivedPdf && (
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={isArchiving}
+            onClick={() => {
+              void handleArchivePdf()
+            }}
+          >
+            {isArchiving
+              ? 'PDF wird erzeugt …'
+              : 'PDF erzeugen'}
+          </button>
+        )}
+
         <button
           className="button button-primary"
           type="button"
@@ -919,12 +974,35 @@ function InvoiceDetailPage() {
         </section>
       )}
 
+      {isAdmin &&
+        invoice.status === 'finalized' &&
+        !hasArchivedPdf &&
+        !pdfErrorMessage && (
+        <section
+          className="form-error detail-error"
+          role="status"
+        >
+          Für diese Rechnung ist noch kein PDF archiviert.
+          Mit „PDF erzeugen“ wird es aus den finalisierten
+          Rechnungsdaten erstellt.
+        </section>
+      )}
+
       {pdfErrorMessage && (
         <section
           className="form-error detail-error"
           role="alert"
         >
           {pdfErrorMessage}
+        </section>
+      )}
+
+      {pdfSuccessMessage && (
+        <section
+          className="form-success detail-error"
+          role="status"
+        >
+          {pdfSuccessMessage}
         </section>
       )}
 
@@ -992,11 +1070,8 @@ function InvoiceDetailPage() {
             <div>
               <dt>Leistungszeitraum</dt>
               <dd>
-                {formatDateTime(
+                {formatServicePeriod(
                   invoice.service_period_start,
-                )}
-                {' – '}
-                {formatDateTime(
                   invoice.service_period_end,
                 )}
               </dd>
@@ -1005,7 +1080,7 @@ function InvoiceDetailPage() {
             <div>
               <dt>Erstellt</dt>
               <dd>
-                {formatDateTime(
+                {formatUtcDateTime(
                   invoice.created_at,
                 )}
               </dd>
@@ -1016,7 +1091,7 @@ function InvoiceDetailPage() {
               <div>
                 <dt>Zuletzt per SFTP exportiert</dt>
                 <dd>
-                  {formatDateTime(
+                  {formatUtcDateTime(
                     invoice.pdf_exported_at,
                   )}
                   {invoice.pdf_export_remote_path && (
@@ -1089,7 +1164,7 @@ function InvoiceDetailPage() {
         invoice.document_type === 'invoice' && (
           <InvoiceFinalizeForm
             invoiceId={invoice.id}
-            onFinalized={setInvoice}
+            onFinalized={handleFinalized}
           />
       )}
 
@@ -1099,7 +1174,7 @@ function InvoiceDetailPage() {
           'cancellation' && (
           <InvoiceCancellationFinalizeForm
             cancellationId={invoice.id}
-            onFinalized={setInvoice}
+            onFinalized={handleFinalized}
           />
       )}
 
@@ -1148,11 +1223,13 @@ function InvoiceDetailPage() {
         </div>
 
         <div className="table-scroll">
-          <table className="data-table">
+          <table className="data-table invoice-items-table">
             <thead>
               <tr>
                 <th>Pos.</th>
-                <th>Beschreibung</th>
+                <th className="invoice-item-description">
+                  Beschreibung
+                </th>
                 <th>Zeitraum</th>
                 <th>Ladestation</th>
                 <th className="table-number">
@@ -1177,7 +1254,7 @@ function InvoiceDetailPage() {
                     {item.position_number}
                   </td>
 
-                  <td>
+                  <td className="invoice-item-description">
                     <strong>
                       {item.description}
                     </strong>
@@ -1187,13 +1264,13 @@ function InvoiceDetailPage() {
                     {item.item_type ===
                     'charging_session' ? (
                       <>
-                        {formatDateTime(
+                        {formatLocalDateTime(
                           item.session_start,
                         )}
                         <br />
                         <span className="muted">
                           bis{' '}
-                          {formatDateTime(
+                          {formatLocalDateTime(
                             item.session_end,
                           )}
                         </span>

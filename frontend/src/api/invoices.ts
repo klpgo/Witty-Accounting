@@ -154,6 +154,32 @@ export async function getInvoice(
   return (await response.json()) as Invoice
 }
 
+// Erzeugt und archiviert das PDF einer finalisierten Rechnung erneut,
+// z. B. wenn die Archivierung beim Finalisieren fehlgeschlagen ist
+export async function archiveInvoicePdf(
+  accessToken: string,
+  invoiceId: number,
+): Promise<Invoice> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/archive`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as Invoice
+}
+
 export async function downloadInvoicePdf(
   accessToken: string,
   invoiceId: number,

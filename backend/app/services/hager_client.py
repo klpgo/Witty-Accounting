@@ -176,10 +176,13 @@ def login(
     email: str,
     password: str,
     saml_app: str = DEFAULT_SAML_APP,
-    log: Callable[[str], None] = lambda _msg: None,
+    log: Callable[[str], None] | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> HagerTokens:
-    """Vollständige Anmeldung mit E-Mail und Passwort."""
+    """Vollständige Anmeldung mit E-Mail und Passwort.
+    Ohne `log` werden die Schritte unter dem Logger dieses Moduls
+    protokolliert (nur Host und Pfad, keine Parameter)."""
+    log = log or logger.info
     if not email or not password:
         raise HagerLoginError("E-Mail und Passwort sind erforderlich.")
 

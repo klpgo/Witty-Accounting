@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import (
@@ -101,6 +102,8 @@ from app.services.invoice_export import (
     InvoiceExportStateError,
     export_invoice_pdf,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/invoices",
@@ -295,6 +298,13 @@ def finalize_draft(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "Rechnung %s finalisiert, PDF-Archivierung "
+            "fehlgeschlagen (%s): %s",
+            invoice_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -342,6 +352,13 @@ def archive_invoice(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "PDF-Archivierung für Rechnung %s "
+            "fehlgeschlagen (%s): %s",
+            invoice_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -579,6 +596,13 @@ def finalize_invoice_cancellation(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "Storno %s finalisiert, PDF-Archivierung "
+            "fehlgeschlagen (%s): %s",
+            cancellation_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR

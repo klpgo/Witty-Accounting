@@ -286,3 +286,28 @@ def test_fetch_max_pages_and_info() -> None:
     assert requested == [0]
     assert len(items) == 3
     assert info == {"pages": 1, "total_elements": 9}
+
+
+def test_login_logs_steps_without_parameters(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("INFO", logger="app.services.hager_client"):
+        hager_client.login(
+            "user@example.com",
+            "richtig",
+            transport=make_login_transport(),
+        )
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "app.services.hager_client"
+    ]
+
+    assert any("Anmeldeseite" in message for message in messages)
+    text = "\n".join(messages)
+    # nur Host und Pfad: keine Query-Parameter, Tokens oder SAML-Daten
+    assert "?" not in text
+    assert "client_id" not in text
+    assert SAML_VALUE not in text
+    assert "ACCESS" not in text and "REAUTH" not in text

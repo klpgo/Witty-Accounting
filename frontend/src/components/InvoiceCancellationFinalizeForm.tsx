@@ -15,7 +15,12 @@ import { useAuth } from '../auth/useAuth'
 
 interface InvoiceCancellationFinalizeFormProps {
   cancellationId: number
-  onFinalized: (invoice: Invoice) => void
+  /*
+   * warning: Fehlermeldung, wenn die Rechnung finalisiert wurde,
+   * das PDF aber nicht archiviert werden konnte. Die Detailseite
+   * zeigt sie an, weil dieses Formular danach verschwindet.
+   */
+  onFinalized: (invoice: Invoice, warning?: string) => void
 }
 
 function formatDateInput(date: Date): string {
@@ -114,7 +119,13 @@ function InvoiceCancellationFinalizeForm({
             cancellationId,
           )
 
-        onFinalized(refreshedInvoice)
+        onFinalized(
+          refreshedInvoice,
+          refreshedInvoice.status === 'finalized' &&
+            error instanceof Error
+            ? error.message
+            : undefined,
+        )
       } catch {
         // Die ursprüngliche Fehlermeldung bleibt sichtbar.
       }

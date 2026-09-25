@@ -3,6 +3,9 @@ import os
 from pathlib import Path
 
 
+NOISY_HTTP_LOGGERS = ("httpx", "httpcore")
+
+
 def setup_logging() -> None:
     log_dir = Path(
         os.getenv(
@@ -34,3 +37,10 @@ def setup_logging() -> None:
             logging.StreamHandler(),
         ],
     )
+
+    # httpx protokolliert auf INFO jede Anfrage mit vollständiger URL –
+    # beim Hager-Login stünden damit Anmeldeparameter (OAuth-Code,
+    # Session-Codes, SAML-Anfrage) im Log. Witty protokolliert die
+    # relevanten Schritte selbst, nur mit Host und Pfad.
+    for noisy_logger in NOISY_HTTP_LOGGERS:
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)

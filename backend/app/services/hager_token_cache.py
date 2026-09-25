@@ -140,7 +140,7 @@ class HagerTokenCache:
                     )
 
             if tokens is None:
-                tokens = self._login(username, password, log=logger.info)
+                tokens = self._login(username, password)
                 logger.info("Hager: neu angemeldet")
 
             self._store(key, tokens)

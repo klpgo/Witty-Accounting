@@ -14,6 +14,7 @@ import {
 } from '../api/invoices'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { formatDate } from '../utils/dateFormat'
 
 
 function formatCurrency(
@@ -33,26 +34,6 @@ function formatCurrency(
       currency,
     },
   ).format(numericValue)
-}
-
-function formatDate(
-  value: string | null,
-): string {
-  if (value === null) {
-    return '–'
-  }
-
-  const date = new Date(
-    `${value}T00:00:00`,
-  )
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat(
-    'de-DE',
-  ).format(date)
 }
 
 function getStatusLabel(

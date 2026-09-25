@@ -1281,3 +1281,26 @@ select {
     gap: 0.125rem;
   }
 }
+
+/* Rechnungspositionen: Beschreibung darf umbrechen, damit die
+   Betragsspalten ohne horizontales Scrollen sichtbar bleiben */
+.invoice-items-table th,
+.invoice-items-table td {
+  padding: 14px 12px;
+}
+
+.invoice-items-table th:first-child,
+.invoice-items-table td:first-child {
+  padding-left: 24px;
+}
+
+.invoice-items-table th:last-child,
+.invoice-items-table td:last-child {
+  padding-right: 24px;
+}
+
+.invoice-items-table .invoice-item-description {
+  white-space: normal;
+  min-width: 12rem;
+  width: 100%;
+}

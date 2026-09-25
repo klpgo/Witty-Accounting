@@ -1801,3 +1801,68 @@ def test_lists_invoices_newest_first(
         later_dated,
         earlier_dated,
     ]
+
+
+def test_failed_pdf_archiving_is_logged_and_can_be_retried(
+    client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.api.routes import invoices as invoice_routes
+    from app.services.invoice_archive import InvoiceArchiveError
+
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+
+    user, _ = create_billable_session(database_session)
+    draft_response = client.post(
+        "/api/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": "2026-06-01T00:00:00",
+            "service_period_end": "2026-07-01T00:00:00",
+        },
+    )
+    invoice_id = draft_response.json()["id"]
+
+    real_archive = invoice_routes.archive_invoice_pdf
+
+    def failing_archive(db, invoice_id):
+        raise InvoiceArchiveError(
+            "Am vorgesehenen Archivpfad existiert "
+            "bereits eine andere Datei."
+        )
+
+    monkeypatch.setattr(invoice_routes, "archive_invoice_pdf", failing_archive)
+
+    with caplog.at_level("ERROR", logger="app.api.routes.invoices"):
+        finalize_response = client.post(
+            f"/api/invoices/{invoice_id}/finalize",
+            json={"issue_date": "2026-07-05", "due_date": "2026-07-19"},
+        )
+
+    assert finalize_response.status_code == 500
+    assert "bereits eine andere Datei" in finalize_response.json()["detail"]
+    assert any(
+        "PDF-Archivierung fehlgeschlagen" in record.getMessage()
+        and "bereits eine andere Datei" in record.getMessage()
+        for record in caplog.records
+    )
+
+    invoice = client.get(f"/api/invoices/{invoice_id}").json()
+    assert invoice["status"] == "finalized"
+    assert invoice["pdf_storage_path"] is None
+
+    # Ursache behoben -> PDF nachträglich erzeugen
+    monkeypatch.setattr(invoice_routes, "archive_invoice_pdf", real_archive)
+
+    archive_response = client.post(f"/api/invoices/{invoice_id}/archive")
+
+    assert archive_response.status_code == 200
+    assert archive_response.json()["pdf_storage_path"] is not None
+    assert (tmp_path / archive_response.json()["pdf_storage_path"]).is_file()
