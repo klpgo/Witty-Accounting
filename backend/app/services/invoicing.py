@@ -838,19 +838,19 @@ def create_invoice_draft(
 
     if issuer_name is None:
         raise InvoiceDraftError(
-            "Für den Rechnungsaussteller ist "
+            "Für den Rechnungssteller ist "
             "kein Name konfiguriert."
         )
 
     if issuer_address is None:
         raise InvoiceDraftError(
-            "Für den Rechnungsaussteller ist "
+            "Für den Rechnungssteller ist "
             "keine Anschrift konfiguriert."
         )
 
     if not issuer_tax_number and not issuer_vat_id:
         raise InvoiceDraftError(
-            "Für den Rechnungsaussteller muss "
+            "Für den Rechnungssteller muss "
             "eine Steuernummer oder USt-IdNr. "
             "konfiguriert sein."
         )

@@ -143,7 +143,7 @@ def validate_invoice(invoice: Invoice) -> None:
 
     if not invoice.issuer_name:
         raise IncompleteInvoicePdfDataError(
-            "Der Rechnungsaussteller fehlt."
+            "Der Rechnungssteller fehlt."
         )
 
     if not invoice.issuer_address:

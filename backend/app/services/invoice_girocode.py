@@ -43,7 +43,7 @@ def validate_girocode_bank_details(
 ) -> tuple[str, str, str]:
     name = validate_text(
         beneficiary,
-        label="Der Name des Rechnungsausstellers",
+        label="Der Name des Rechnungsstellers",
         max_length=70,
     )
     normalized_iban = "".join((iban or "").split()).upper()

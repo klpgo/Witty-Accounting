@@ -244,7 +244,7 @@ function AdminAccessSettingsForm() {
           />
 
           <span className="form-hint">
-            Leer lassen, wenn derzeit keine Mitteilung
+            Leer lassen, wenn derzeit keine Nachricht
             angezeigt werden soll.
           </span>
         </label>

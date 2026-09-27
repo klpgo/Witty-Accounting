@@ -462,7 +462,7 @@ function AdminSettingsPage() {
       !normalizedIssuerName
     ) {
       setErrorMessage(
-        'Für den Rechnungsaussteller ist ein Name erforderlich.',
+        'Für den Rechnungssteller ist ein Name erforderlich.',
       )
       setSuccessMessage(null)
       return
@@ -473,7 +473,7 @@ function AdminSettingsPage() {
       !normalizedIssuerAddress
     ) {
       setErrorMessage(
-        'Für den Rechnungsaussteller ist eine Anschrift erforderlich.',
+        'Für den Rechnungssteller ist eine Anschrift erforderlich.',
       )
       setSuccessMessage(null)
       return
@@ -904,7 +904,7 @@ function AdminSettingsPage() {
 
           <section className="settings-section">
             <div>
-              <h2>Rechnungsaussteller</h2>
+              <h2>Rechnungssteller</h2>
 
               <p className="muted">
                 Diese Angaben werden bei neuen
@@ -915,7 +915,7 @@ function AdminSettingsPage() {
 
             <div className="form-grid settings-business-grid">
               <label className="form-field settings-wide-field">
-                <span>Name des Rechnungsausstellers</span>
+                <span>Name des Rechnungsstellers</span>
 
                 <input
                   type="text"
@@ -930,7 +930,7 @@ function AdminSettingsPage() {
               </label>
 
               <label className="form-field">
-                <span>Anschrift des Rechnungsausstellers</span>
+                <span>Anschrift des Rechnungsstellers</span>
 
                 <textarea
                   rows={3}

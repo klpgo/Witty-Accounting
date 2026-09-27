@@ -182,16 +182,16 @@ function DashboardPage() {
 
         <article className="card dashboard-note-card">
           <p className="eyebrow">
-            Mitteilung der Administration
+            Nachrichten
           </p>
 
           {isLoading ? (
             <p className="muted">
-              Mitteilungen werden geladen …
+              Nachrichten werden geladen …
             </p>
           ) : isOffline ? (
             <p className="muted">
-              Mitteilungen sind derzeit nicht verfügbar.
+              Nachrichten sind derzeit nicht verfügbar.
             </p>
           ) : dashboard?.admin_note ? (
             <p className="dashboard-note">
@@ -199,7 +199,7 @@ function DashboardPage() {
             </p>
           ) : (
             <p className="muted">
-              Derzeit liegen keine Mitteilungen vor.
+              Derzeit liegen keine Nachrichten vor.
             </p>
           )}
         </article>
