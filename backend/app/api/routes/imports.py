@@ -26,6 +26,7 @@ from app.services.hager_sync import (
     HagerConnectionError,
     import_from_hager,
 )
+from app.services.import_lock import ImportBusyError, import_lock
 from app.services.smtp_secret import SmtpSecretError
 
 from app.auth import require_admin
@@ -121,10 +122,11 @@ def upload_xlsx(
                 detail="Die hochgeladene Datei ist leer.",
             )
 
-        import_result = import_xlsx_to_db(
-            db=db,
-            path=temporary_path,
-        )
+        with import_lock(db):
+            import_result = import_xlsx_to_db(
+                db=db,
+                path=temporary_path,
+            )
 
         return build_import_result(
             db,
@@ -133,6 +135,12 @@ def upload_xlsx(
 
     except HTTPException:
         raise
+
+    except ImportBusyError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
 
     except (
         BadZipFile,
@@ -252,16 +260,22 @@ def upload_json(
                 detail="Die hochgeladene Datei ist leer.",
             )
 
-        return build_import_result(
-            db,
-            import_json_to_db(
+        with import_lock(db):
+            import_result = import_json_to_db(
                 db=db,
                 path=temporary_path,
-            ),
-        )
+            )
+
+        return build_import_result(db, import_result)
 
     except HTTPException:
         raise
+
+    except ImportBusyError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
 
     except (
         KeyError,
@@ -310,6 +324,11 @@ def import_hager(
     except HagerConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except ImportBusyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
     except HagerConnectionError as exc:

@@ -206,3 +206,20 @@ def test_import_hager_fetch_all_with_range_is_rejected(client: TestClient) -> No
     )
 
     assert response.status_code == 422
+
+
+def test_import_hager_while_another_import_runs_returns_409(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.import_lock import ImportBusyError
+
+    def busy(db: Any, date_from=None, date_to=None, fetch_all=False) -> None:
+        raise ImportBusyError("Ein anderer Import läuft noch.")
+
+    monkeypatch.setattr("app.api.routes.imports.import_from_hager", busy)
+
+    response = client.post("/api/imports/hager")
+
+    assert response.status_code == 409
+    assert "anderer Import" in response.json()["detail"]

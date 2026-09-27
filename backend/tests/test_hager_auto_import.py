@@ -283,3 +283,25 @@ def test_registry_error_is_handled() -> None:
         raise RuntimeError("Kontroll-Datenbank nicht erreichbar")
 
     assert check_all_tenants(now=NOW, list_tenants=failing_registry) == 0
+
+
+def test_busy_import_is_recorded_as_error(
+    fake_import,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.import_lock import ImportBusyError
+
+    def busy_import(db):
+        raise ImportBusyError("Ein anderer Import läuft noch.")
+
+    monkeypatch.setattr(hager_auto_import, "import_from_hager", busy_import)
+
+    tenant = make_tenant(1)
+    databases = TenantDatabases()
+    databases.add(tenant, hager_auto_import_enabled=True)
+
+    assert start_if_due(tenant, NOW, databases.session, run_now)
+
+    settings = databases.settings(tenant)
+    assert settings.hager_auto_import_last_status == STATUS_ERROR
+    assert "anderer Import" in settings.hager_auto_import_last_message

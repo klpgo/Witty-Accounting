@@ -14,13 +14,14 @@ from typing import Any, Callable, TypeVar
 
 import httpx
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.models.global_settings import GlobalSettings
 from app.services import hager_client
 from app.services.hager_secret import decrypt_hager_password
 from app.services.hager_token_cache import token_cache
+from app.services.import_lock import import_lock
 from app.models.charging_session import ChargingSession
 from app.services.importers.hager_json_importer import (
     import_charging_rows_to_db,
@@ -297,6 +298,23 @@ def local_day_start(day: date) -> datetime:
     return datetime.combine(day, time(0, 0), tzinfo=LOCAL_TIMEZONE).astimezone(UTC)
 
 
+def record_successful_fetch(db: Session, fetched_at: datetime) -> None:
+    """
+    Schreibt den Zeitpunkt des letzten erfolgreichen Abrufs als gezieltes
+    UPDATE in einer frischen Transaktion. Ein Zurückschreiben der zuvor
+    gelesenen Zeile würde bei MariaDB (Snapshot-Isolation) mit Fehler 1020
+    scheitern, wenn die Einstellungen inzwischen geändert wurden.
+    """
+    db.commit()
+    db.execute(
+        update(GlobalSettings)
+        .where(GlobalSettings.id == 1)
+        .values(hager_last_successful_fetch_at=fetched_at)
+    )
+    db.commit()
+    db.expire_all()
+
+
 def import_from_hager(
     db: Session,
     date_from: date | None = None,
@@ -315,6 +333,16 @@ def import_from_hager(
     Abrufe bis "jetzt" (ohne Zeitraum) schreiben den Zeitpunkt des
     letzten erfolgreichen Abrufs fort.
     """
+    with import_lock(db):
+        return _import_from_hager(db, date_from, date_to, fetch_all)
+
+
+def _import_from_hager(
+    db: Session,
+    date_from: date | None,
+    date_to: date | None,
+    fetch_all: bool,
+) -> dict[str, object]:
     access = load_access(db)
     global_settings = db.get(GlobalSettings, 1)
 
@@ -360,9 +388,7 @@ def import_from_hager(
     )
 
     if date_from is None and date_to is None:
-        global_settings = db.get(GlobalSettings, 1)
-        global_settings.hager_last_successful_fetch_at = fetch_started_at
-        db.commit()
+        record_successful_fetch(db, fetch_started_at)
 
     result["fetched_from"] = effective_from
 

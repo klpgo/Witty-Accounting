@@ -18,6 +18,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.global_settings import GlobalSettings
@@ -27,6 +28,7 @@ from app.services.hager_sync import (
     HagerConnectionError,
     import_from_hager,
 )
+from app.services.import_lock import ImportBusyError
 from app.services.pricing import price_charging_sessions
 from app.services.smtp_secret import SmtpSecretError
 from app.tenancy.context import TenantContext
@@ -103,6 +105,17 @@ def check_all_tenants(
     return started
 
 
+def write_status(db: Session, **values: object) -> None:
+    """Status des automatischen Abrufs als gezieltes UPDATE in einer
+    frischen Transaktion (verhindert MariaDB-Fehler 1020)."""
+    db.execute(
+        update(GlobalSettings)
+        .where(GlobalSettings.id == 1)
+        .values(**values)
+    )
+    db.commit()
+
+
 def start_if_due(
     tenant: TenantContext,
     now: datetime,
@@ -129,14 +142,18 @@ def start_if_due(
         ):
             return False
 
-        # Start sofort vermerken: der nächste Heartbeat löst ihn nicht erneut aus
-        settings.hager_auto_import_last_started_at = (
-            now.astimezone(UTC).replace(tzinfo=None)
+        # Start sofort vermerken: der nächste Heartbeat löst ihn nicht erneut
+        # aus. Lesetransaktion zuerst beenden, dann gezielt aktualisieren.
+        db.rollback()
+        write_status(
+            db,
+            hager_auto_import_last_started_at=(
+                now.astimezone(UTC).replace(tzinfo=None)
+            ),
+            hager_auto_import_last_finished_at=None,
+            hager_auto_import_last_status=STATUS_RUNNING,
+            hager_auto_import_last_message=None,
         )
-        settings.hager_auto_import_last_finished_at = None
-        settings.hager_auto_import_last_status = STATUS_RUNNING
-        settings.hager_auto_import_last_message = None
-        db.commit()
     finally:
         db.close()
 
@@ -211,6 +228,7 @@ def run_import(
         except (
             HagerConfigurationError,
             HagerConnectionError,
+            ImportBusyError,
             SmtpSecretError,
             ValueError,
         ) as exc:
@@ -226,13 +244,17 @@ def run_import(
             status = STATUS_ERROR
             message = f"Unerwarteter Fehler: {type(exc).__name__}"
 
-        settings = db.get(GlobalSettings, 1)
-
-        if settings is not None:
-            settings.hager_auto_import_last_finished_at = utc_now()
-            settings.hager_auto_import_last_status = status
-            settings.hager_auto_import_last_message = message
+        try:
             db.commit()
+        except Exception:
+            db.rollback()
+
+        write_status(
+            db,
+            hager_auto_import_last_finished_at=utc_now(),
+            hager_auto_import_last_status=status,
+            hager_auto_import_last_message=message,
+        )
 
         log = logger.info if status == STATUS_SUCCESS else logger.warning
         log(
