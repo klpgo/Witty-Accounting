@@ -58,6 +58,7 @@ def store_access(db: Session) -> None:
     settings.hager_username = "user@example.com"
     settings.hager_password_encrypted = "verschluesselt"
     settings.hager_installation_id = "1000143617"
+    settings.hager_serial_number = "322329007044"
     db.commit()
 
 
@@ -148,3 +149,29 @@ def test_last_run_is_returned_with_timezone(
     assert data["auto_import_last_started_at"].startswith("2026-09-24T12:00:00")
     assert data["auto_import_last_started_at"].endswith(("Z", "+00:00"))
     assert data["auto_import_last_message"] == "2 neu, 3 übersprungen"
+
+
+def test_serial_number_is_stored_and_validated(client: TestClient) -> None:
+    response = client.patch(
+        "/api/settings/hager",
+        json={"serial_number": " 322329007044 "},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["serial_number"] == "322329007044"
+    assert client.patch(
+        "/api/settings/hager",
+        json={"serial_number": "S-123"},
+    ).status_code == 422
+
+
+def test_skip_empty_sessions_setting(client: TestClient) -> None:
+    assert client.get("/api/settings/hager").json()["skip_empty_sessions"] is False
+
+    response = client.patch(
+        "/api/settings/hager",
+        json={"skip_empty_sessions": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["skip_empty_sessions"] is True

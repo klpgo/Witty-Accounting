@@ -43,5 +43,6 @@ backups/
 
 /secrets/
 
-# Test data delete scripts
+# Helper Scripts
 sql/
+bin/

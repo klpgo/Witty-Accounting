@@ -1,5 +1,5 @@
 """
-Abruf von Ladevorgängen direkt aus Hager flow.
+Abruf von Ladevorgängen direkt aus der Hager Cloud.
 
 Nutzt die auf der Einstellungsseite hinterlegten Zugangsdaten, meldet
 sich ohne Browser an (hager_client) und übergibt die Sessions an den
@@ -10,18 +10,20 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import httpx
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.global_settings import GlobalSettings
 from app.services import hager_client
 from app.services.hager_secret import decrypt_hager_password
 from app.services.hager_token_cache import token_cache
+from app.models.charging_session import ChargingSession
 from app.services.importers.hager_json_importer import (
-    import_items_to_db,
+    import_charging_rows_to_db,
     parse_utc_to_local,
 )
 from app.utils.local_time import LOCAL_TIMEZONE
@@ -30,13 +32,15 @@ from app.utils.utc import utc_now
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 
 class HagerConfigurationError(Exception):
     """Zugangsdaten oder Installations-ID fehlen."""
 
 
 class HagerConnectionError(Exception):
-    """Hager flow nicht erreichbar oder Anmeldung/Abruf fehlgeschlagen."""
+    """Hager Cloud nicht erreichbar oder Anmeldung/Abruf fehlgeschlagen."""
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,7 @@ class HagerAccess:
     username: str
     password: str
     installation_id: str
+    serial_number: str
 
 
 def load_access(db: Session) -> HagerAccess:
@@ -60,13 +65,14 @@ def load_access(db: Session) -> HagerAccess:
             ("Benutzername", global_settings.hager_username),
             ("Passwort", global_settings.hager_password_encrypted),
             ("Installations-ID", global_settings.hager_installation_id),
+            ("Seriennummer", global_settings.hager_serial_number),
         )
         if not value
     ]
 
     if missing:
         raise HagerConfigurationError(
-            "Für den Abruf aus Hager flow fehlen: "
+            "Für den Abruf aus der Hager Cloud fehlen: "
             + ", ".join(missing)
         )
 
@@ -76,21 +82,19 @@ def load_access(db: Session) -> HagerAccess:
             global_settings.hager_password_encrypted
         ),
         installation_id=global_settings.hager_installation_id,
+        serial_number=global_settings.hager_serial_number,
     )
 
 
-def fetch_all_sessions(
+def call_with_token(
     access: HagerAccess,
+    call: Callable[[str], T],
     force_login: bool = False,
-    **fetch_options: Any,
-) -> list[dict[str, Any]]:
+) -> T:
     """
-    Sessions der Installation abrufen (fetch_options siehe
-    hager_client.fetch_sessions, z. B. stop_before).
-
-    Das Zugriffstoken kommt aus dem Token-Cache (Arbeitsspeicher). Lehnt
-    die API es ab (401/403) oder antwortet sie nicht (Timeout), wird
-    einmal neu angemeldet und wiederholt.
+    Führt einen API-Aufruf mit einem Zugriffstoken aus dem Token-Cache
+    (Arbeitsspeicher) aus. Lehnt die API es ab (401/403) oder antwortet
+    sie nicht (Timeout), wird einmal neu angemeldet und wiederholt.
     """
     try:
         token = token_cache.get_access_token(
@@ -100,11 +104,7 @@ def fetch_all_sessions(
         )
 
         try:
-            return hager_client.fetch_sessions(
-                token,
-                access.installation_id,
-                **fetch_options,
-            )
+            return call(token)
         except (
             hager_client.HagerUnauthorizedError,
             httpx.TimeoutException,
@@ -125,11 +125,7 @@ def fetch_all_sessions(
                 force_login=True,
             )
 
-            return hager_client.fetch_sessions(
-                token,
-                access.installation_id,
-                **fetch_options,
-            )
+            return call(token)
     except (
         hager_client.HagerLoginError,
         hager_client.HagerApiError,
@@ -137,22 +133,80 @@ def fetch_all_sessions(
         raise HagerConnectionError(str(exc)) from exc
     except httpx.HTTPError as exc:
         raise HagerConnectionError(
-            "Hager flow ist nicht erreichbar: "
+            "Hager Cloud ist nicht erreichbar: "
             f"{type(exc).__name__}"
         ) from exc
 
 
-def session_local_start(item: dict[str, Any]) -> datetime | None:
-    session = item.get("session")
+def fetch_all_sessions(
+    access: HagerAccess,
+    force_login: bool = False,
+    **fetch_options: Any,
+) -> list[dict[str, Any]]:
+    """
+    Ladevorgänge aller Wallboxen über den E-Mobility-Endpunkt
+    (fetch_options siehe hager_client.fetch_charging_sessions,
+    z. B. stop_before).
+    """
+    return call_with_token(
+        access,
+        lambda token: hager_client.fetch_charging_sessions(
+            token,
+            access.serial_number,
+            **fetch_options,
+        ),
+        force_login=force_login,
+    )
 
-    if not isinstance(session, dict):
-        return None
+
+def known_wallbox_names(db: Session) -> dict[str, str]:
+    """Namen, die Witty für Wallbox-IDs bereits kennt (auch für
+    inzwischen getauschte Geräte). Der jüngste Name gewinnt."""
+    rows = db.execute(
+        select(ChargingSession.wallbox_id, ChargingSession.station_id)
+        .where(
+            ChargingSession.wallbox_id.is_not(None),
+            ChargingSession.station_id.not_like("ID: %"),
+        )
+        .order_by(ChargingSession.start_time)
+    ).all()
+
+    return {wallbox_id: station_id for wallbox_id, station_id in rows}
+
+
+def wallbox_names(db: Session, access: HagerAccess) -> dict[str, str]:
+    """
+    Namen der Wallboxen: aktive Geräte laut Hager, ergänzt um bereits
+    bekannte Namen. Ist die Liste nicht abrufbar, bleiben die bekannten
+    Namen – der Import selbst scheitert daran nicht.
+    """
+    names = known_wallbox_names(db)
 
     try:
-        return parse_utc_to_local(
-            session.get("start_date_time"),
-            "start_date_time",
+        names.update(
+            call_with_token(
+                access,
+                lambda token: hager_client.fetch_wallbox_names(
+                    token,
+                    access.installation_id,
+                ),
+            )
         )
+    except HagerConnectionError as exc:
+        logger.warning("Hager: Wallbox-Namen nicht abrufbar: %s", exc)
+
+    return names
+
+
+def session_local_start(item: dict[str, Any]) -> datetime | None:
+    value = item.get("startAt")
+
+    if value is None:
+        session = item.get("session")
+        value = session.get("start_date_time") if isinstance(session, dict) else None
+
+    try:
+        return parse_utc_to_local(value, "startAt")
     except ValueError:
         return None
 
@@ -161,22 +215,20 @@ def check_connection(db: Session) -> dict[str, object]:
     """Anmeldung und Abruf prüfen, ohne etwas zu importieren.
     Meldet sich immer neu an, damit die Zugangsdaten wirklich
     geprüft werden. Ruft nur die erste Seite ab (neueste zuerst)."""
-    info: dict[str, Any] = {}
-    items = fetch_all_sessions(
+    rows = fetch_all_sessions(
         load_access(db),
         force_login=True,
         max_pages=1,
-        info=info,
     )
     starts = [
         start
-        for start in map(session_local_start, items)
+        for start in map(session_local_start, rows)
         if start is not None
     ]
-    total = info.get("total_elements")
 
     return {
-        "sessions": total if isinstance(total, int) else len(items),
+        # der Endpunkt nennt keine Gesamtzahl
+        "sessions": None,
         "latest_session_start": max(starts) if starts else None,
     }
 
@@ -252,10 +304,10 @@ def import_from_hager(
     fetch_all: bool = False,
 ) -> dict[str, object]:
     """
-    Ruft Sessions aus Hager flow ab und importiert sie.
+    Ruft Sessions aus der Hager Cloud ab und importiert sie.
 
-    - fetch_all: alle verfügbaren Sessions (vollständiger Abgleich)
-    - date_from/date_to: nur dieser Zeitraum
+    - fetch_all: alle Sessions ab Abrechnungsbeginn (vollständiger Abgleich)
+    - date_from/date_to: nur dieser Zeitraum, frühestens ab Abrechnungsbeginn
     - sonst: ab dem Cut-off (letzter erfolgreicher Abruf minus 3 Tage,
       frühestens Abrechnungsbeginn)
 
@@ -266,14 +318,21 @@ def import_from_hager(
     access = load_access(db)
     global_settings = db.get(GlobalSettings, 1)
 
+    billing_start = global_settings.billing_start_date
+
     if fetch_all:
-        effective_from = None
+        # "alle" heißt: alle ab Abrechnungsbeginn
+        effective_from = billing_start
     elif date_from is not None:
-        effective_from = date_from
+        effective_from = (
+            max(date_from, billing_start)
+            if billing_start is not None
+            else date_from
+        )
     else:
         effective_from = determine_cutoff(
             global_settings.hager_last_successful_fetch_at,
-            global_settings.billing_start_date,
+            billing_start,
         )
 
     fetch_started_at = utc_now()
@@ -288,15 +347,16 @@ def import_from_hager(
         info=info,
     )
     logger.info(
-        "Hager: %s Sessions auf %s Seite(n) abgerufen, ab %s",
+        "Hager: %s Ladevorgänge auf %s Seite(n) abgerufen, ab %s",
         len(items),
         info.get("pages", "?"),
         effective_from.isoformat() if effective_from else "Beginn",
     )
 
-    result = import_items_to_db(
+    result = import_charging_rows_to_db(
         db,
         filter_by_local_date(items, effective_from, date_to),
+        wallbox_names(db, access),
     )
 
     if date_from is None and date_to is None:

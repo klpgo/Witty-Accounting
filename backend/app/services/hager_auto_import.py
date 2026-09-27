@@ -1,5 +1,5 @@
 """
-Automatischer Abruf aus Hager flow pro Mandant.
+Automatischer Abruf aus der Hager Cloud pro Mandant.
 
 Der Scheduler-Heartbeat ruft jede Minute check_all_tenants() auf. Für
 jeden aktiven Mandanten wird dessen eigener Zeitplan geprüft; ist ein
@@ -168,6 +168,14 @@ def summarize(import_result: dict, pricing_result: dict) -> str:
         parts.append(
             f"{import_result['unknown_rfid_sessions']} ohne Kartenzuordnung"
         )
+
+    if import_result.get("skipped_before_billing_start"):
+        parts.append(
+            f"{import_result['skipped_before_billing_start']} vor Abrechnungsbeginn"
+        )
+
+    if import_result.get("skipped_empty"):
+        parts.append(f"{import_result['skipped_empty']} ohne Energie")
 
     if import_result.get("reassigned_sessions"):
         parts.append(

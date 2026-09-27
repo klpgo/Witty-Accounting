@@ -1,4 +1,4 @@
-"""Verschlüsselung des Hager-flow-Passworts.
+"""Verschlüsselung des Hager-Cloud-Passworts.
 
 Nutzt denselben Fernet-Schlüssel wie die Mail-Einstellungen
 (SMTP_SETTINGS_ENCRYPTION_KEY).

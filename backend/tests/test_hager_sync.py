@@ -61,6 +61,7 @@ ACCESS = HagerAccess(
     username="user@example.com",
     password="pw",
     installation_id="1000143617",
+    serial_number="322329007044",
 )
 
 
@@ -81,7 +82,7 @@ def test_fetch_uses_cached_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(hager_sync, "token_cache", cache)
     monkeypatch.setattr(
         hager_client,
-        "fetch_sessions",
+        "fetch_charging_sessions",
         lambda token, installation_id: [{"token": token}],
     )
 
@@ -100,7 +101,7 @@ def test_fetch_retries_once_with_new_login_on_401(
         return [{"token": token}]
 
     monkeypatch.setattr(hager_sync, "token_cache", cache)
-    monkeypatch.setattr(hager_client, "fetch_sessions", fake_fetch)
+    monkeypatch.setattr(hager_client, "fetch_charging_sessions", fake_fetch)
 
     assert fetch_all_sessions(ACCESS) == [{"token": "fresh"}]
     assert cache.calls == [False, True]
@@ -113,7 +114,7 @@ def test_fetch_gives_up_after_second_401(
         raise hager_client.HagerUnauthorizedError("HTTP 401")
 
     monkeypatch.setattr(hager_sync, "token_cache", FakeCache())
-    monkeypatch.setattr(hager_client, "fetch_sessions", always_401)
+    monkeypatch.setattr(hager_client, "fetch_charging_sessions", always_401)
 
     with pytest.raises(HagerConnectionError, match="401"):
         fetch_all_sessions(ACCESS)
@@ -127,19 +128,19 @@ def test_connection_check_forces_login(
     monkeypatch.setattr(hager_sync, "load_access", lambda db: ACCESS)
     options: dict = {}
 
-    def fake_fetch(token, installation_id, **kwargs):
+    def fake_fetch(token, serial_number, **kwargs):
+        assert serial_number == "322329007044"
         options.update(kwargs)
-        kwargs["info"]["total_elements"] = 250
-        return [item("2026-07-15T09:26:37Z")]
+        return [{"startAt": "2026-07-15T09:26:37.000Z"}]
 
-    monkeypatch.setattr(hager_client, "fetch_sessions", fake_fetch)
+    monkeypatch.setattr(hager_client, "fetch_charging_sessions", fake_fetch)
 
     result = hager_sync.check_connection(db=None)
 
-    # nur erste Seite, Gesamtzahl aus der API
+    # nur erste Seite (neueste zuerst); der Endpunkt nennt keine Gesamtzahl
     assert options["max_pages"] == 1
     assert result == {
-        "sessions": 250,
+        "sessions": None,
         "latest_session_start": datetime(2026, 7, 15, 11, 26, 37),
     }
     assert cache.calls == [True]
@@ -158,7 +159,7 @@ def test_fetch_retries_once_with_new_login_on_timeout(
         return [{"token": token}]
 
     monkeypatch.setattr(hager_sync, "token_cache", cache)
-    monkeypatch.setattr(hager_client, "fetch_sessions", fake_fetch)
+    monkeypatch.setattr(hager_client, "fetch_charging_sessions", fake_fetch)
 
     assert fetch_all_sessions(ACCESS) == [{"token": "fresh"}]
     assert cache.calls == [False, True]
@@ -173,7 +174,7 @@ def test_fetch_reports_timeout_after_retry(
         raise httpx.ReadTimeout("keine Antwort")
 
     monkeypatch.setattr(hager_sync, "token_cache", FakeCache())
-    monkeypatch.setattr(hager_client, "fetch_sessions", always_timeout)
+    monkeypatch.setattr(hager_client, "fetch_charging_sessions", always_timeout)
 
     with pytest.raises(HagerConnectionError, match="ReadTimeout"):
         fetch_all_sessions(ACCESS)
@@ -237,13 +238,15 @@ def sync_db(monkeypatch: pytest.MonkeyPatch):
             item("2026-09-18T10:00:00Z"),
         ]
 
-    def fake_import_items(db, items):
-        imported.append(items)
-        return {"read": len(items), "imported": len(items), "skipped": 0}
+    def fake_import_rows(db, rows, names):
+        assert names == {"WB-A": "WB2"}
+        imported.append(rows)
+        return {"read": len(rows), "imported": len(rows), "skipped": 0}
 
     monkeypatch.setattr(hager_sync, "load_access", lambda db: ACCESS)
     monkeypatch.setattr(hager_sync, "fetch_all_sessions", fake_fetch_all_sessions)
-    monkeypatch.setattr(hager_sync, "import_items_to_db", fake_import_items)
+    monkeypatch.setattr(hager_sync, "import_charging_rows_to_db", fake_import_rows)
+    monkeypatch.setattr(hager_sync, "wallbox_names", lambda db, access: {"WB-A": "WB2"})
 
     with Session(engine) as db:
         db.add(
@@ -305,7 +308,7 @@ def test_failed_import_keeps_last_fetch(sync_db, monkeypatch: pytest.MonkeyPatch
     db, _fetched, _imported = sync_db
 
     def failing_fetch(access, force_login=False, **options):
-        raise HagerConnectionError("Hager flow ist nicht erreichbar: ReadTimeout")
+        raise HagerConnectionError("Hager Cloud ist nicht erreichbar: ReadTimeout")
 
     monkeypatch.setattr(hager_sync, "fetch_all_sessions", failing_fetch)
 
@@ -315,3 +318,29 @@ def test_failed_import_keeps_last_fetch(sync_db, monkeypatch: pytest.MonkeyPatch
     assert db.get(GlobalSettings, 1).hager_last_successful_fetch_at == datetime(
         2026, 9, 24, 1, 30
     )
+
+
+def test_fetch_all_starts_at_billing_start(sync_db) -> None:
+    db, fetched, _imported = sync_db
+    db.get(GlobalSettings, 1).billing_start_date = date(2026, 9, 20)
+    db.commit()
+
+    result = import_from_hager(db, fetch_all=True)
+
+    assert result["fetched_from"] == date(2026, 9, 20)
+    assert fetched[0]["stop_before"] == local_day_start(date(2026, 9, 20))
+
+
+def test_range_before_billing_start_is_floored(sync_db) -> None:
+    db, fetched, _imported = sync_db
+    db.get(GlobalSettings, 1).billing_start_date = date(2026, 9, 20)
+    db.commit()
+
+    result = import_from_hager(
+        db,
+        date_from=date(2026, 9, 1),
+        date_to=date(2026, 9, 30),
+    )
+
+    assert result["fetched_from"] == date(2026, 9, 20)
+    assert fetched[0]["stop_before"] == local_day_start(date(2026, 9, 20))

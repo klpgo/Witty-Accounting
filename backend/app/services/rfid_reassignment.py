@@ -109,6 +109,7 @@ def open_unassigned_sessions_statement():
             ChargingSession.invoiced.is_(None),
         ),
         ChargingSession.invoice_id.is_(None),
+        ChargingSession.discarded_at.is_(None),
         ~ChargingSession.invoice_items.any(),
     )
 

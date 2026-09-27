@@ -17,6 +17,9 @@ class ImportResult(BaseModel):
     unknown_rfid_cards: list[str] = []
     inactive_rfid_cards: list[str] = []
     unassigned_rfid_numbers: list[str] = []
+    # nach den Import-Regeln nicht übernommen
+    skipped_before_billing_start: int = 0
+    skipped_empty: int = 0
     # bei vorhandenen Ladevorgängen ergänzte RFID-Nummern
     backfilled_rfid_numbers: int = 0
     # ältere Ladevorgänge, die jetzt einer Zuordnung zugeordnet wurden

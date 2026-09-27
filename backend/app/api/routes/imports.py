@@ -199,6 +199,10 @@ def build_import_result(
             import_result.get("reassigned_sessions", 0)
         ),
         fetched_from=import_result.get("fetched_from"),
+        skipped_before_billing_start=int(
+            import_result.get("skipped_before_billing_start", 0)
+        ),
+        skipped_empty=int(import_result.get("skipped_empty", 0)),
     )
 
 
@@ -291,7 +295,7 @@ def import_hager(
     request: HagerImportRequest | None = None,
     db: Session = Depends(get_db),
 ) -> ImportResult:
-    """Ruft Ladevorgänge direkt aus Hager flow ab und importiert
+    """Ruft Ladevorgänge direkt aus der Hager Cloud ab und importiert
     sie. Ohne Zeitraum ab dem Cut-off (letzter erfolgreicher Abruf
     minus 3 Tage), mit fetch_all vollständig."""
     request = request or HagerImportRequest()
@@ -322,7 +326,7 @@ def import_hager(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Die Daten aus Hager flow konnten nicht "
+                "Die Daten aus der Hager Cloud konnten nicht "
                 f"importiert werden: {exc}"
             ),
         ) from exc

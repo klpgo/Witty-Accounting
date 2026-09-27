@@ -121,6 +121,8 @@ def test_upload_xlsx_returns_import_result(
         "backfilled_rfid_numbers": 0,
         "reassigned_sessions": 0,
         "fetched_from": None,
+        "skipped_before_billing_start": 0,
+        "skipped_empty": 0,
     }
 
 

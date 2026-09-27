@@ -25,7 +25,10 @@ HagerInstallationId = Annotated[
 class HagerSettingsResponse(BaseModel):
     username: str | None
     installation_id: str | None
+    serial_number: str | None = None
     password_configured: bool
+    # gilt für alle Importe (Hager Cloud, JSON, XLSX)
+    skip_empty_sessions: bool = False
     auto_import_enabled: bool = False
     auto_import_interval_hours: int = 24
     auto_import_start_time: str = "03:00"
@@ -41,8 +44,10 @@ class HagerSettingsResponse(BaseModel):
 class HagerSettingsUpdate(BaseModel):
     username: HagerUsername | None = None
     installation_id: HagerInstallationId | None = None
+    serial_number: HagerInstallationId | None = None
     password: SecretStr | None = None
     clear_password: bool = False
+    skip_empty_sessions: bool | None = None
     auto_import_enabled: bool | None = None
     auto_import_interval_hours: int | None = Field(
         default=None,
@@ -68,6 +73,7 @@ class HagerSettingsUpdate(BaseModel):
     @field_validator(
         "username",
         "installation_id",
+        "serial_number",
         mode="before",
     )
     @classmethod
@@ -94,9 +100,23 @@ class HagerSettingsUpdate(BaseModel):
 
         return value
 
+    @field_validator("serial_number")
+    @classmethod
+    def validate_serial_number(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value and not value.isdigit():
+            raise ValueError(
+                "Die Seriennummer besteht nur aus Ziffern."
+            )
+
+        return value
+
 
 class HagerConnectionTestResponse(BaseModel):
-    sessions: int
+    # None: die Quelle nennt keine Gesamtzahl
+    sessions: int | None
     latest_session_start: datetime | None
 
 

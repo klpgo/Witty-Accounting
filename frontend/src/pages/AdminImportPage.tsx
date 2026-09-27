@@ -321,7 +321,7 @@ function AdminImportPage() {
           ? error.message
           : (
               'Die Ladevorgänge konnten nicht ' +
-              'aus Hager flow abgerufen werden.'
+              'aus der Hager Cloud abgerufen werden.'
             ),
       )
     } finally {
@@ -340,7 +340,7 @@ function AdminImportPage() {
           <h1>Import</h1>
 
           <p className="muted">
-            Ladevorgänge direkt aus Hager flow
+            Ladevorgänge direkt aus der Hager Cloud
             abrufen oder aus einer Datei (XLSX-Export
             bzw. JSON aus hager-fetch) importieren.
             Neue Ladevorgänge werden automatisch
@@ -364,7 +364,7 @@ function AdminImportPage() {
         onSubmit={handleHagerImport}
       >
         <div>
-          <h2>Abruf aus Hager flow</h2>
+          <h2>Abruf aus der Hager Cloud</h2>
 
           <p className="muted">
             Ruft die Ladevorgänge direkt mit den
@@ -412,8 +412,8 @@ function AdminImportPage() {
               setHagerFetchAll(event.target.checked)
             }}
           />
-          Alle Ladevorgänge abrufen (vollständiger
-          Abgleich, dauert länger)
+          Alle Ladevorgänge ab Abrechnungsbeginn abrufen
+          (vollständiger Abgleich, dauert länger)
         </label>
 
         <div className="form-actions">
@@ -424,7 +424,7 @@ function AdminImportPage() {
           >
             {isFetchingHager
               ? 'Ladevorgänge werden abgerufen …'
-              : 'Jetzt aus Hager flow abrufen'}
+              : 'Jetzt aus der Hager Cloud abrufen'}
           </button>
         </div>
       </form>
@@ -552,10 +552,25 @@ function AdminImportPage() {
           {resultFromHager && (
             <p className="muted">
               {importResult.fetched_from
-                ? `Aus Hager flow abgerufen ab ${formatIsoDate(
+                ? `Aus der Hager Cloud abgerufen ab ${formatIsoDate(
                     importResult.fetched_from,
                   )}.`
-                : 'Alle Ladevorgänge aus Hager flow abgerufen.'}
+                : 'Alle Ladevorgänge aus der Hager Cloud abgerufen.'}
+            </p>
+          )}
+
+          {((importResult.skipped_before_billing_start ?? 0) > 0 ||
+            (importResult.skipped_empty ?? 0) > 0) && (
+            <p className="muted">
+              Nicht übernommen:
+              {(importResult.skipped_before_billing_start ?? 0) > 0 &&
+                ` ${importResult.skipped_before_billing_start} vor dem Abrechnungsbeginn`}
+              {(importResult.skipped_before_billing_start ?? 0) > 0 &&
+                (importResult.skipped_empty ?? 0) > 0 &&
+                ','}
+              {(importResult.skipped_empty ?? 0) > 0 &&
+                ` ${importResult.skipped_empty} ohne Energie (0 kWh)`}
+              .
             </p>
           )}
 

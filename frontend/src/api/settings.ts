@@ -138,7 +138,9 @@ export type HagerAutoImportStatus = 'running' | 'success' | 'error'
 export interface HagerSettings {
   username: string | null
   installation_id: string | null
+  serial_number: string | null
   password_configured: boolean
+  skip_empty_sessions: boolean
   auto_import_enabled: boolean
   auto_import_interval_hours: number
   auto_import_start_time: string
@@ -151,13 +153,16 @@ export interface HagerSettings {
 }
 
 export interface HagerConnectionTestResponse {
-  sessions: number
+  // null: die Quelle nennt keine Gesamtzahl
+  sessions: number | null
   latest_session_start: string | null
 }
 
 export interface HagerSettingsUpdate {
   username?: string
   installation_id?: string
+  serial_number?: string
+  skip_empty_sessions?: boolean
   password?: string
   clear_password?: boolean
   auto_import_enabled?: boolean

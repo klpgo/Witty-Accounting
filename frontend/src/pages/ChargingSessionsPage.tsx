@@ -10,26 +10,61 @@ import {
 
 import {
   ChargingSessionApiError,
+  discardChargingSessions,
   listChargingSessions,
+  restoreChargingSessions,
   type ChargingSession,
 } from '../api/chargingSessions'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 
 
-function formatDateTime(
-  value: string,
-): string {
-  const date = new Date(value)
+const DATE_FORMAT = new Intl.DateTimeFormat('de-DE', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})
 
-  if (Number.isNaN(date.getTime())) {
-    return value
+const TIME_FORMAT = new Intl.DateTimeFormat('de-DE', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const SHORT_DATE_TIME_FORMAT = new Intl.DateTimeFormat('de-DE', {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+
+// Zeitraum in zwei Zeilen: Datum, darunter die Uhrzeiten.
+// Endet der Vorgang an einem anderen Tag, steht beim Ende das Datum mit.
+function formatPeriod(
+  start: string,
+  end: string,
+): { date: string; times: string } {
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    Number.isNaN(endDate.getTime())
+  ) {
+    return { date: start, times: end }
   }
 
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
+  const sameDay =
+    startDate.toDateString() === endDate.toDateString()
+
+  return {
+    date: DATE_FORMAT.format(startDate),
+    times:
+      `${TIME_FORMAT.format(startDate)} – ` +
+      (sameDay
+        ? TIME_FORMAT.format(endDate)
+        : SHORT_DATE_TIME_FORMAT.format(endDate)),
+  }
 }
 
 
@@ -76,9 +111,24 @@ function formatNetCost(
 }
 
 
+function isDiscardable(
+  chargingSession: ChargingSession,
+): boolean {
+  return (
+    !chargingSession.discarded &&
+    !chargingSession.invoiced &&
+    chargingSession.invoice_id === null
+  )
+}
+
+
 function getStatusLabel(
   chargingSession: ChargingSession,
 ): string {
+  if (chargingSession.discarded) {
+    return 'Verworfen'
+  }
+
   if (
     chargingSession.invoice_status ===
     'finalized'
@@ -99,6 +149,10 @@ function getStatusLabel(
 function getStatusClassName(
   chargingSession: ChargingSession,
 ): string {
+  if (chargingSession.discarded) {
+    return 'status-badge status-discarded'
+  }
+
   return chargingSession.invoice_status ===
     'finalized'
     ? 'status-badge status-finalized'
@@ -126,20 +180,63 @@ function ChargingSessionsPage() {
     setChargingSessions,
   ] = useState<ChargingSession[]>([])
 
+  const [selectedIds, setSelectedIds] =
+    useState<Set<number>>(new Set())
+  const [discardReason, setDiscardReason] =
+    useState('')
+  const [isChanging, setIsChanging] =
+    useState(false)
+  const [actionMessage, setActionMessage] =
+    useState<string | null>(null)
+  const [actionError, setActionError] =
+    useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const [showDiscarded, setShowDiscarded] =
+    useState(false)
+
   const visibleChargingSessions = useMemo(
     () =>
-      chargingSessions.filter(
-        (chargingSession) =>
-          chargingSession.invoiced
-            ? showInvoicedSessions
-            : showUninvoicedSessions,
-      ),
+      chargingSessions.filter((chargingSession) => {
+        if (chargingSession.discarded) {
+          return showDiscarded
+        }
+
+        return chargingSession.invoiced
+          ? showInvoicedSessions
+          : showUninvoicedSessions
+      }),
     [
       chargingSessions,
+      showDiscarded,
       showInvoicedSessions,
       showUninvoicedSessions,
     ],
   )
+
+  // Kennzahlen über alle geladenen Vorgänge (unabhängig von den Filtern)
+  const statistics = useMemo(() => {
+    let invoiced = 0
+    let open = 0
+    let discarded = 0
+
+    for (const chargingSession of chargingSessions) {
+      if (chargingSession.discarded) {
+        discarded += 1
+      } else if (chargingSession.invoiced) {
+        invoiced += 1
+      } else {
+        open += 1
+      }
+    }
+
+    return {
+      total: chargingSessions.length,
+      invoiced,
+      open,
+      discarded,
+    }
+  }, [chargingSessions])
 
   const [isLoading, setIsLoading] =
     useState(true)
@@ -172,11 +269,13 @@ function ChargingSessionsPage() {
           await listChargingSessions(
             token,
             controller.signal,
+            isAdmin,
           )
 
         setChargingSessions(
           loadedChargingSessions,
         )
+        setSelectedIds(new Set())
       } catch (error) {
         if (
           error instanceof Error &&
@@ -216,7 +315,113 @@ function ChargingSessionsPage() {
     return () => {
       controller.abort()
     }
-  }, [navigate, signOut])
+  }, [navigate, signOut, isAdmin, reloadKey])
+
+  const selectableIds = visibleChargingSessions
+    .filter(isDiscardable)
+    .map((chargingSession) => chargingSession.id)
+
+  const allSelected =
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedIds.has(id))
+
+  function toggleSelected(id: number): void {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+
+      return next
+    })
+  }
+
+  function toggleAll(): void {
+    setSelectedIds(
+      allSelected ? new Set() : new Set(selectableIds),
+    )
+  }
+
+  async function runAction(
+    action: () => Promise<number>,
+    successText: (changed: number) => string,
+  ): Promise<void> {
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+      navigate('/login', { replace: true })
+      return
+    }
+
+    setIsChanging(true)
+    setActionMessage(null)
+    setActionError(null)
+
+    try {
+      const changed = await action()
+      setActionMessage(successText(changed))
+      setDiscardReason('')
+      setReloadKey((key) => key + 1)
+    } catch (error) {
+      if (
+        error instanceof ChargingSessionApiError &&
+        error.status === 401
+      ) {
+        signOut()
+        navigate('/login', { replace: true })
+        return
+      }
+
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'Die Aktion ist fehlgeschlagen.',
+      )
+    } finally {
+      setIsChanging(false)
+    }
+  }
+
+  function handleDiscard(): void {
+    const ids = [...selectedIds]
+
+    if (
+      ids.length === 0 ||
+      !window.confirm(
+        `${ids.length} Ladevorgang/Ladevorgänge verwerfen? ` +
+          'Sie werden nicht mehr angezeigt, bepreist oder abgerechnet ' +
+          'und lassen sich über „Verworfene anzeigen“ wiederherstellen.',
+      )
+    ) {
+      return
+    }
+
+    const token = getAccessToken() ?? ''
+
+    void runAction(
+      () =>
+        discardChargingSessions(
+          token,
+          ids,
+          discardReason.trim() || undefined,
+        ),
+      (changed) =>
+        `${changed} Ladevorgang/Ladevorgänge verworfen.`,
+    )
+  }
+
+  function handleRestore(id: number): void {
+    const token = getAccessToken() ?? ''
+
+    void runAction(
+      () => restoreChargingSessions(token, [id]),
+      () => 'Ladevorgang wiederhergestellt.',
+    )
+  }
 
   return (
     <div className="page charging-sessions-page">
@@ -272,8 +477,29 @@ function ChargingSessionsPage() {
       {!isLoading &&
         !errorMessage &&
         chargingSessions.length > 0 && (
-          <section className="card">
-            <div className="checkbox-group">
+          <section className="card sessions-overview">
+            <dl className="sessions-statistics">
+              <div>
+                <dt>Ladevorgänge geladen</dt>
+                <dd>{statistics.total}</dd>
+              </div>
+              <div>
+                <dt>abgerechnet</dt>
+                <dd>{statistics.invoiced}</dd>
+              </div>
+              <div>
+                <dt>nicht abgerechnet</dt>
+                <dd>{statistics.open}</dd>
+              </div>
+              {isAdmin && (
+                <div>
+                  <dt>verworfen</dt>
+                  <dd>{statistics.discarded}</dd>
+                </div>
+              )}
+            </dl>
+
+            <div className="checkbox-group sessions-filters">
               <label className="checkbox-field">
                 <input
                   type="checkbox"
@@ -301,9 +527,75 @@ function ChargingSessionsPage() {
 
                 Nicht abgerechnete Ladevorgänge anzeigen
               </label>
+
+              {isAdmin && (
+                <label className="checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={showDiscarded}
+                    onChange={(event) => {
+                      setShowDiscarded(event.target.checked)
+                    }}
+                  />
+
+                  Verworfene Ladevorgänge anzeigen
+                </label>
+              )}
             </div>
           </section>
         )}
+
+      {isAdmin && (actionMessage || actionError) && (
+        <section
+          className={
+            actionError
+              ? 'card form-error'
+              : 'card form-success'
+          }
+          role={actionError ? 'alert' : 'status'}
+        >
+          {actionError ?? actionMessage}
+        </section>
+      )}
+
+      {isAdmin && selectedIds.size > 0 && (
+        <section className="card session-bulk-actions">
+          <strong>
+            {selectedIds.size} ausgewählt
+          </strong>
+
+          <input
+            type="text"
+            value={discardReason}
+            maxLength={255}
+            placeholder="Grund (optional), z. B. Testladung"
+            disabled={isChanging}
+            onChange={(event) => {
+              setDiscardReason(event.target.value)
+            }}
+          />
+
+          <button
+            className="button button-danger"
+            type="button"
+            disabled={isChanging}
+            onClick={handleDiscard}
+          >
+            {isChanging ? 'Wird verworfen …' : 'Auswahl verwerfen'}
+          </button>
+
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={isChanging}
+            onClick={() => {
+              setSelectedIds(new Set())
+            }}
+          >
+            Auswahl aufheben
+          </button>
+        </section>
+      )}
 
       {!isLoading &&
         !errorMessage &&
@@ -327,11 +619,21 @@ function ChargingSessionsPage() {
               <table className="data-table compact-table charging-sessions-table">
                 <thead>
                   <tr>
-                    <th>Beginn</th>
-                    <th>Ende</th>
+                    {isAdmin && (
+                      <th className="session-select">
+                        <input
+                          type="checkbox"
+                          aria-label="Alle verwerfbaren auswählen"
+                          checked={allSelected}
+                          disabled={selectableIds.length === 0}
+                          onChange={toggleAll}
+                        />
+                      </th>
+                    )}
+                    <th>Zeitraum</th>
 
                     {isAdmin && (
-                      <th>Benutzer</th>
+                      <th className="session-user">Benutzer</th>
                     )}
 
                     <th>RFID-Karte</th>
@@ -351,6 +653,7 @@ function ChargingSessionsPage() {
 
                     <th>Status</th>
                     <th>Rechnung</th>
+                    {isAdmin && showDiscarded && <th />}
                   </tr>
                 </thead>
 
@@ -359,22 +662,50 @@ function ChargingSessionsPage() {
                     (chargingSession) => (
                       <tr
                         key={chargingSession.id}
+                        className={
+                          chargingSession.discarded
+                            ? 'session-discarded'
+                            : undefined
+                        }
                       >
-                        <td>
-                          {formatDateTime(
-                            chargingSession.start_time,
-                          )}
-                        </td>
+                        {isAdmin && (
+                          <td className="session-select">
+                            {isDiscardable(chargingSession) && (
+                              <input
+                                type="checkbox"
+                                aria-label="Ladevorgang auswählen"
+                                checked={selectedIds.has(
+                                  chargingSession.id,
+                                )}
+                                onChange={() => {
+                                  toggleSelected(chargingSession.id)
+                                }}
+                              />
+                            )}
+                          </td>
+                        )}
 
-                        <td>
-                          {formatDateTime(
-                            chargingSession.end_time,
-                          )}
+                        <td className="session-period">
+                          {(() => {
+                            const period = formatPeriod(
+                              chargingSession.start_time,
+                              chargingSession.end_time,
+                            )
+
+                            return (
+                              <>
+                                <span>{period.date}</span>
+                                <span className="muted">
+                                  {period.times}
+                                </span>
+                              </>
+                            )
+                          })()}
                         </td>
 
                         {isAdmin && (
-                          <td>
-                            {chargingSession.user_name ?? '-'}
+                          <td className="session-user">
+                            {chargingSession.user_name ?? '–'}
                           </td>
                         )}
 
@@ -413,6 +744,10 @@ function ChargingSessionsPage() {
                             className={getStatusClassName(
                               chargingSession,
                             )}
+                            title={
+                              chargingSession.discard_reason ??
+                              undefined
+                            }
                           >
                             {getStatusLabel(
                               chargingSession,
@@ -434,6 +769,23 @@ function ChargingSessionsPage() {
                             '–'
                           )}
                         </td>
+
+                        {isAdmin && showDiscarded && (
+                          <td>
+                            {chargingSession.discarded && (
+                              <button
+                                className="button button-secondary"
+                                type="button"
+                                disabled={isChanging}
+                                onClick={() => {
+                                  handleRestore(chargingSession.id)
+                                }}
+                              >
+                                Wiederherstellen
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ),
                   )}

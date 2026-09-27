@@ -1304,3 +1304,90 @@ select {
   min-width: 12rem;
   width: 100%;
 }
+
+/* Ladevorgänge verwerfen */
+.status-discarded {
+  background: var(--color-surface-muted, #eef0f3);
+  color: var(--color-text-muted, #5f6b7a);
+}
+
+.charging-sessions-table tr.session-discarded td {
+  color: var(--color-text-muted, #5f6b7a);
+}
+
+.session-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-bulk-actions input[type="text"] {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+}
+
+/* Ladevorgänge: Zeitraum zweizeilig, Namen dürfen umbrechen */
+.charging-sessions-table .session-select {
+  width: 1%;
+  padding-right: 4px;
+}
+
+.charging-sessions-table .session-period span {
+  display: block;
+}
+
+.charging-sessions-table .session-period .muted {
+  font-size: 0.85em;
+}
+
+.charging-sessions-table .session-user {
+  white-space: normal;
+  min-width: 7rem;
+}
+
+/* Ladevorgänge: Kennzahlen links, Filter rechts */
+.sessions-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px 48px;
+  align-items: start;
+}
+
+.sessions-statistics {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.sessions-statistics > div {
+  display: grid;
+  grid-template-columns: 4ch auto;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.sessions-statistics dd {
+  grid-row: 1;
+  grid-column: 1;
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sessions-statistics dt {
+  grid-column: 2;
+  color: var(--color-text-muted, #5f6b7a);
+}
+
+.sessions-statistics > div:first-child dt {
+  color: inherit;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .sessions-overview {
+    grid-template-columns: 1fr;
+  }
+}

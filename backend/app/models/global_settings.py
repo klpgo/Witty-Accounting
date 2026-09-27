@@ -371,7 +371,7 @@ class GlobalSettings(Base):
         nullable=True,
     )
 
-    # Zugang zum Hager-flow-Portal (Abruf der Ladevorgänge)
+    # Zugang zur Hager Cloud (Abruf der Ladevorgänge)
     hager_username: Mapped[
         str | None
     ] = mapped_column(
@@ -387,6 +387,23 @@ class GlobalSettings(Base):
     )
 
     hager_installation_id: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    # Import: Ladevorgänge ohne Energie (0 kWh) nicht übernehmen
+    import_skip_empty_sessions: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    # Seriennummer des Systems (zweite Zahl in der Adresse der
+    # Hager-Weboberfläche); Grundlage des E-Mobility-Abrufs
+    hager_serial_number: Mapped[
         str | None
     ] = mapped_column(
         String(50),

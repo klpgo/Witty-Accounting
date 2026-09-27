@@ -111,8 +111,10 @@ def price_charging_sessions(
     Bei overwrite=True werden auch bereits bepreiste Sitzungen
     neu berechnet.
     """
-    statement = select(ChargingSession).order_by(
-        ChargingSession.start_time
+    statement = (
+        select(ChargingSession)
+        .where(ChargingSession.discarded_at.is_(None))
+        .order_by(ChargingSession.start_time)
     )
     if import_hashes is not None:
         if not import_hashes:

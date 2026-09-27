@@ -12,6 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.charging_session import ChargingSession
+from app.services.importers.import_filters import (
+    ExclusionCounter,
+    exclusion_reason,
+    load_import_filters,
+)
 from app.services.rfid_reassignment import (
     ASSIGNED,
     RFIDIssueCollector,
@@ -180,7 +185,7 @@ def parse_start_time(value: Any) -> datetime:
 
 def import_xlsx(path: str | Path) -> list[dict[str, Any]]:
     """
-    Liest einen Hager-Flow-XLSX-Export ein und gibt normalisierte
+    Liest einen XLSX-Export der Hager-Weboberfläche ein und gibt normalisierte
     Ladevorgänge zurück.
 
     Diese Funktion speichert noch keine Daten in der Datenbank.
@@ -341,8 +346,20 @@ def import_xlsx_to_db(
     backfilled = 0
     issues = RFIDIssueCollector()
     imported_hashes: list[str] = []
+    filters = load_import_filters(db)
+    excluded = ExclusionCounter()
 
     for session_data in parsed_sessions:
+        reason = exclusion_reason(
+            filters,
+            session_data["start_time"],
+            session_data["energy_total_kwh"],
+        )
+
+        if reason is not None:
+            excluded.add(reason)
+            continue
+
         import_hash = session_data["import_hash"]
 
         existing_session = db.scalar(
@@ -425,6 +442,7 @@ def import_xlsx_to_db(
         "imported": imported,
         "skipped": skipped,
         **issues.as_result(),
+        **excluded.as_result(),
         "backfilled_rfid_numbers": backfilled,
         "reassigned_sessions": reassigned,
         "imported_hashes": imported_hashes,

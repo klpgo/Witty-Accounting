@@ -21,6 +21,9 @@ export interface ChargingSession {
   invoice_id: number | null
   invoice_number: string | null
   invoice_status: string | null
+  discarded: boolean
+  discarded_at: string | null
+  discard_reason: string | null
 }
 
 interface ApiErrorResponse {
@@ -60,9 +63,11 @@ async function getErrorMessage(
 export async function listChargingSessions(
   accessToken: string,
   signal?: AbortSignal,
+  includeDiscarded = false,
 ): Promise<ChargingSession[]> {
+  const query = includeDiscarded ? '?include_discarded=true' : ''
   const response = await fetch(
-    `${API_BASE_URL}/charging-sessions`,
+    `${API_BASE_URL}/charging-sessions${query}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -81,4 +86,50 @@ export async function listChargingSessions(
   return (
     await response.json()
   ) as ChargingSession[]
+}
+
+async function postSessionIds(
+  accessToken: string,
+  action: 'discard' | 'restore',
+  body: { ids: number[]; reason?: string },
+): Promise<number> {
+  const response = await fetch(
+    `${API_BASE_URL}/charging-sessions/${action}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+  )
+
+  if (!response.ok) {
+    throw new ChargingSessionApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return ((await response.json()) as { changed: number }).changed
+}
+
+// Verwirft nicht abgerechnete Ladevorgänge (alle oder keiner)
+export function discardChargingSessions(
+  accessToken: string,
+  ids: number[],
+  reason?: string,
+): Promise<number> {
+  return postSessionIds(accessToken, 'discard', {
+    ids,
+    ...(reason ? { reason } : {}),
+  })
+}
+
+export function restoreChargingSessions(
+  accessToken: string,
+  ids: number[],
+): Promise<number> {
+  return postSessionIds(accessToken, 'restore', { ids })
 }

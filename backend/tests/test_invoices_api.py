@@ -1866,3 +1866,31 @@ def test_failed_pdf_archiving_is_logged_and_can_be_retried(
     assert archive_response.status_code == 200
     assert archive_response.json()["pdf_storage_path"] is not None
     assert (tmp_path / archive_response.json()["pdf_storage_path"]).is_file()
+
+
+def test_discarded_session_is_not_invoiced(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.services.charging_session_discard import discard_sessions
+
+    user, charging_session = create_billable_session(database_session)
+    discard_sessions(database_session, [charging_session.id], user_id=None)
+
+    response = client.post(
+        "/api/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": "2026-06-01T00:00:00",
+            "service_period_end": "2026-07-01T00:00:00",
+        },
+    )
+
+    if response.status_code == 201:
+        assert all(
+            item["charging_session_id"] != charging_session.id
+            for item in response.json()["items"]
+        )
+    else:
+        # ohne den verworfenen Vorgang gibt es nichts abzurechnen
+        assert response.status_code in (400, 409, 422)

@@ -17,6 +17,8 @@ export interface ImportResult {
   backfilled_rfid_numbers?: number
   reassigned_sessions?: number
   fetched_from?: string | null
+  skipped_before_billing_start?: number
+  skipped_empty?: number
 }
 
 interface ValidationErrorDetail {

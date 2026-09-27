@@ -134,31 +134,6 @@ def test_refresh_error_raises() -> None:
         hager_client.refresh("R1", transport=transport)
 
 
-def test_fetch_sessions_reads_all_pages() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["authorization"] == "Bearer ACCESS"
-        page = int(request.url.params["page"])
-        return httpx.Response(
-            200,
-            json={"content": [{"page": page}], "last": page == 1},
-        )
-
-    items = hager_client.fetch_sessions(
-        "ACCESS",
-        "1000143617",
-        transport=httpx.MockTransport(handler),
-    )
-
-    assert items == [{"page": 0}, {"page": 1}]
-
-
-def test_fetch_sessions_http_error_raises() -> None:
-    transport = httpx.MockTransport(lambda request: httpx.Response(401))
-
-    with pytest.raises(hager_client.HagerApiError, match="HTTP 401"):
-        hager_client.fetch_sessions("ACCESS", "1", transport=transport)
-
-
 @pytest.mark.parametrize(
     "page",
     [
@@ -185,109 +160,6 @@ def test_describe_page_hides_values() -> None:
     assert SAML_VALUE[:16] not in description
 
 
-def test_fetch_sessions_401_raises_unauthorized() -> None:
-    transport = httpx.MockTransport(lambda request: httpx.Response(401))
-
-    with pytest.raises(hager_client.HagerUnauthorizedError):
-        hager_client.fetch_sessions("ACCESS", "1", transport=transport)
-
-
-# --------------------------------------------------------------------------
-# Früher Abbruch am Cut-off
-# --------------------------------------------------------------------------
-from datetime import UTC, datetime
-
-
-def session_at(day: int, hour: int = 12) -> dict:
-    return {"session": {"start_date_time": f"2026-09-{day:02d}T{hour:02d}:00:00Z"}}
-
-
-def paged_transport(pages: list[list[dict]], requested: list[int]) -> httpx.MockTransport:
-    def handler(request: httpx.Request) -> httpx.Response:
-        page = int(request.url.params["page"])
-        requested.append(page)
-        return httpx.Response(
-            200,
-            json={
-                "content": pages[page],
-                "last": page == len(pages) - 1,
-                "totalElements": sum(len(p) for p in pages),
-            },
-        )
-
-    return httpx.MockTransport(handler)
-
-
-DESCENDING_PAGES = [
-    [session_at(24), session_at(23), session_at(22)],
-    [session_at(21), session_at(20), session_at(19)],
-    [session_at(18), session_at(17), session_at(16)],
-]
-
-
-def test_fetch_stops_after_page_reaching_cutoff() -> None:
-    requested: list[int] = []
-
-    items = hager_client.fetch_sessions(
-        "ACCESS",
-        "1",
-        stop_before=datetime(2026, 9, 20, 0, 0, tzinfo=UTC),
-        transport=paged_transport(DESCENDING_PAGES, requested),
-    )
-
-    # Seite 1 reicht bis 19.09. zurück -> Seite 2 wird nicht mehr geholt
-    assert requested == [0, 1]
-    assert len(items) == 6
-
-
-def test_fetch_without_cutoff_reads_all_pages() -> None:
-    requested: list[int] = []
-
-    items = hager_client.fetch_sessions(
-        "ACCESS",
-        "1",
-        transport=paged_transport(DESCENDING_PAGES, requested),
-    )
-
-    assert requested == [0, 1, 2]
-    assert len(items) == 9
-
-
-def test_fetch_reads_all_pages_if_not_sorted() -> None:
-    unsorted = [
-        [session_at(24), session_at(19), session_at(22)],
-        [session_at(21), session_at(20), session_at(18)],
-        [session_at(23), session_at(17), session_at(16)],
-    ]
-    requested: list[int] = []
-
-    hager_client.fetch_sessions(
-        "ACCESS",
-        "1",
-        stop_before=datetime(2026, 9, 20, 0, 0, tzinfo=UTC),
-        transport=paged_transport(unsorted, requested),
-    )
-
-    assert requested == [0, 1, 2]
-
-
-def test_fetch_max_pages_and_info() -> None:
-    requested: list[int] = []
-    info: dict = {}
-
-    items = hager_client.fetch_sessions(
-        "ACCESS",
-        "1",
-        max_pages=1,
-        info=info,
-        transport=paged_transport(DESCENDING_PAGES, requested),
-    )
-
-    assert requested == [0]
-    assert len(items) == 3
-    assert info == {"pages": 1, "total_elements": 9}
-
-
 def test_login_logs_steps_without_parameters(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -311,3 +183,171 @@ def test_login_logs_steps_without_parameters(
     assert "client_id" not in text
     assert SAML_VALUE not in text
     assert "ACCESS" not in text and "REAUTH" not in text
+
+
+# --------------------------------------------------------------------------
+# E-Mobility-Endpunkt: spaltenweise Antwort, neueste zuerst, Blättern
+# --------------------------------------------------------------------------
+from datetime import UTC, datetime
+
+
+def charging_row(day: int, hour: int = 12) -> dict:
+    return {
+        "sessionID": f"S-{day:02d}-{hour:02d}",
+        "wallboxID": "WB-A",
+        "startAt": f"2026-09-{day:02d}T{hour:02d}:00:00.000Z",
+    }
+
+
+def as_columns(rows: list[dict]) -> dict:
+    keys = rows[0].keys() if rows else ["sessionID", "wallboxID", "startAt"]
+    return {key: [row[key] for row in rows] for key in keys}
+
+
+def emobility_transport(
+    pages: list[list[dict]],
+    requested: list[dict],
+) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/e-mobility/322329007044/charging"
+        assert request.headers["authorization"] == "Bearer ACCESS"
+        params = dict(request.url.params)
+        requested.append(params)
+        page = int(params["offset"]) // int(params["limit"])
+        rows = pages[page] if page < len(pages) else []
+        return httpx.Response(200, json=as_columns(rows))
+
+    return httpx.MockTransport(handler)
+
+
+def full_pages(days: list[list[int]]) -> list[list[dict]]:
+    return [[charging_row(day) for day in page] for page in days]
+
+
+def test_columns_to_rows() -> None:
+    assert hager_client.columns_to_rows(
+        {"id": [1, 2], "startAt": ["a", "b"]}
+    ) == [{"id": 1, "startAt": "a"}, {"id": 2, "startAt": "b"}]
+    assert hager_client.columns_to_rows({}) == []
+
+    with pytest.raises(hager_client.HagerApiError, match="unterschiedlich lang"):
+        hager_client.columns_to_rows({"id": [1, 2], "startAt": ["a"]})
+
+
+def test_fetch_requests_newest_first_and_stops_at_cutoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(hager_client, "PAGE_SIZE", 3)
+    requested: list[dict] = []
+
+    rows = hager_client.fetch_charging_sessions(
+        "ACCESS",
+        "322329007044",
+        stop_before=datetime(2026, 9, 20, 0, 0, tzinfo=UTC),
+        transport=emobility_transport(
+            full_pages([[24, 23, 22], [21, 20, 19], [18, 17, 16]]),
+            requested,
+        ),
+    )
+
+    assert requested[0] == {"sort": "-startAt", "limit": "3", "offset": "0"}
+    # Seite 2 reicht bis 19.09. zurück -> Seite 3 wird nicht geholt
+    assert [r["offset"] for r in requested] == ["0", "3"]
+    assert len(rows) == 6
+
+
+def test_fetch_stops_at_last_partial_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(hager_client, "PAGE_SIZE", 3)
+    requested: list[dict] = []
+    info: dict = {}
+
+    rows = hager_client.fetch_charging_sessions(
+        "ACCESS",
+        "322329007044",
+        info=info,
+        transport=emobility_transport(
+            full_pages([[24, 23, 22], [21, 20]]),
+            requested,
+        ),
+    )
+
+    assert len(rows) == 5
+    assert info == {"pages": 2, "rows": 5}
+
+
+def test_fetch_reads_all_pages_if_not_sorted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(hager_client, "PAGE_SIZE", 3)
+    requested: list[dict] = []
+
+    hager_client.fetch_charging_sessions(
+        "ACCESS",
+        "322329007044",
+        stop_before=datetime(2026, 9, 20, 0, 0, tzinfo=UTC),
+        transport=emobility_transport(
+            full_pages([[24, 19, 22], [21, 20, 18], [23, 17]]),
+            requested,
+        ),
+    )
+
+    assert [r["offset"] for r in requested] == ["0", "3", "6"]
+
+
+def test_fetch_max_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hager_client, "PAGE_SIZE", 3)
+    requested: list[dict] = []
+
+    rows = hager_client.fetch_charging_sessions(
+        "ACCESS",
+        "322329007044",
+        max_pages=1,
+        transport=emobility_transport(
+            full_pages([[24, 23, 22], [21, 20, 19]]),
+            requested,
+        ),
+    )
+
+    assert len(requested) == 1
+    assert len(rows) == 3
+
+
+@pytest.mark.parametrize(
+    ("status_code", "error"),
+    [
+        (401, hager_client.HagerUnauthorizedError),
+        (403, hager_client.HagerUnauthorizedError),
+        (400, hager_client.HagerApiError),
+    ],
+)
+def test_fetch_http_errors(status_code: int, error: type) -> None:
+    transport = httpx.MockTransport(lambda request: httpx.Response(status_code))
+
+    with pytest.raises(error, match=f"HTTP {status_code}"):
+        hager_client.fetch_charging_sessions(
+            "ACCESS",
+            "322329007044",
+            transport=transport,
+        )
+
+
+def test_fetch_wallbox_names() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/wallbox/wallboxes/1000143617/active")
+        return httpx.Response(
+            200,
+            json=[
+                {"wallboxId": "WB-A", "wallboxName": "WB2"},
+                {"wallboxId": "WB-B", "wallboxName": " "},
+                {"wallboxName": "ohne ID"},
+            ],
+        )
+
+    assert hager_client.fetch_wallbox_names(
+        "ACCESS",
+        "1000143617",
+        transport=httpx.MockTransport(handler),
+    ) == {"WB-A": "WB2"}
+

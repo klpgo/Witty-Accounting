@@ -74,6 +74,9 @@ function AdminHagerSettingsForm() {
 
   const [username, setUsername] = useState('')
   const [installationId, setInstallationId] = useState('')
+  const [serialNumber, setSerialNumber] = useState('')
+  const [skipEmptySessions, setSkipEmptySessions] =
+    useState(false)
   const [password, setPassword] = useState('')
   const [clearPassword, setClearPassword] = useState(false)
   const [passwordConfigured, setPasswordConfigured] =
@@ -101,10 +104,13 @@ function AdminHagerSettingsForm() {
     (settings: HagerSettings): void => {
       setUsername(settings.username ?? '')
       setInstallationId(settings.installation_id ?? '')
+      setSerialNumber(settings.serial_number ?? '')
+      setSkipEmptySessions(settings.skip_empty_sessions)
       setPasswordConfigured(settings.password_configured)
       setSavedComplete(
         Boolean(settings.username) &&
           Boolean(settings.installation_id) &&
+          Boolean(settings.serial_number) &&
           settings.password_configured,
       )
       setPassword('')
@@ -176,6 +182,7 @@ function AdminHagerSettingsForm() {
     event.preventDefault()
 
     const normalizedInstallationId = installationId.trim()
+    const normalizedSerialNumber = serialNumber.trim()
 
     setErrorMessage(null)
     setSuccessMessage(null)
@@ -186,6 +193,16 @@ function AdminHagerSettingsForm() {
     ) {
       setErrorMessage(
         'Die Installations-ID besteht nur aus Ziffern.',
+      )
+      return
+    }
+
+    if (
+      normalizedSerialNumber &&
+      !/^\d+$/.test(normalizedSerialNumber)
+    ) {
+      setErrorMessage(
+        'Die Seriennummer besteht nur aus Ziffern.',
       )
       return
     }
@@ -220,6 +237,8 @@ function AdminHagerSettingsForm() {
     const payload: HagerSettingsUpdate = {
       username: username.trim(),
       installation_id: normalizedInstallationId,
+      serial_number: normalizedSerialNumber,
+      skip_empty_sessions: skipEmptySessions,
       auto_import_enabled: autoEnabled,
       auto_import_interval_hours: intervalHours,
       auto_import_start_time: autoStartTime,
@@ -281,9 +300,13 @@ function AdminHagerSettingsForm() {
       )
 
       setSuccessMessage(
-        `Verbindung zu Hager flow erfolgreich: ${result.sessions} ` +
-          'Ladevorgänge verfügbar' +
-          (latest ? `, der neueste vom ${latest}.` : '.'),
+        'Verbindung zur Hager Cloud erfolgreich' +
+          (result.sessions !== null
+            ? `: ${result.sessions} Ladevorgänge verfügbar`
+            : '') +
+          (latest
+            ? `. Neuester Ladevorgang vom ${latest}.`
+            : '. Noch keine Ladevorgänge vorhanden.'),
       )
     } catch (error) {
       if (
@@ -297,7 +320,7 @@ function AdminHagerSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Verbindung zu Hager flow konnte nicht getestet werden.',
+          : 'Die Verbindung zur Hager Cloud konnte nicht getestet werden.',
       )
     } finally {
       setIsTesting(false)
@@ -321,11 +344,11 @@ function AdminHagerSettingsForm() {
     >
       <section className="settings-section">
         <div>
-          <h2>Hager flow</h2>
+          <h2>Hager Cloud</h2>
 
           <p className="muted">
-            Zugangsdaten für das Hager-flow-Portal,
-            aus dem die Ladevorgänge abgerufen werden.
+            Zugangsdaten für die Hager Cloud,
+            aus der die Ladevorgänge abgerufen werden.
             Das Passwort wird verschlüsselt gespeichert
             und nie wieder angezeigt.
           </p>
@@ -353,20 +376,6 @@ function AdminHagerSettingsForm() {
               autoComplete="off"
               onChange={(event) => {
                 setUsername(event.target.value)
-              }}
-            />
-          </label>
-
-          <label className="form-field">
-            <span>Installations-ID</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={installationId}
-              maxLength={50}
-              placeholder="z. B. 1000143617"
-              onChange={(event) => {
-                setInstallationId(event.target.value)
               }}
             />
           </label>
@@ -411,13 +420,65 @@ function AdminHagerSettingsForm() {
               löschen
             </label>
           </div>
+
+          <label className="form-field">
+            <span>Installations-ID</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={installationId}
+              maxLength={50}
+              placeholder="z. B. 1000143617"
+              onChange={(event) => {
+                setInstallationId(event.target.value)
+              }}
+            />
+          </label>
+
+          <label className="form-field">
+            <span>Seriennummer</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={serialNumber}
+              maxLength={50}
+              placeholder="z. B. 322329007044"
+              onChange={(event) => {
+                setSerialNumber(event.target.value)
+              }}
+            />
+          </label>
         </div>
 
         <p className="muted">
-          Die Installations-ID steht in der Adresse der
-          Hager-flow-Seite: flow.hager.com/e-mobility/
-          <strong>Installations-ID</strong>/…
+          Installations-ID und Seriennummer stehen in der Adresse
+          der Hager-Weboberfläche: flow.hager.com/e-mobility/
+          <strong>Installations-ID</strong>/<strong>Seriennummer</strong>/…
         </p>
+      </section>
+
+      <section className="settings-section">
+        <div>
+          <h2>Import-Regeln</h2>
+
+          <p className="muted">
+            Gelten für alle Importe (Hager Cloud, XLSX, JSON).
+            Ladevorgänge vor dem Abrechnungsbeginn werden nie
+            übernommen.
+          </p>
+        </div>
+
+        <label className="settings-checkbox-control">
+          <input
+            type="checkbox"
+            checked={skipEmptySessions}
+            onChange={(event) => {
+              setSkipEmptySessions(event.target.checked)
+            }}
+          />
+          Ladevorgänge ohne Energie (0 kWh) nicht importieren,
+          z. B. abgebrochene oder nicht autorisierte Vorgänge
+        </label>
       </section>
 
       <section className="settings-section">
@@ -425,7 +486,7 @@ function AdminHagerSettingsForm() {
           <h2>Automatischer Abruf</h2>
 
           <p className="muted">
-            Ruft neue Ladevorgänge regelmäßig aus Hager flow ab,
+            Ruft neue Ladevorgänge regelmäßig aus der Hager Cloud ab,
             alle N Stunden ab der Startzeit (deutsche Ortszeit),
             mindestens einmal täglich. Nach dem Aktivieren erfolgt
             der erste Abruf innerhalb einer Minute.
@@ -446,8 +507,8 @@ function AdminHagerSettingsForm() {
 
         {!savedComplete && (
           <small className="muted">
-            Zuerst Benutzername, Passwort und Installations-ID
-            speichern.
+            Zuerst Benutzername, Passwort, Installations-ID
+            und Seriennummer speichern.
           </small>
         )}
 
@@ -564,7 +625,7 @@ function AdminHagerSettingsForm() {
           title={
             savedComplete
               ? undefined
-              : 'Zuerst Benutzername, Passwort und Installations-ID speichern.'
+              : 'Zuerst Benutzername, Passwort, Installations-ID und Seriennummer speichern.'
           }
           onClick={() => {
             void handleTest()

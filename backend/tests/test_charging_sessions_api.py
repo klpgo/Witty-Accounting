@@ -464,3 +464,205 @@ def test_user_reads_only_own_charging_sessions(
 
     assert data[2]["invoiced"] is False
     assert data[2]["invoice_id"] is None
+
+
+# --------------------------------------------------------------------------
+# Verwerfen und Wiederherstellen
+# --------------------------------------------------------------------------
+def create_admin_with_session(database_session: Session):
+    admin = create_user(
+        database_session,
+        email="discard-admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card, assignment = create_card_assignment(
+        database_session,
+        user=admin,
+        suffix="discard",
+    )
+    charging_session = create_charging_session(
+        database_session,
+        suffix="discard",
+        start_time=datetime(2026, 6, 10, 8, 0),
+        card=card,
+        assignment=assignment,
+    )
+    return admin, card, assignment, charging_session
+
+
+def listed_ids(client: TestClient, admin: User, **params) -> list[int]:
+    response = client.get(
+        "/api/charging-sessions",
+        headers=authorization_header(admin),
+        params=params,
+    )
+    assert response.status_code == 200
+    return [item["id"] for item in response.json()]
+
+
+def test_admin_discards_and_restores_session(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin, _card, _assignment, charging_session = create_admin_with_session(
+        database_session
+    )
+
+    response = client.post(
+        "/api/charging-sessions/discard",
+        headers=authorization_header(admin),
+        json={"ids": [charging_session.id], "reason": " Testladung "},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"changed": 1}
+    assert charging_session.id not in listed_ids(client, admin)
+
+    discarded = [
+        item
+        for item in client.get(
+            "/api/charging-sessions",
+            headers=authorization_header(admin),
+            params={"include_discarded": True},
+        ).json()
+        if item["id"] == charging_session.id
+    ][0]
+    assert discarded["discarded"] is True
+    assert discarded["discard_reason"] == "Testladung"
+    assert discarded["discarded_at"] is not None
+
+    database_session.refresh(charging_session)
+    assert charging_session.discarded_by_user_id == admin.id
+
+    response = client.post(
+        "/api/charging-sessions/restore",
+        headers=authorization_header(admin),
+        json={"ids": [charging_session.id]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"changed": 1}
+    assert charging_session.id in listed_ids(client, admin)
+
+
+def test_invoiced_session_cannot_be_discarded_and_nothing_changes(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin, card, assignment, open_session = create_admin_with_session(
+        database_session
+    )
+    invoice = create_invoice(
+        database_session,
+        user=admin,
+        status="finalized",
+        invoice_number="RE-2026-0099",
+    )
+    invoiced_session = create_charging_session(
+        database_session,
+        suffix="invoiced",
+        start_time=datetime(2026, 6, 11, 8, 0),
+        card=card,
+        assignment=assignment,
+        invoice=invoice,
+        invoiced=True,
+    )
+
+    response = client.post(
+        "/api/charging-sessions/discard",
+        headers=authorization_header(admin),
+        json={"ids": [open_session.id, invoiced_session.id]},
+    )
+
+    assert response.status_code == 409
+    assert "bereits abgerechnet" in response.json()["detail"]
+    # alle oder keiner: auch der offene Vorgang bleibt unverändert
+    database_session.refresh(open_session)
+    assert open_session.discarded_at is None
+
+
+def test_discard_requires_admin(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    _admin, _card, _assignment, charging_session = create_admin_with_session(
+        database_session
+    )
+    user = create_user(
+        database_session,
+        email="discard-user@example.com",
+        first_name="User",
+    )
+
+    response = client.post(
+        "/api/charging-sessions/discard",
+        headers=authorization_header(user),
+        json={"ids": [charging_session.id]},
+    )
+
+    assert response.status_code == 403
+
+
+def test_discard_unknown_session_returns_404(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin, _card, _assignment, _session = create_admin_with_session(
+        database_session
+    )
+
+    response = client.post(
+        "/api/charging-sessions/discard",
+        headers=authorization_header(admin),
+        json={"ids": [999999]},
+    )
+
+    assert response.status_code == 404
+
+
+def test_non_admin_never_sees_discarded_sessions(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin, card, assignment, charging_session = create_admin_with_session(
+        database_session
+    )
+    user = create_user(
+        database_session,
+        email="owner@example.com",
+        first_name="Owner",
+    )
+    assignment.user_id = user.id
+    charging_session.discarded_at = datetime(2026, 9, 1, 12, 0)
+    database_session.commit()
+
+    assert listed_ids(client, user, include_discarded=True) == []
+
+
+def test_admin_sees_imported_rfid_number_of_unassigned_session(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin, _card, _assignment, _session = create_admin_with_session(
+        database_session
+    )
+    unassigned = create_charging_session(
+        database_session,
+        suffix="unassigned",
+        start_time=datetime(2026, 6, 12, 8, 0),
+    )
+    unassigned.rfid_number = "3027ECAC"
+    database_session.commit()
+
+    item = [
+        entry
+        for entry in client.get(
+            "/api/charging-sessions",
+            headers=authorization_header(admin),
+        ).json()
+        if entry["id"] == unassigned.id
+    ][0]
+
+    assert item["rfid_number"] == "3027ECAC"
+    assert item["user_id"] is None

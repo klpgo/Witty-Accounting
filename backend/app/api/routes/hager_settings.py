@@ -57,6 +57,7 @@ def is_access_complete(global_settings: GlobalSettings) -> bool:
         global_settings.hager_username
         and global_settings.hager_password_encrypted
         and global_settings.hager_installation_id
+        and global_settings.hager_serial_number
     )
 
 
@@ -75,6 +76,8 @@ def build_response(
     return HagerSettingsResponse(
         username=global_settings.hager_username,
         installation_id=global_settings.hager_installation_id,
+        serial_number=global_settings.hager_serial_number,
+        skip_empty_sessions=global_settings.import_skip_empty_sessions,
         password_configured=(
             global_settings.hager_password_encrypted is not None
         ),
@@ -135,6 +138,16 @@ def update_hager_settings(
             updates["installation_id"] or None
         )
 
+    if "serial_number" in updates:
+        global_settings.hager_serial_number = (
+            updates["serial_number"] or None
+        )
+
+    if data.skip_empty_sessions is not None:
+        global_settings.import_skip_empty_sessions = (
+            data.skip_empty_sessions
+        )
+
     if data.auto_import_interval_hours is not None:
         global_settings.hager_auto_import_interval_hours = (
             data.auto_import_interval_hours
@@ -177,7 +190,8 @@ def update_hager_settings(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "Für den automatischen Abruf müssen Benutzername, "
-                "Passwort und Installations-ID gespeichert sein."
+                "Passwort, Installations-ID und Seriennummer "
+                "gespeichert sein."
             ),
         )
 
@@ -203,7 +217,7 @@ def update_hager_settings(
 def test_hager_connection(
     db: Session = Depends(get_db),
 ) -> HagerConnectionTestResponse:
-    """Meldet sich bei Hager flow an und ruft die Sessions ab,
+    """Meldet sich bei der Hager Cloud an und ruft die Sessions ab,
     ohne etwas zu importieren."""
     try:
         result = check_connection(db)

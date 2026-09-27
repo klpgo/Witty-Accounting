@@ -161,7 +161,7 @@ def test_import_hager_connection_error_returns_502(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail(db: Any, date_from=None, date_to=None, fetch_all=False) -> None:
-        raise HagerConnectionError("Hager flow ist nicht erreichbar: ConnectTimeout")
+        raise HagerConnectionError("Hager Cloud ist nicht erreichbar: ConnectTimeout")
 
     monkeypatch.setattr("app.api.routes.imports.import_from_hager", fail)
 

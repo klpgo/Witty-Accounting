@@ -21,6 +21,12 @@ from sqlalchemy.orm import Session
 
 from app.models.charging_session import ChargingSession
 from app.services.importers.xlsx_importer import create_import_hash
+from app.services.importers.import_filters import (
+    ExclusionCounter,
+    ImportFilters,
+    exclusion_reason,
+    load_import_filters,
+)
 from app.services.rfid_reassignment import (
     ASSIGNED,
     RFIDIssueCollector,
@@ -153,6 +159,7 @@ def parse_session(item: dict[str, Any]) -> dict[str, Any] | None:
         "status": str(item.get("status") or session.get("status") or "").strip(),
         "station_id": station_id,
         "station_aliases": station_aliases(item),
+        "wallbox_id": str(item.get("wallboxId") or "").strip() or None,
         "rfid": rfid,
         "energy_total_kwh": energy_total_kwh,
         "energy_pv_kwh": energy_pv_kwh,
@@ -164,6 +171,87 @@ def parse_session(item: dict[str, Any]) -> dict[str, Any] | None:
         ),
         "source": JSON_SOURCE,
     }
+
+
+HAGER_API_SOURCE = "hager"
+WH_PER_KWH = 1000.0
+
+
+def parse_charging_row(
+    row: dict[str, Any],
+    wallbox_names: dict[str, str],
+) -> dict[str, Any] | None:
+    """
+    Normalisiert einen Datensatz des E-Mobility-Endpunkts.
+
+    Energie liefert die API in Wh, Zeiten in UTC. Gibt None zurück,
+    wenn der Ladevorgang noch läuft (kein Endzeitpunkt).
+    """
+    if not row.get("stopAt"):
+        return None
+
+    session_id = str(row.get("sessionID") or "").strip()
+
+    if not session_id:
+        raise ValueError("sessionID fehlt")
+
+    wallbox_id = str(row.get("wallboxID") or "").strip()
+
+    if not wallbox_id:
+        raise ValueError("wallboxID fehlt")
+
+    start_time = parse_utc_to_local(row.get("startAt"), "startAt")
+    end_time = parse_utc_to_local(row.get("stopAt"), "stopAt")
+
+    if end_time < start_time:
+        raise ValueError("Endzeitpunkt liegt vor dem Startzeitpunkt")
+
+    station_id = wallbox_names.get(wallbox_id) or f"ID: {wallbox_id}"
+    rfid = str(row.get("authData") or "").strip().upper() or None
+    energy_total_kwh = to_float(row.get("energyAll"), "energyAll") / WH_PER_KWH
+    energy_pv_kwh = to_float(row.get("energySolar"), "energySolar") / WH_PER_KWH
+
+    return {
+        "hager_session_id": session_id,
+        "start_time": start_time,
+        "end_time": end_time,
+        "status": str(row.get("status") or "").strip(),
+        "station_id": station_id,
+        "station_aliases": {station_id, f"ID: {wallbox_id}"},
+        "wallbox_id": wallbox_id,
+        "rfid": rfid,
+        "energy_total_kwh": energy_total_kwh,
+        "energy_pv_kwh": energy_pv_kwh,
+        "import_hash": create_import_hash(
+            start_time=start_time,
+            station=station_id,
+            energy=energy_total_kwh,
+            rfid=rfid,
+        ),
+        "source": HAGER_API_SOURCE,
+    }
+
+
+def parse_charging_rows(
+    rows: list[dict[str, Any]],
+    wallbox_names: dict[str, str],
+) -> tuple[list[dict[str, Any]], int]:
+    """Rückgabe: (normalisierte Sessions, Anzahl laufender Sessions)."""
+    sessions: list[dict[str, Any]] = []
+    running = 0
+
+    for index, row in enumerate(rows, start=1):
+        try:
+            parsed = parse_charging_row(row, wallbox_names)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Fehler in Ladevorgang {index}: {exc}") from exc
+
+        if parsed is None:
+            running += 1
+        else:
+            sessions.append(parsed)
+
+    return sessions, running
 
 
 def import_json(path: str | Path) -> tuple[list[dict[str, Any]], int]:
@@ -220,8 +308,9 @@ def find_existing_session(
     Dublettenprüfung in drei Stufen:
         1. gleiche Hager-Session-ID
         2. gleicher Import-Hash
-        3. per XLSX importierte Session (ohne Hager-ID) mit gleicher
-           Startzeit an derselben Station
+        3. gleiche Startzeit (auf die Sekunde) und gleiche Wallbox – oder,
+           bei früher importierten Ladevorgängen ohne Wallbox-ID, gleiche
+           Station bzw. einziger Ladevorgang zu dieser Sekunde
     """
     existing = db.scalar(
         select(ChargingSession).where(
@@ -241,15 +330,32 @@ def find_existing_session(
     if existing is not None:
         return existing
 
-    return db.scalar(
-        select(ChargingSession)
-        .where(
-            ChargingSession.hager_session_id.is_(None),
-            ChargingSession.start_time == session_data["start_time"],
-            ChargingSession.station_id.in_(sorted(session_data["station_aliases"])),
+    candidates = db.scalars(
+        select(ChargingSession).where(
+            ChargingSession.start_time == session_data["start_time"]
         )
-        .limit(1)
-    )
+    ).all()
+    wallbox_id = session_data.get("wallbox_id")
+
+    # a) gleiche Wallbox
+    if wallbox_id:
+        for candidate in candidates:
+            if candidate.wallbox_id == wallbox_id:
+                return candidate
+
+    # b) früher importiert (ohne Wallbox-ID) an derselben Station
+    legacy = [c for c in candidates if c.wallbox_id is None]
+
+    for candidate in legacy:
+        if candidate.station_id in session_data["station_aliases"]:
+            return candidate
+
+    # c) früher importiert, Station anders benannt (z. B. getauschte
+    #    Wallbox): nur wenn es der einzige Ladevorgang zu dieser Sekunde ist
+    if len(candidates) == 1 and len(legacy) == 1:
+        return legacy[0]
+
+    return None
 
 
 def is_editable(charging_session: ChargingSession) -> bool:
@@ -274,6 +380,9 @@ def backfill_existing_session(
 
     if existing.hager_session_id is None:
         existing.hager_session_id = session_data["hager_session_id"]
+
+    if existing.wallbox_id is None and session_data.get("wallbox_id"):
+        existing.wallbox_id = session_data["wallbox_id"]
 
     if existing.rfid_number is None and session_data["rfid"] is not None:
         existing.rfid_number = session_data["rfid"]
@@ -314,12 +423,34 @@ def import_items_to_db(
     )
 
 
+def import_charging_rows_to_db(
+    db: Session,
+    rows: list[dict[str, Any]],
+    wallbox_names: dict[str, str],
+) -> dict[str, object]:
+    """Importiert Datensätze des E-Mobility-Endpunkts."""
+    parsed_sessions, running_sessions = parse_charging_rows(rows, wallbox_names)
+
+    return import_parsed_sessions_to_db(
+        db,
+        parsed_sessions,
+        running_sessions,
+    )
+
+
 def import_parsed_sessions_to_db(
     db: Session,
     parsed_sessions: list[dict[str, Any]],
     running_sessions: int = 0,
+    filters: ImportFilters | None = None,
 ) -> dict[str, object]:
-    """Speichert normalisierte Sessions mit Dublettenprüfung."""
+    """
+    Speichert normalisierte Sessions mit Dublettenprüfung.
+    Ohne `filters` gelten die Import-Regeln aus den Einstellungen
+    (Abrechnungsbeginn, Vorgänge ohne Energie).
+    """
+    filters = filters if filters is not None else load_import_filters(db)
+    excluded = ExclusionCounter()
 
     imported = 0
     skipped = running_sessions
@@ -329,6 +460,16 @@ def import_parsed_sessions_to_db(
     seen_ids: set[str] = set()
 
     for session_data in parsed_sessions:
+        reason = exclusion_reason(
+            filters,
+            session_data["start_time"],
+            session_data["energy_total_kwh"],
+        )
+
+        if reason is not None:
+            excluded.add(reason)
+            continue
+
         if session_data["hager_session_id"] in seen_ids:
             skipped += 1
             continue
@@ -366,6 +507,7 @@ def import_parsed_sessions_to_db(
             ChargingSession(
                 hager_session_id=session_data["hager_session_id"],
                 station_id=session_data["station_id"],
+                wallbox_id=session_data.get("wallbox_id"),
                 start_time=session_data["start_time"],
                 end_time=session_data["end_time"],
                 rfid_number=rfid_number,
@@ -399,6 +541,7 @@ def import_parsed_sessions_to_db(
         "imported": imported,
         "skipped": skipped,
         **issues.as_result(),
+        **excluded.as_result(),
         "backfilled_rfid_numbers": backfilled,
         "reassigned_sessions": reassigned,
         "imported_hashes": imported_hashes,

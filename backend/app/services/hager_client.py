@@ -1,5 +1,5 @@
 """
-Hager-flow-Client: Anmeldung und Abruf der Ladesessions ohne Browser.
+Hager-Cloud-Client: Anmeldung und Abruf der Ladesessions ohne Browser.
 
 Ablauf (aus der Aufzeichnung von `discover-login` abgeleitet):
   1. E3/DC-SAML-Login  -> Keycloak (auth.hagerenergy.com) -> login.hager.com
@@ -31,6 +31,7 @@ DEFAULT_SAML_APP = "hager"
 E3DC_SAML_LOGIN = "https://e3dc.e3dc.com/auth-saml/service-providers/hager/login"
 E3DC_REAUTH = "https://e3dc.e3dc.com/auth-saml/re-auth"
 BRIDGE_API = "https://hager-bridge.production.production.eks.e3dc.com/hager-bridge/v1"
+EMOBILITY_API = "https://e-mobility.e3dc.com/e-mobility"
 FLOW_ORIGIN = "https://flow.hager.com"
 
 USER_AGENT = (
@@ -264,12 +265,9 @@ def refresh(
 # --------------------------------------------------------------------------
 # Datenabruf
 # --------------------------------------------------------------------------
-def session_start_utc(item: dict) -> datetime | None:
-    """Startzeit einer Session als UTC-Zeitpunkt, None wenn nicht lesbar."""
-    session = item.get("session") if isinstance(item, dict) else None
-    value = session.get("start_date_time") if isinstance(session, dict) else None
-
-    if not isinstance(value, str):
+def parse_api_time(value: object) -> datetime | None:
+    """ISO-Zeitstempel der API als UTC-Zeitpunkt, None wenn nicht lesbar."""
+    if not isinstance(value, str) or not value.strip():
         return None
 
     try:
@@ -280,79 +278,122 @@ def session_start_utc(item: dict) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
-def fetch_sessions(
-    token: str,
-    installation_id: str,
-    stop_before: datetime | None = None,
-    max_pages: int | None = None,
-    info: dict | None = None,
-    transport: httpx.BaseTransport | None = None,
-) -> list[dict]:
+def columns_to_rows(data: object) -> list[dict]:
     """
-    Ladesessions der Installation, seitenweise.
+    Der E-Mobility-Endpunkt liefert spaltenweise: {"id": [...],
+    "startAt": [...], ...}. Umwandlung in eine Liste von Datensätzen.
+    """
+    if isinstance(data, list):
+        return [row for row in data if isinstance(row, dict)]
 
-    stop_before: Die API liefert die neuesten Sessions zuerst. Sobald
-        eine Seite nur noch bis vor diesen Zeitpunkt zurückreicht, wird
-        nicht weiter geblättert. Ist eine Seite nicht absteigend
-        sortiert, werden zur Sicherheit alle Seiten abgerufen.
-    max_pages: höchstens so viele Seiten abrufen.
-    info: erhält "total_elements" und "pages" (Anzahl abgerufener Seiten).
-    """
-    url = f"{BRIDGE_API}/sessions/installation/{installation_id}"
-    headers = {
+    if not isinstance(data, dict):
+        raise HagerApiError("E-Mobility-API: unerwartetes Antwortformat.")
+
+    columns = {key: values for key, values in data.items() if isinstance(values, list)}
+
+    if not columns:
+        return []
+
+    lengths = {len(values) for values in columns.values()}
+
+    if len(lengths) != 1:
+        raise HagerApiError(
+            "E-Mobility-API: Spalten unterschiedlich lang "
+            f"({sorted(lengths)})."
+        )
+
+    count = lengths.pop()
+
+    return [
+        {key: values[index] for key, values in columns.items()}
+        for index in range(count)
+    ]
+
+
+def _api_headers(token: str) -> dict[str, str]:
+    return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "User-Agent": USER_AGENT,
         "Origin": FLOW_ORIGIN,
         "Referer": FLOW_ORIGIN + "/",
     }
-    items: list[dict] = []
+
+
+def fetch_charging_sessions(
+    token: str,
+    serial_number: str,
+    stop_before: datetime | None = None,
+    max_pages: int | None = None,
+    info: dict | None = None,
+    transport: httpx.BaseTransport | None = None,
+) -> list[dict]:
+    """
+    Ladevorgänge aller Wallboxen des Systems, neueste zuerst.
+
+    Der Endpunkt sortiert serverseitig (sort=-startAt) und blättert über
+    limit/offset. Sobald eine Seite vor `stop_before` zurückreicht, wird
+    nicht weiter geblättert. Ist eine Seite wider Erwarten nicht
+    absteigend sortiert, werden zur Sicherheit alle Seiten abgerufen.
+
+    info erhält "pages" und "rows".
+    """
+    url = f"{EMOBILITY_API}/{serial_number}/charging"
+    rows: list[dict] = []
     early_stop = stop_before is not None
     previous_oldest: datetime | None = None
 
-    with httpx.Client(timeout=TIMEOUT, headers=headers, transport=transport) as client:
+    with httpx.Client(
+        timeout=TIMEOUT,
+        headers=_api_headers(token),
+        transport=transport,
+    ) as client:
         for page in range(MAX_PAGES):
             started = time.monotonic()
+            params = {"sort": "-startAt", "limit": PAGE_SIZE, "offset": page * PAGE_SIZE}
+
             try:
-                response = client.get(url, params={"page": page, "size": PAGE_SIZE})
+                response = client.get(url, params=params)
             except httpx.TimeoutException:
                 logger.warning(
-                    "Hager: Sessions-API Seite %s ohne Antwort nach %.1f s",
+                    "Hager: E-Mobility-API Seite %s ohne Antwort nach %.1f s",
                     page,
                     time.monotonic() - started,
                 )
                 raise
+
             logger.info(
-                "Hager: Sessions-API Seite %s: HTTP %s in %.1f s",
+                "Hager: E-Mobility-API Seite %s: HTTP %s in %.1f s",
                 page,
                 response.status_code,
                 time.monotonic() - started,
             )
+
             if response.status_code in (401, 403):
                 raise HagerUnauthorizedError(
-                    f"Sessions-API Seite {page}: HTTP {response.status_code}"
+                    f"E-Mobility-API Seite {page}: HTTP {response.status_code}"
                 )
+
             if response.status_code != 200:
                 raise HagerApiError(
-                    f"Sessions-API Seite {page}: HTTP {response.status_code}"
+                    f"E-Mobility-API Seite {page}: HTTP {response.status_code}"
                 )
-            data = response.json()
-            content = data.get("content") or []
-            items.extend(content)
+
+            page_rows = columns_to_rows(response.json())
+            rows.extend(page_rows)
 
             if info is not None:
                 info["pages"] = page + 1
-                if page == 0:
-                    info["total_elements"] = data.get("totalElements")
+                info["rows"] = len(rows)
 
-            if data.get("last", True) or not content:
-                return items
+            if len(page_rows) < PAGE_SIZE:
+                return rows
 
             if max_pages is not None and page + 1 >= max_pages:
-                return items
+                return rows
 
             if early_stop:
-                starts = [session_start_utc(item) for item in content]
+                starts = [parse_api_time(row.get("startAt")) for row in page_rows]
                 ordered = (
                     all(start is not None for start in starts)
                     and all(a >= b for a, b in zip(starts, starts[1:]))
@@ -361,7 +402,7 @@ def fetch_sessions(
 
                 if not ordered:
                     logger.warning(
-                        "Hager: Sessions nicht absteigend sortiert – "
+                        "Hager: Ladevorgänge nicht absteigend sortiert – "
                         "rufe zur Sicherheit alle Seiten ab"
                     )
                     early_stop = False
@@ -374,5 +415,45 @@ def fetch_sessions(
                             "Ladevorgänge liegen vor dem Cut-off",
                             page,
                         )
-                        return items
+                        return rows
+
     raise HagerApiError(f"Mehr als {MAX_PAGES} Seiten – Abbruch.")
+
+
+def fetch_wallbox_names(
+    token: str,
+    installation_id: str,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, str]:
+    """
+    Namen der aktiven Wallboxen der Installation: {wallboxId: Name}.
+    Getauschte Geräte stehen hier nicht mehr drin.
+    """
+    url = f"{BRIDGE_API}/wallbox/wallboxes/{installation_id}/active"
+
+    with httpx.Client(
+        timeout=TIMEOUT,
+        headers=_api_headers(token),
+        transport=transport,
+    ) as client:
+        response = client.get(url)
+
+    if response.status_code in (401, 403):
+        raise HagerUnauthorizedError(f"Wallbox-Liste: HTTP {response.status_code}")
+
+    if response.status_code != 200:
+        raise HagerApiError(f"Wallbox-Liste: HTTP {response.status_code}")
+
+    names: dict[str, str] = {}
+
+    for entry in response.json() or []:
+        if not isinstance(entry, dict):
+            continue
+
+        wallbox_id = str(entry.get("wallboxId") or "").strip()
+        name = str(entry.get("wallboxName") or "").strip()
+
+        if wallbox_id and name:
+            names[wallbox_id] = name
+
+    return names
