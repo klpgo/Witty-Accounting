@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from html import escape
@@ -28,6 +29,7 @@ from reportlab.platypus import (
 from reportlab.pdfgen import canvas as pdf_canvas
 
 from app.models.invoice import Invoice
+from app.utils import locale_format
 from app.services.invoice_girocode import (
     GirocodeError,
     build_girocode_payload,
@@ -46,25 +48,34 @@ class IncompleteInvoicePdfDataError(
 
 CONTENT_WIDTH = A4[0] - 36 * mm
 
+# Gebietsschema und Währung des gerade erzeugten PDFs (je Thread/Kontext)
+_pdf_locale: ContextVar[str] = ContextVar(
+    "pdf_locale",
+    default=locale_format.DEFAULT_LOCALE,
+)
+_pdf_currency: ContextVar[str] = ContextVar(
+    "pdf_currency",
+    default=locale_format.DEFAULT_CURRENCY,
+)
+
+
 def format_decimal(
     value: Decimal,
     decimal_places: int,
 ) -> str:
-    quantizer = Decimal("1").scaleb(
-        -decimal_places
-    )
-    formatted = f"{value.quantize(quantizer):,.{decimal_places}f}"
-
-    return (
-        formatted
-        .replace(",", "#")
-        .replace(".", ",")
-        .replace("#", ".")
+    return locale_format.format_decimal(
+        value,
+        decimal_places,
+        _pdf_locale.get(),
     )
 
 
 def format_money(value: Decimal) -> str:
-    return f"{format_decimal(value, 2)} EUR"
+    return locale_format.format_money(
+        value,
+        _pdf_currency.get(),
+        _pdf_locale.get(),
+    )
 
 
 def format_energy(value: Decimal) -> str:
@@ -72,7 +83,7 @@ def format_energy(value: Decimal) -> str:
 
 
 def format_date(value: date) -> str:
-    return value.strftime("%d.%m.%Y")
+    return locale_format.format_date(value, _pdf_locale.get())
 
 
 def format_service_period(
@@ -239,6 +250,36 @@ def build_invoice_pdf(
     girocode_enabled: bool = False,
     issuer_email: str | None = None,
 ) -> bytes:
+    """
+    Erzeugt das PDF im Gebietsschema und in der Währung der Rechnung.
+    Beides wird beim Anlegen der Rechnung festgehalten, damit ein später
+    erneut erzeugtes PDF der ursprünglichen Rechnung entspricht. Ältere
+    Rechnungen ohne Gebietsschema erscheinen wie bisher in de-DE.
+    """
+    locale_token = _pdf_locale.set(
+        getattr(invoice, "locale", None) or locale_format.DEFAULT_LOCALE
+    )
+    currency_token = _pdf_currency.set(
+        invoice.currency or locale_format.DEFAULT_CURRENCY
+    )
+
+    try:
+        return _build_invoice_pdf(
+            invoice,
+            girocode_enabled=girocode_enabled,
+            issuer_email=issuer_email,
+        )
+    finally:
+        _pdf_currency.reset(currency_token)
+        _pdf_locale.reset(locale_token)
+
+
+def _build_invoice_pdf(
+    invoice: Invoice,
+    *,
+    girocode_enabled: bool,
+    issuer_email: str | None,
+) -> bytes:
     validate_invoice(invoice)
 
     girocode = None
@@ -247,6 +288,8 @@ def build_invoice_pdf(
         girocode_enabled
         and invoice.document_type != "cancellation"
         and invoice.total_gross > 0
+        # der Girocode (EPC-QR) ist nur für Euro definiert
+        and (invoice.currency or "EUR") == "EUR"
     ):
         try:
             payload = build_girocode_payload(
@@ -944,8 +987,8 @@ def build_invoice_pdf(
         item_rows.append(
             [
                 str(item.position_number),
-                item.session_start.strftime(
-                    "%d.%m.%Y"
+                format_date(
+                    item.session_start.date()
                 ),
                 item.station_id,
                 format_energy(

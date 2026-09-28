@@ -122,6 +122,8 @@ def create_cancellation_draft(
             original_invoice.service_period_end
         ),
         currency=original_invoice.currency,
+        # Storno im Format der ursprünglichen Rechnung
+        locale=original_invoice.locale,
         total_net=-original_invoice.total_net,
         vat_amount=-original_invoice.vat_amount,
         total_gross=-original_invoice.total_gross,

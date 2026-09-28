@@ -16,6 +16,7 @@ export interface User {
   last_login: string | null
   created_at: string
   updated_at: string
+  language?: string | null
 }
 
 export interface UserProfileUpdate {
@@ -26,6 +27,8 @@ export interface UserProfileUpdate {
   phone?: string | null
   invoice_delivery_email?: boolean
   invoice_delivery_post?: boolean
+  // null = Standardsprache des Mandanten
+  language?: string | null
 }
 
 export interface UserAdminUpdate

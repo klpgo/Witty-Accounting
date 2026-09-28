@@ -393,6 +393,38 @@ class GlobalSettings(Base):
         nullable=True,
     )
 
+    # Standardsprache der Oberfläche für Benutzer ohne eigene Wahl
+    # und für die Seiten vor der Anmeldung
+    default_language: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="de",
+        server_default="de",
+    )
+
+    # Gebietsschema für Zahlen-, Datums- und Betragsformat (z. B. de-DE)
+    locale: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default="de-DE",
+        server_default="de-DE",
+    )
+
+    # Währung der Abrechnung (ISO 4217); nach der ersten Rechnung fest
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        nullable=False,
+        default="EUR",
+        server_default="EUR",
+    )
+
+    # Zeitzone, in der die Ortszeiten dieses Mandanten gespeichert sind
+    # (beim ersten Import festgehalten, danach unveränderlich)
+    data_timezone: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
     # Import: Ladevorgänge ohne Energie (0 kWh) nicht übernehmen
     import_skip_empty_sessions: Mapped[bool] = mapped_column(
         Boolean,

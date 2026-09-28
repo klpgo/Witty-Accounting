@@ -15,54 +15,18 @@ import {
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { formatDate } from '../utils/dateFormat'
+import {
+  formatCurrency,
+} from '../utils/numberFormat'
+import {
+  documentTypeLabel,
+  invoiceStatusLabel,
+} from '../i18n/invoiceLabels'
+import { useTranslation } from '../i18n/useTranslation'
 
-
-function formatCurrency(
-  value: string | number,
-  currency: string,
-): string {
-  const numericValue = Number(value)
-
-  if (!Number.isFinite(numericValue)) {
-    return '–'
-  }
-
-  return new Intl.NumberFormat(
-    'de-DE',
-    {
-      style: 'currency',
-      currency,
-    },
-  ).format(numericValue)
-}
-
-function getStatusLabel(
-  status: string,
-): string {
-  switch (status) {
-    case 'draft':
-      return 'Entwurf'
-    case 'finalized':
-      return 'Finalisiert'
-    default:
-      return status
-  }
-}
-
-function getDocumentTypeLabel(
-  documentType: string,
-): string {
-  switch (documentType) {
-    case 'invoice':
-      return 'Rechnung'
-    case 'cancellation':
-      return 'Storno'
-    default:
-      return documentType
-  }
-}
 
 function InvoicesPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
   const isAdmin = user?.is_admin === true
@@ -127,7 +91,7 @@ function InvoicesPage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Rechnungen konnten nicht geladen werden.',
+            : t('invoices.loadFailed'),
         )
       } finally {
         setIsLoading(false)
@@ -146,15 +110,15 @@ function InvoicesPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Abrechnung
+            {t('invoices.eyebrow')}
           </p>
 
-          <h1>Rechnungen</h1>
+          <h1>{t('invoices.title')}</h1>
 
           <p className="muted">
             {isAdmin
-              ? 'Entwürfe, finalisierte Rechnungen und Stornobelege.'
-              : 'Ihre finalisierten Rechnungen und Stornobelege.'}
+              ? t('invoices.intro.admin')
+              : t('invoices.intro.user')}
           </p>
         </div>
         {isAdmin && (
@@ -162,7 +126,7 @@ function InvoicesPage() {
             className="button button-primary"
             to="/invoices/new"
           >
-            Entwurf erstellen
+            {t('invoices.createDraft')}
           </Link>
         )}
       </header>
@@ -170,7 +134,7 @@ function InvoicesPage() {
       {isLoading && (
         <section className="card">
           <p className="muted">
-            Rechnungen werden geladen …
+            {t('invoices.loading')}
           </p>
         </section>
       )}
@@ -188,12 +152,12 @@ function InvoicesPage() {
         !errorMessage &&
         invoices.length === 0 && (
           <section className="card">
-            <h2>Keine Rechnungen vorhanden</h2>
+            <h2>{t('invoices.empty.title')}</h2>
 
             <p className="muted">
               {isAdmin
-                ? 'Es wurden noch keine Rechnungsentwürfe erstellt.'
-                : 'Für Sie liegen noch keine finalisierten Rechnungen vor.'}
+                ? t('invoices.empty.admin')
+                : t('invoices.empty.user')}
             </p>
           </section>
         )}
@@ -206,14 +170,14 @@ function InvoicesPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Nummer</th>
-                    <th>Art</th>
-                    <th>Empfänger</th>
-                    <th>Status</th>
-                    <th>Rechnungsdatum</th>
-                    <th>Fällig</th>
+                    <th>{t('invoices.col.number')}</th>
+                    <th>{t('invoices.col.type')}</th>
+                    <th>{t('invoices.col.recipient')}</th>
+                    <th>{t('invoices.col.status')}</th>
+                    <th>{t('invoices.col.issueDate')}</th>
+                    <th>{t('invoices.col.due')}</th>
                     <th className="table-number">
-                      Gesamt
+                      {t('invoices.col.total')}
                     </th>
                   </tr>
                 </thead>
@@ -227,13 +191,17 @@ function InvoicesPage() {
                           to={`/invoices/${invoice.id}`}
                         >
                           {invoice.invoice_number ??
-                              `Entwurf #${invoice.id}`}
+                            t('common.draftNumber', {
+                              id: invoice.id,
+                            })}
                         </Link>
                       </td>
 
                       <td>
-                        {getDocumentTypeLabel(
+                        {documentTypeLabel(
+                          t,
                           invoice.document_type,
+                          true,
                         )}
                       </td>
 
@@ -250,7 +218,8 @@ function InvoicesPage() {
                               : 'status-badge status-draft'
                           }
                         >
-                          {getStatusLabel(
+                          {invoiceStatusLabel(
+                            t,
                             invoice.status,
                           )}
                         </span>

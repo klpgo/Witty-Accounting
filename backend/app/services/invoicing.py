@@ -877,7 +877,13 @@ def create_invoice_draft(
         due_date=None,
         service_period_start=service_period_start,
         service_period_end=service_period_end,
-        currency="EUR",
+        # Währung und Gebietsschema der Abrechnung festhalten
+        currency=(
+            getattr(global_settings, "currency", None) or "EUR"
+        ),
+        locale=(
+            getattr(global_settings, "locale", None) or "de-DE"
+        ),
         total_net=Decimal("0.00"),
         vat_amount=Decimal("0.00"),
         total_gross=Decimal("0.00"),

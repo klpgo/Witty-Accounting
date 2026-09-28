@@ -1,3 +1,5 @@
+import { useTranslation } from '../i18n/useTranslation'
+
 interface PasswordFieldsProps {
   newPassword: string
   confirmPassword: string
@@ -15,10 +17,11 @@ function PasswordFields({
   onNewPasswordChange,
   onConfirmPasswordChange,
 }: PasswordFieldsProps) {
+  const { t } = useTranslation()
   return (
     <div className="form-grid">
       <label className="form-field">
-        Neues Passwort
+        {t('passwordFields.new')}
         <input
           type="password"
           value={newPassword}
@@ -35,7 +38,7 @@ function PasswordFields({
       </label>
 
       <label className="form-field">
-        Passwort wiederholen
+        {t('passwordFields.confirm')}
         <input
           type="password"
           value={confirmPassword}

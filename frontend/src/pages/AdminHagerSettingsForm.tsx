@@ -16,6 +16,10 @@ import {
   updateHagerSettings,
 } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
+import {
+  getDisplayLocale,
+  getDisplayTimeZone,
+} from '../utils/dateFormat'
 import { useAuth } from '../auth/useAuth'
 
 
@@ -49,8 +53,8 @@ function formatTimestamp(value: string | null): string | null {
   }
 
   return (
-    date.toLocaleString('de-DE', {
-      timeZone: 'Europe/Berlin',
+    date.toLocaleString(getDisplayLocale(), {
+      timeZone: getDisplayTimeZone(),
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -487,7 +491,7 @@ function AdminHagerSettingsForm() {
 
           <p className="muted">
             Ruft neue Ladevorgänge regelmäßig aus der Hager Cloud ab,
-            alle N Stunden ab der Startzeit (deutsche Ortszeit),
+            alle N Stunden ab der Startzeit (Ortszeit der Instanz),
             mindestens einmal täglich. Nach dem Aktivieren erfolgt
             der erste Abruf innerhalb einer Minute.
           </p>

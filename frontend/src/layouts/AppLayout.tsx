@@ -6,15 +6,17 @@ import {
 
 import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
+import { useTranslation } from '../i18n/useTranslation'
 
 function AppLayout() {
+  const { t } = useTranslation()
   const { tenantName } = useAppSettings()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
 
   const displayName = user
     ? `${user.first_name} ${user.last_name}`.trim()
-    : 'Administrator'
+    : t('layout.fallbackName')
 
   const brandMark =
     tenantName
@@ -42,7 +44,7 @@ function AppLayout() {
             to="/"
             end
             className="app-brand"
-            aria-label="Zum Dashboard"
+            aria-label={t('layout.brandAria')}
           >
             <span className="app-brand-mark">
               {brandMark}
@@ -52,14 +54,14 @@ function AppLayout() {
               <strong>{tenantName}</strong>
 
               <span>
-                Verwaltungsoberfläche
+                {t('layout.subtitle')}
               </span>
             </div>
           </NavLink>
 
           <nav
             className="app-nav"
-            aria-label="Hauptnavigation"
+            aria-label={t('layout.navAria')}
           >
             <NavLink
               to="/charging-sessions"
@@ -69,7 +71,7 @@ function AppLayout() {
                   : 'nav-link'
               }
             >
-              Ladevorgänge
+              {t('layout.nav.chargingSessions')}
             </NavLink>
             <NavLink
               to="/invoices"
@@ -79,7 +81,7 @@ function AppLayout() {
                   : 'nav-link'
               }
             >
-              Rechnungen
+              {t('layout.nav.invoices')}
             </NavLink>
 
             {user?.is_admin && (
@@ -92,7 +94,7 @@ function AppLayout() {
                     : 'nav-link'
                 }
               >
-                Benutzer
+                {t('layout.nav.users')}
               </NavLink>
               <NavLink
                 to="/admin/rfid-cards"
@@ -102,7 +104,7 @@ function AppLayout() {
                     : 'nav-link'
                 }
               >
-                Ladekarten
+                {t('layout.nav.rfidCards')}
               </NavLink>
               <NavLink
                 to="/admin/import"
@@ -112,7 +114,7 @@ function AppLayout() {
                     : 'nav-link'
                 }
               >
-                Datenimport
+                {t('layout.nav.import')}
               </NavLink>
               <NavLink
                 to="/admin/settings"
@@ -122,7 +124,7 @@ function AppLayout() {
                     : 'nav-link'
                 }
               >
-                Einstellungen
+                {t('layout.nav.settings')}
               </NavLink>
               </>
             )}
@@ -136,7 +138,7 @@ function AppLayout() {
                   ? 'user-menu-trigger user-menu-trigger-active'
                   : 'user-menu-trigger'
               }
-              aria-label="Meine Daten öffnen"
+              aria-label={t('layout.profileAria')}
             >
               <span className="user-details">
                 <strong>{displayName}</strong>
@@ -150,7 +152,7 @@ function AppLayout() {
               type="button"
               onClick={handleSignOut}
             >
-              Abmelden
+              {t('layout.signOut')}
             </button>
           </div>
         </div>

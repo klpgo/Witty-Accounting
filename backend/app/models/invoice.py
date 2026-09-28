@@ -147,6 +147,13 @@ class Invoice(Base):
         server_default="EUR",
     )
 
+    # Gebietsschema beim Anlegen der Rechnung (Format im PDF); ältere
+    # Rechnungen ohne Angabe erscheinen in de-DE
+    locale: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True,
+    )
+
     total_net: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,

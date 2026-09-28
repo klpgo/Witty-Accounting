@@ -978,3 +978,89 @@ def test_admin_user_routes_return_not_found(
             "gefunden."
         ),
     }
+
+
+# --------------------------------------------------------------------------
+# Persönliche Sprache
+# --------------------------------------------------------------------------
+def test_own_language_is_stored_and_reset_to_default(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="sprache@example.com",
+        first_name="Max",
+        last_name="Mustermann",
+    )
+
+    assert client.get(
+        "/api/users/me",
+        headers=authorization_header(user),
+    ).json()["language"] is None
+
+    response = client.patch(
+        "/api/users/me",
+        headers=authorization_header(user),
+        json={"language": "en"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] == "en"
+    assert client.get(
+        "/api/auth/me",
+        headers=authorization_header(user),
+    ).json()["language"] == "en"
+
+    # null = wieder Standardsprache des Mandanten
+    response = client.patch(
+        "/api/users/me",
+        headers=authorization_header(user),
+        json={"language": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] is None
+
+
+def test_unsupported_language_is_rejected(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="sprache2@example.com",
+        first_name="Max",
+        last_name="Mustermann",
+    )
+
+    response = client.patch(
+        "/api/users/me",
+        headers=authorization_header(user),
+        json={"language": "fr"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_other_profile_fields_keep_language(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="sprache3@example.com",
+        first_name="Max",
+        last_name="Mustermann",
+    )
+    user.language = "en"
+    database_session.commit()
+
+    response = client.patch(
+        "/api/users/me",
+        headers=authorization_header(user),
+        json={"phone": "+49 1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] == "en"

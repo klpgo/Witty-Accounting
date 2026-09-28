@@ -25,6 +25,7 @@ import {
 } from '../api/users'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { getDisplayLocale } from '../utils/dateFormat'
 
 // Nach Beschreibung ("Karte 2" vor "Karte 10"), Karten ohne
 // Beschreibung zuletzt, bei Gleichstand nach RFID-Nummer
@@ -74,7 +75,7 @@ function formatDateTime(value: string): string {
   }
 
   return new Intl.DateTimeFormat(
-    'de-DE',
+    getDisplayLocale(),
     {
       dateStyle: 'medium',
       timeStyle: 'short',

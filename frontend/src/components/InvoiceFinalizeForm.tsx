@@ -12,6 +12,7 @@ import {
 } from '../api/invoices'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { useTranslation } from '../i18n/useTranslation'
 
 interface InvoiceFinalizeFormProps {
   invoiceId: number
@@ -53,6 +54,7 @@ function InvoiceFinalizeForm({
   invoiceId,
   onFinalized,
 }: InvoiceFinalizeFormProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -77,7 +79,7 @@ function InvoiceFinalizeForm({
 
     if (dueDate < issueDate) {
       setErrorMessage(
-        'Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen.',
+        t('invoiceFinalize.dueBeforeIssue'),
       )
       return
     }
@@ -126,7 +128,7 @@ function InvoiceFinalizeForm({
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Rechnung konnte nicht finalisiert werden.',
+          : t('invoiceFinalize.failed'),
       )
 
       /*
@@ -159,15 +161,13 @@ function InvoiceFinalizeForm({
   return (
     <section className="card detail-section">
       <p className="eyebrow">
-        Entwurf abschließen
+        {t('invoiceFinalize.eyebrow')}
       </p>
 
-      <h2>Rechnung finalisieren</h2>
+      <h2>{t('invoiceFinalize.title')}</h2>
 
       <p className="muted finalize-intro">
-        Nach der Finalisierung sind die
-        Rechnungsdaten unveränderlich. Das PDF
-        wird automatisch erstellt und archiviert.
+        {t('invoiceFinalize.intro')}
       </p>
 
       <form
@@ -176,7 +176,7 @@ function InvoiceFinalizeForm({
       >
         <div className="form-grid">
           <label className="form-field">
-            <span>Rechnungsdatum</span>
+            <span>{t('invoiceFinalize.issueDate')}</span>
 
             <input
               type="date"
@@ -192,7 +192,7 @@ function InvoiceFinalizeForm({
           </label>
 
           <label className="form-field">
-            <span>Fälligkeitsdatum</span>
+            <span>{t('invoiceFinalize.dueDate')}</span>
 
             <input
               type="date"
@@ -225,8 +225,8 @@ function InvoiceFinalizeForm({
             disabled={isSubmitting}
           >
             {isSubmitting
-              ? 'Rechnung wird finalisiert …'
-              : 'Rechnung verbindlich finalisieren'}
+              ? t('invoiceFinalize.submitting')
+              : t('invoiceFinalize.submit')}
           </button>
         </div>
       </form>

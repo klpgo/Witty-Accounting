@@ -1,7 +1,7 @@
 """
 Zeitplan für den automatischen Hager-Abruf.
 
-Regel: "alle N Stunden, beginnend um HH:MM" (Ortszeit Europe/Berlin),
+Regel: "alle N Stunden, beginnend um HH:MM" (Ortszeit der Installation),
 N zwischen 1 und 24.
 
 Jeder Tag beginnt beim Startzeitpunkt neu. Von dort aus liegt alle N
@@ -19,10 +19,9 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, date, datetime, time, timedelta
-from zoneinfo import ZoneInfo
 
 
-LOCAL_TIMEZONE = ZoneInfo("Europe/Berlin")
+from app.utils.local_time import LOCAL_TIMEZONE
 MIN_INTERVAL_HOURS = 1
 MAX_INTERVAL_HOURS = 24
 _START_TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")

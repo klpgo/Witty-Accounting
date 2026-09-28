@@ -223,3 +223,20 @@ def test_import_hager_while_another_import_runs_returns_409(
 
     assert response.status_code == 409
     assert "anderer Import" in response.json()["detail"]
+
+
+def test_import_hager_with_changed_timezone_returns_409(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.data_timezone import DataTimezoneMismatchError
+
+    def mismatch(db: Any, date_from=None, date_to=None, fetch_all=False) -> None:
+        raise DataTimezoneMismatchError("Die Daten liegen in Europe/Berlin.")
+
+    monkeypatch.setattr("app.api.routes.imports.import_from_hager", mismatch)
+
+    response = client.post("/api/imports/hager")
+
+    assert response.status_code == 409
+    assert "Europe/Berlin" in response.json()["detail"]

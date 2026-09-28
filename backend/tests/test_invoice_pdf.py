@@ -411,3 +411,52 @@ def test_invoice_pdf_contains_inclusive_service_period() -> None:
     # Leistungszeitraum Juni: 01.06. bis 30.06., nicht bis 01.07.
     assert "30.06.2026" in extracted_text
     assert "– 01.07.2026" not in extracted_text
+
+
+# --------------------------------------------------------------------------
+# Gebietsschema und Währung
+# --------------------------------------------------------------------------
+def extract_text(invoice, **kwargs) -> str:
+    return PdfReader(BytesIO(build_invoice_pdf(invoice, **kwargs))).pages[0].extract_text() or ""
+
+
+def test_invoice_without_locale_keeps_german_format() -> None:
+    invoice = create_finalized_invoice()
+    invoice.locale = None
+
+    text = extract_text(invoice)
+
+    assert "2,62 EUR" in text
+    assert "01.06.2026 – 30.06.2026" in text
+
+
+def test_invoice_in_english_format() -> None:
+    invoice = create_finalized_invoice()
+    invoice.locale = "en-GB"
+
+    text = extract_text(invoice)
+
+    assert "EUR 2.62" in text
+    assert "01/06/2026 – 30/06/2026" in text
+
+
+def test_invoice_in_swiss_francs_has_no_girocode() -> None:
+    invoice = create_finalized_invoice()
+    invoice.locale = "de-CH"
+    invoice.currency = "CHF"
+
+    text = extract_text(invoice, girocode_enabled=True)
+
+    assert "CHF 2.62" in text
+    assert "Girocode" not in text
+
+
+def test_pdf_locale_does_not_leak_into_next_pdf() -> None:
+    english = create_finalized_invoice()
+    english.locale = "en-US"
+    extract_text(english)
+
+    german = create_finalized_invoice()
+    german.locale = None
+
+    assert "2,62 EUR" in extract_text(german)

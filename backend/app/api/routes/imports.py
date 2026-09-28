@@ -26,6 +26,7 @@ from app.services.hager_sync import (
     HagerConnectionError,
     import_from_hager,
 )
+from app.services.data_timezone import DataTimezoneMismatchError
 from app.services.import_lock import ImportBusyError, import_lock
 from app.services.smtp_secret import SmtpSecretError
 
@@ -136,7 +137,7 @@ def upload_xlsx(
     except HTTPException:
         raise
 
-    except ImportBusyError as exc:
+    except (ImportBusyError, DataTimezoneMismatchError) as exc:
         raise HTTPException(
             status_code=409,
             detail=str(exc),
@@ -271,7 +272,7 @@ def upload_json(
     except HTTPException:
         raise
 
-    except ImportBusyError as exc:
+    except (ImportBusyError, DataTimezoneMismatchError) as exc:
         raise HTTPException(
             status_code=409,
             detail=str(exc),
@@ -326,7 +327,7 @@ def import_hager(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
-    except ImportBusyError as exc:
+    except (ImportBusyError, DataTimezoneMismatchError) as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),

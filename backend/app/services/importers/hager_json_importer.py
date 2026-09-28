@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.models.charging_session import ChargingSession
 from app.services.importers.xlsx_importer import create_import_hash
+from app.services.data_timezone import ensure_data_timezone
 from app.services.importers.import_filters import (
     ExclusionCounter,
     ImportFilters,
@@ -400,6 +401,7 @@ def import_json_to_db(
 
     Rückgabe im selben Format wie import_xlsx_to_db.
     """
+    ensure_data_timezone(db)
     parsed_sessions, running_sessions = import_json(path)
 
     return import_parsed_sessions_to_db(

@@ -21,6 +21,7 @@ from app.models.global_settings import GlobalSettings
 from app.services import hager_client
 from app.services.hager_secret import decrypt_hager_password
 from app.services.hager_token_cache import token_cache
+from app.services.data_timezone import ensure_data_timezone
 from app.services.import_lock import import_lock
 from app.models.charging_session import ChargingSession
 from app.services.importers.hager_json_importer import (
@@ -334,6 +335,7 @@ def import_from_hager(
     letzten erfolgreichen Abrufs fort.
     """
     with import_lock(db):
+        ensure_data_timezone(db)
         return _import_from_hager(db, date_from, date_to, fetch_all)
 
 

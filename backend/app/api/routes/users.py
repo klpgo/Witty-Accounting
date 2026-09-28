@@ -214,6 +214,9 @@ def update_own_profile(
     if "phone" in payload.model_fields_set:
         current_user.phone = payload.phone
 
+    if "language" in payload.model_fields_set:
+        current_user.language = payload.language
+
     if (
         "invoice_delivery_email"
         in payload.model_fields_set
@@ -364,6 +367,7 @@ def create_new_user(
         last_name=payload.last_name,
         address=payload.address,
         phone=payload.phone,
+        language=payload.language,
         invoice_delivery_email=(
             payload.invoice_delivery_email
         ),
@@ -495,6 +499,9 @@ def update_user(
 
     if "phone" in payload.model_fields_set:
         user.phone = payload.phone
+
+    if "language" in payload.model_fields_set:
+        user.language = payload.language
 
     if (
         "invoice_delivery_email"

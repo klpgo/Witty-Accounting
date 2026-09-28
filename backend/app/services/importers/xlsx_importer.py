@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.charging_session import ChargingSession
+from app.services.data_timezone import ensure_data_timezone
 from app.services.importers.import_filters import (
     ExclusionCounter,
     exclusion_reason,
@@ -346,6 +347,7 @@ def import_xlsx_to_db(
     backfilled = 0
     issues = RFIDIssueCollector()
     imported_hashes: list[str] = []
+    ensure_data_timezone(db)
     filters = load_import_filters(db)
     excluded = ExclusionCounter()
 

@@ -8,6 +8,7 @@ from fastapi import (
     HTTPException,
     status,
 )
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from typing import Annotated
 
@@ -18,6 +19,7 @@ from app.api.dependencies import (
 from app.auth import require_admin
 from app.config import settings as app_settings
 from app.models.global_settings import GlobalSettings
+from app.models.invoice import Invoice
 from app.models.user import User
 from app.tenancy.context import TenantContext
 
@@ -327,11 +329,31 @@ def read_public_settings(
             return PublicSettingsResponse(
                 app_name=app_name,
                 tenant_name=tenant.name,
+                timezone=app_settings.timezone,
+                locale=global_settings.locale,
+                currency=global_settings.currency,
+                default_language=global_settings.default_language,
             )
 
     return PublicSettingsResponse(
         app_name=app_settings.app_name,
         tenant_name=tenant.name,
+        timezone=app_settings.timezone,
+        locale=(
+            global_settings.locale
+            if global_settings is not None
+            else "de-DE"
+        ),
+        currency=(
+            global_settings.currency
+            if global_settings is not None
+            else "EUR"
+        ),
+        default_language=(
+            global_settings.default_language
+            if global_settings is not None
+            else "de"
+        ),
     )
 
 
@@ -952,6 +974,35 @@ def update_global_settings(
     updates = data.model_dump(
         exclude_unset=True,
     )
+
+    new_currency = updates.get("currency", global_settings.currency)
+
+    # Die Währung ist nach der ersten Rechnung fest: gespeicherte Preise
+    # und Beträge stünden sonst plötzlich in einer anderen Währung.
+    if (
+        new_currency != global_settings.currency
+        and db.scalar(select(Invoice.id).limit(1)) is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Die Währung kann nicht mehr geändert werden, "
+                "da bereits Rechnungen existieren."
+            ),
+        )
+
+    # Der Girocode (EPC-QR) ist nur für Euro definiert
+    if new_currency != "EUR" and updates.get(
+        "invoice_girocode_enabled",
+        global_settings.invoice_girocode_enabled,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Der Girocode ist nur mit der Währung EUR möglich. "
+                "Bitte den Girocode deaktivieren oder EUR wählen."
+            ),
+        )
 
     if updates.get(
         "invoice_girocode_enabled",

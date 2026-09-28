@@ -5,6 +5,10 @@ const API_BASE_URL =
 export interface PublicSettings {
   app_name: string
   tenant_name: string
+  timezone?: string
+  locale?: string
+  currency?: string
+  default_language?: string
 }
 
 export interface GlobalSettings {
@@ -34,6 +38,9 @@ export interface GlobalSettings {
   password_require_special: boolean
   frontend_base_url: string
   password_reset_token_expire_minutes: number
+  locale: string
+  currency: string
+  default_language: string
 }
 
 export interface GlobalSettingsUpdate {
@@ -63,6 +70,9 @@ export interface GlobalSettingsUpdate {
   password_require_special?: boolean
   frontend_base_url?: string
   password_reset_token_expire_minutes?: number
+  locale?: string
+  currency?: string
+  default_language?: string
 }
 
 export interface SmtpSettings {

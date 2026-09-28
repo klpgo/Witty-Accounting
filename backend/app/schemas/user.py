@@ -1,3 +1,4 @@
+from typing import Literal
 from datetime import datetime
 
 from pydantic import (
@@ -6,6 +7,9 @@ from pydantic import (
     Field,
     field_validator,
 )
+
+
+UserLanguage = Literal["de", "en"]
 
 
 class UserResponse(BaseModel):
@@ -23,6 +27,7 @@ class UserResponse(BaseModel):
     invoice_delivery_post: bool
     active: bool
     is_admin: bool
+    language: str | None = None
     last_login: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -54,6 +59,8 @@ class UserProfileUpdate(BaseModel):
     )
     invoice_delivery_email: bool | None = None
     invoice_delivery_post: bool | None = None
+    # null = Standardsprache des Mandanten
+    language: UserLanguage | None = None
 
     @field_validator(
         "first_name",

@@ -17,6 +17,7 @@ import {
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
+import { useTranslation } from '../i18n/useTranslation'
 import AdminSmtpSettingsForm from './AdminSmtpSettingsForm'
 import AdminPasswordPolicyForm from './AdminPasswordPolicyForm'
 import AdminAccessSettingsForm from './AdminAccessSettingsForm'
@@ -50,6 +51,7 @@ function AdminSettingsPage() {
   const navigate = useNavigate()
   const { signOut } = useAuth()
   const { refreshSettings } = useAppSettings()
+  const { t } = useTranslation()
 
   const [appName, setAppName] = useState('')
   const [
@@ -68,6 +70,10 @@ function AdminSettingsPage() {
     billingStartDate,
     setBillingStartDate,
   ] = useState('')
+  const [locale, setLocale] = useState('de-DE')
+  const [defaultLanguageSetting, setDefaultLanguageSetting] =
+    useState('de')
+  const [currency, setCurrency] = useState('EUR')
   const [
     invoicePaymentTermDays,
     setInvoicePaymentTermDays,
@@ -265,6 +271,9 @@ function AdminSettingsPage() {
         setBillingStartDate(
           loadedSettings.billing_start_date ?? '',
         )
+        setLocale(loadedSettings.locale)
+        setDefaultLanguageSetting(loadedSettings.default_language)
+        setCurrency(loadedSettings.currency)
         setInvoicePaymentTermDays(
           String(
             loadedSettings
@@ -559,6 +568,9 @@ function AdminSettingsPage() {
               normalizedPostalDeliveryFee,
             billing_start_date:
               billingStartDate || null,
+            locale,
+            currency,
+            default_language: defaultLanguageSetting,
             invoice_payment_term_days:
               paymentTermDays,
             invoice_issuer_name:
@@ -600,6 +612,9 @@ function AdminSettingsPage() {
       setBillingStartDate(
         updatedSettings.billing_start_date ?? '',
       )
+      setLocale(updatedSettings.locale)
+      setDefaultLanguageSetting(updatedSettings.default_language)
+      setCurrency(updatedSettings.currency)
       setInvoicePaymentTermDays(
         String(
           updatedSettings
@@ -876,6 +891,24 @@ function AdminSettingsPage() {
               </small>
             </label>
 
+            <label className="form-field">
+              <span>{t('settings.defaultLanguage')}</span>
+
+              <select
+                value={defaultLanguageSetting}
+                onChange={(event) => {
+                  setDefaultLanguageSetting(event.target.value)
+                }}
+              >
+                <option value="de">{t('language.de')}</option>
+                <option value="en">{t('language.en')}</option>
+              </select>
+
+              <small className="muted">
+                {t('settings.defaultLanguage.hint')}
+              </small>
+            </label>
+
             <label className="form-field settings-name-field">
               <span>Girocode auf Rechnungen</span>
 
@@ -1068,6 +1101,49 @@ function AdminSettingsPage() {
           <h2>Abrechnung</h2>
 
           <div className="form-grid settings-billing-grid">
+            <label className="form-field">
+              <span>Zahlen- und Datumsformat</span>
+
+              <select
+                value={locale}
+                onChange={(event) => {
+                  setLocale(event.target.value)
+                }}
+              >
+                <option value="de-DE">Deutsch (Deutschland) – 1.234,56 · 31.12.2026</option>
+                <option value="de-AT">Deutsch (Österreich) – 1 234,56 · 31.12.2026</option>
+                <option value="de-CH">Deutsch (Schweiz) – 1’234.56 · 31.12.2026</option>
+                <option value="en-GB">English (UK) – 1,234.56 · 31/12/2026</option>
+                <option value="en-US">English (US) – 1,234.56 · 12/31/2026</option>
+              </select>
+
+              <small className="muted">
+                Gilt für die Anzeige und für neue Rechnungen.
+                Bereits erstellte Rechnungen behalten ihr Format.
+              </small>
+            </label>
+
+            <label className="form-field">
+              <span>Währung</span>
+
+              <select
+                value={currency}
+                onChange={(event) => {
+                  setCurrency(event.target.value)
+                }}
+              >
+                <option value="EUR">EUR – Euro</option>
+                <option value="CHF">CHF – Schweizer Franken</option>
+                <option value="GBP">GBP – Britisches Pfund</option>
+                <option value="USD">USD – US-Dollar</option>
+              </select>
+
+              <small className="muted">
+                Nach der ersten Rechnung nicht mehr änderbar.
+                Der Girocode ist nur mit EUR möglich.
+              </small>
+            </label>
+
             <label className="form-field">
               <span>Abrechnungs-Startdatum</span>
 

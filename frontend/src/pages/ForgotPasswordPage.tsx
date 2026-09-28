@@ -6,9 +6,11 @@ import { Link } from 'react-router-dom'
 
 import { requestPasswordReset } from '../api/auth'
 import { useAppSettings } from '../settings/useAppSettings'
+import { useTranslation } from '../i18n/useTranslation'
 
 
 function ForgotPasswordPage() {
+  const { t } = useTranslation()
   const { tenantName } = useAppSettings()
   const [email, setEmail] = useState('')
   const [isSubmitting, setIsSubmitting] =
@@ -35,7 +37,7 @@ function ForgotPasswordPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Anfrage konnte nicht verarbeitet werden.',
+          : t('forgotPassword.failed'),
       )
     } finally {
       setIsSubmitting(false)
@@ -47,12 +49,10 @@ function ForgotPasswordPage() {
       <section className="card login-card">
         <p className="eyebrow">{tenantName}</p>
 
-        <h1>Passwort vergessen</h1>
+        <h1>{t('forgotPassword.title')}</h1>
 
         <p className="login-intro">
-          Gib deine E-Mail-Adresse ein. Wir senden dir
-          einen einmaligen Link zum Festlegen eines neuen
-          Passworts.
+          {t('forgotPassword.intro')}
         </p>
 
         <form
@@ -60,7 +60,7 @@ function ForgotPasswordPage() {
           onSubmit={handleSubmit}
         >
           <label className="form-field">
-            <span>E-Mail-Adresse</span>
+            <span>{t('common.email')}</span>
 
             <input
               type="email"
@@ -92,13 +92,13 @@ function ForgotPasswordPage() {
             disabled={isSubmitting}
           >
             {isSubmitting
-              ? 'E-Mail wird angefordert …'
-              : 'Reset-Link anfordern'}
+              ? t('forgotPassword.submitting')
+              : t('forgotPassword.submit')}
           </button>
 
           <p className="login-link-row">
             <Link to="/login">
-              Zurück zur Anmeldung
+              {t('common.backToLogin')}
             </Link>
           </p>
         </form>

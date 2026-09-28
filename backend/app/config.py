@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from pydantic import SecretStr
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +49,33 @@ class Settings(BaseSettings):
     tenant_provision_db_allowed_host: str = "%"
 
     log_level: str = "INFO"
+
+    # Zeitzone der gesamten Instanz aus TZ (IANA-Name, z. B. Europe/Berlin),
+    # festgelegt beim Aufsetzen des Containers. Ladevorgänge,
+    # Leistungszeiträume und Tarifbeginne werden als Ortszeit dieser Zone
+    # gespeichert – sie darf nach dem ersten Import nicht mehr geändert werden.
+    timezone: str = Field(
+        default="Europe/Berlin",
+        validation_alias="TZ",
+    )
+
+    @field_validator("timezone", mode="before")
+    @classmethod
+    def validate_timezone(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return "Europe/Berlin"
+
+        name = str(value).strip().lstrip(":")
+
+        try:
+            ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(
+                f"Ungültige Zeitzone '{value}'. Erwartet wird ein "
+                "IANA-Name wie Europe/Berlin (Umgebungsvariable TZ)."
+            ) from exc
+
+        return name
 
     jwt_secret_key: SecretStr
 

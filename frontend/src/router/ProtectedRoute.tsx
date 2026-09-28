@@ -6,8 +6,10 @@ import {
 
 import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
+import { useTranslation } from '../i18n/useTranslation'
 
 function ProtectedRoute() {
+  const { t } = useTranslation()
   const { tenantName } = useAppSettings()
   const location = useLocation()
   const { status, user } = useAuth()
@@ -20,10 +22,10 @@ function ProtectedRoute() {
             {tenantName}
           </p>
 
-          <h1>Sitzung wird geprüft</h1>
+          <h1>{t('common.sessionCheck.title')}</h1>
 
           <p className="muted">
-            Bitte einen Augenblick …
+            {t('common.sessionCheck.text')}
           </p>
         </section>
       </main>

@@ -326,6 +326,7 @@ def test_me_returns_authenticated_user(
         "last_name": admin.last_name,
         "is_admin": True,
         "active": True,
+        "language": None,
     }
 
 

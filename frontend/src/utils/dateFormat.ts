@@ -9,28 +9,84 @@
  *   "2026-09-25T08:27:00" – muss als UTC gelesen werden
  */
 
-const DATE_FORMAT = new Intl.DateTimeFormat('de-DE', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-})
+// Gebietsschema und Zeitzone der Instanz, gesetzt aus den öffentlichen
+// Einstellungen beim Start der Anwendung (vor dem ersten Rendern)
+let displayLocale = 'de-DE'
+let displayTimeZone = 'Europe/Berlin'
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat('de-DE', {
+const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
+}
+
+const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  ...DATE_OPTIONS,
+  hour: '2-digit',
+  minute: '2-digit',
+}
+
+let dateFormat = new Intl.DateTimeFormat(displayLocale, DATE_OPTIONS)
+let dateTimeFormat = new Intl.DateTimeFormat(displayLocale, DATE_TIME_OPTIONS)
+let timeFormat = new Intl.DateTimeFormat(displayLocale, {
   hour: '2-digit',
   minute: '2-digit',
 })
-
-const DATE_TIME_FORMAT_BERLIN = new Intl.DateTimeFormat('de-DE', {
+let shortDateTimeFormat = new Intl.DateTimeFormat(displayLocale, {
   day: '2-digit',
   month: '2-digit',
-  year: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
-  timeZone: 'Europe/Berlin',
 })
+let utcDateTimeFormat = new Intl.DateTimeFormat(displayLocale, {
+  ...DATE_TIME_OPTIONS,
+  timeZone: displayTimeZone,
+})
+
+function rebuildFormats(locale: string, timeZone: string): void {
+  dateFormat = new Intl.DateTimeFormat(locale, DATE_OPTIONS)
+  dateTimeFormat = new Intl.DateTimeFormat(locale, DATE_TIME_OPTIONS)
+  timeFormat = new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  shortDateTimeFormat = new Intl.DateTimeFormat(locale, {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  utcDateTimeFormat = new Intl.DateTimeFormat(locale, {
+    ...DATE_TIME_OPTIONS,
+    timeZone,
+  })
+  displayLocale = locale
+  displayTimeZone = timeZone
+}
+
+export function setDisplayLocale(locale: string): void {
+  try {
+    rebuildFormats(locale, displayTimeZone)
+  } catch {
+    // unbekanntes Gebietsschema im Browser: bisheriges beibehalten
+  }
+}
+
+export function getDisplayLocale(): string {
+  return displayLocale
+}
+
+export function setDisplayTimeZone(timeZone: string): void {
+  try {
+    rebuildFormats(displayLocale, timeZone)
+  } catch {
+    // unbekannte Zone im Browser: bisherige beibehalten
+  }
+}
+
+export function getDisplayTimeZone(): string {
+  return displayTimeZone
+}
 
 const HAS_TIME_ZONE = /(Z|[+-]\d{2}:?\d{2})$/
 
@@ -47,7 +103,7 @@ export function formatDate(value: string | null): string {
 
   const date = parseLocal(value)
 
-  return Number.isNaN(date.getTime()) ? value : DATE_FORMAT.format(date)
+  return Number.isNaN(date.getTime()) ? value : dateFormat.format(date)
 }
 
 /** Ortszeit ohne Zeitzone: 01.07.2026, 07:45 */
@@ -60,10 +116,10 @@ export function formatLocalDateTime(value: string | null): string {
 
   return Number.isNaN(date.getTime())
     ? value
-    : DATE_TIME_FORMAT.format(date)
+    : dateTimeFormat.format(date)
 }
 
-/** UTC-Zeitstempel der API in deutscher Zeit: 25.09.2026, 10:27 */
+/** UTC-Zeitstempel der API in der Zeitzone der Instanz: 25.09.2026, 10:27 */
 export function formatUtcDateTime(value: string | null): string {
   if (value === null) {
     return '–'
@@ -73,7 +129,7 @@ export function formatUtcDateTime(value: string | null): string {
 
   return Number.isNaN(date.getTime())
     ? value
-    : DATE_TIME_FORMAT_BERLIN.format(date)
+    : utcDateTimeFormat.format(date)
 }
 
 /**
@@ -110,5 +166,20 @@ export function formatServicePeriod(
     lastDay.setDate(lastDay.getDate() - 1)
   }
 
-  return `${DATE_FORMAT.format(startDate)} – ${DATE_FORMAT.format(lastDay)}`
+  return `${dateFormat.format(startDate)} – ${dateFormat.format(lastDay)}`
+}
+
+/** Uhrzeit: 14:23 */
+export function formatTime(date: Date): string {
+  return timeFormat.format(date)
+}
+
+/** Tag, Monat und Uhrzeit ohne Jahr: 13.08., 06:10 */
+export function formatShortDateTime(date: Date): string {
+  return shortDateTimeFormat.format(date)
+}
+
+/** Kalenderdatum aus einem Date-Objekt: 12.08.2026 */
+export function formatDateValue(date: Date): string {
+  return dateFormat.format(date)
 }

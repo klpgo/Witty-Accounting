@@ -24,6 +24,7 @@ import {
   getGlobalSettings,
   SettingsApiError,
 } from '../api/settings'
+import { getDisplayLocale } from '../utils/dateFormat'
 
 function sortUsers(users: User[]): User[] {
   return [...users].sort((first, second) => {
@@ -64,7 +65,7 @@ function formatLastLogin(
     return value
   }
 
-  return new Intl.DateTimeFormat('de-DE', {
+  return new Intl.DateTimeFormat(getDisplayLocale(), {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date)
@@ -786,7 +787,7 @@ function AdminUsersPage() {
                       }
                     />
 
-                    Download aus dem Portal
+                    Manueller Download aus dem Portal
                     nach Benachrichtigung per E-Mail
                   </label>
                   </div>

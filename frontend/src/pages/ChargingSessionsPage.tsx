@@ -17,25 +17,17 @@ import {
 } from '../api/chargingSessions'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
-
-
-const DATE_FORMAT = new Intl.DateTimeFormat('de-DE', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-})
-
-const TIME_FORMAT = new Intl.DateTimeFormat('de-DE', {
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
-const SHORT_DATE_TIME_FORMAT = new Intl.DateTimeFormat('de-DE', {
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
+import {
+  formatDateValue,
+  formatShortDateTime,
+  formatTime,
+} from '../utils/dateFormat'
+import {
+  formatCurrency,
+  formatNumber,
+} from '../utils/numberFormat'
+import type { MessageKey } from '../i18n/de'
+import { useTranslation } from '../i18n/useTranslation'
 
 
 // Zeitraum in zwei Zeilen: Datum, darunter die Uhrzeiten.
@@ -58,31 +50,16 @@ function formatPeriod(
     startDate.toDateString() === endDate.toDateString()
 
   return {
-    date: DATE_FORMAT.format(startDate),
+    date: formatDateValue(startDate),
     times:
-      `${TIME_FORMAT.format(startDate)} – ` +
+      `${formatTime(startDate)} – ` +
       (sameDay
-        ? TIME_FORMAT.format(endDate)
-        : SHORT_DATE_TIME_FORMAT.format(endDate)),
+        ? formatTime(endDate)
+        : formatShortDateTime(endDate)),
   }
 }
 
 
-function formatNumber(
-  value: string | number,
-  maximumFractionDigits = 3,
-): string {
-  const numericValue = Number(value)
-
-  if (!Number.isFinite(numericValue)) {
-    return '–'
-  }
-
-  return new Intl.NumberFormat('de-DE', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(numericValue)
-}
 
 
 function formatNetCost(
@@ -104,10 +81,7 @@ function formatNetCost(
     return '–'
   }
 
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(gridCost + pvCost)
+  return formatCurrency(gridCost + pvCost)
 }
 
 
@@ -122,27 +96,27 @@ function isDiscardable(
 }
 
 
-function getStatusLabel(
+function getStatusKey(
   chargingSession: ChargingSession,
-): string {
+): MessageKey {
   if (chargingSession.discarded) {
-    return 'Verworfen'
+    return 'sessions.status.discarded'
   }
 
   if (
     chargingSession.invoice_status ===
     'finalized'
   ) {
-    return 'Abgerechnet'
+    return 'sessions.status.finalized'
   }
 
   if (
     chargingSession.invoice_status === 'draft'
   ) {
-    return 'Rechnungsentwurf'
+    return 'sessions.status.draft'
   }
 
-  return 'Offen'
+  return 'sessions.status.open'
 }
 
 
@@ -161,6 +135,7 @@ function getStatusClassName(
 
 
 function ChargingSessionsPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
   const isAdmin = user?.is_admin === true
@@ -301,7 +276,7 @@ function ChargingSessionsPage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Ladevorgänge konnten nicht geladen werden.',
+            : t('sessions.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -379,7 +354,7 @@ function ChargingSessionsPage() {
       setActionError(
         error instanceof Error
           ? error.message
-          : 'Die Aktion ist fehlgeschlagen.',
+          : t('sessions.actionFailed'),
       )
     } finally {
       setIsChanging(false)
@@ -392,9 +367,7 @@ function ChargingSessionsPage() {
     if (
       ids.length === 0 ||
       !window.confirm(
-        `${ids.length} Ladevorgang/Ladevorgänge verwerfen? ` +
-          'Sie werden nicht mehr angezeigt, bepreist oder abgerechnet ' +
-          'und lassen sich über „Verworfene anzeigen“ wiederherstellen.',
+        t('sessions.discard.confirm', { count: ids.length }),
       )
     ) {
       return
@@ -410,7 +383,7 @@ function ChargingSessionsPage() {
           discardReason.trim() || undefined,
         ),
       (changed) =>
-        `${changed} Ladevorgang/Ladevorgänge verworfen.`,
+        t('sessions.discard.done', { count: changed }),
     )
   }
 
@@ -419,7 +392,7 @@ function ChargingSessionsPage() {
 
     void runAction(
       () => restoreChargingSessions(token, [id]),
-      () => 'Ladevorgang wiederhergestellt.',
+      () => t('sessions.restored'),
     )
   }
 
@@ -428,15 +401,15 @@ function ChargingSessionsPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Ladehistorie
+            {t('sessions.eyebrow')}
           </p>
 
-          <h1>Ladevorgänge</h1>
+          <h1>{t('sessions.title')}</h1>
 
           <p className="muted">
             {isAdmin
-              ? 'Alle importierten Ladevorgänge, neueste zuerst.'
-              : 'Ihre Ladevorgänge und deren Abrechnungsstatus.'}
+              ? t('sessions.intro.admin')
+              : t('sessions.intro.user')}
           </p>
         </div>
       </header>
@@ -444,7 +417,7 @@ function ChargingSessionsPage() {
       {isLoading && (
         <section className="card">
           <p className="muted">
-            Ladevorgänge werden geladen …
+            {t('sessions.loading')}
           </p>
         </section>
       )}
@@ -463,13 +436,13 @@ function ChargingSessionsPage() {
         chargingSessions.length === 0 && (
           <section className="card">
             <h2>
-              Keine Ladevorgänge vorhanden
+              {t('sessions.empty.title')}
             </h2>
 
             <p className="muted">
               {isAdmin
-                ? 'Es wurden noch keine Ladevorgänge importiert.'
-                : 'Ihnen sind noch keine Ladevorgänge zugeordnet.'}
+                ? t('sessions.empty.admin')
+                : t('sessions.empty.user')}
             </p>
           </section>
         )}
@@ -480,20 +453,20 @@ function ChargingSessionsPage() {
           <section className="card sessions-overview">
             <dl className="sessions-statistics">
               <div>
-                <dt>Ladevorgänge geladen</dt>
+                <dt>{t('sessions.stats.total')}</dt>
                 <dd>{statistics.total}</dd>
               </div>
               <div>
-                <dt>abgerechnet</dt>
+                <dt>{t('sessions.stats.invoiced')}</dt>
                 <dd>{statistics.invoiced}</dd>
               </div>
               <div>
-                <dt>nicht abgerechnet</dt>
+                <dt>{t('sessions.stats.open')}</dt>
                 <dd>{statistics.open}</dd>
               </div>
               {isAdmin && (
                 <div>
-                  <dt>verworfen</dt>
+                  <dt>{t('sessions.stats.discarded')}</dt>
                   <dd>{statistics.discarded}</dd>
                 </div>
               )}
@@ -511,7 +484,7 @@ function ChargingSessionsPage() {
                   }
                 />
 
-                Abgerechnete Ladevorgänge anzeigen
+                {t('sessions.filter.invoiced')}
               </label>
 
               <label className="checkbox-field">
@@ -525,7 +498,7 @@ function ChargingSessionsPage() {
                   }
                 />
 
-                Nicht abgerechnete Ladevorgänge anzeigen
+                {t('sessions.filter.uninvoiced')}
               </label>
 
               {isAdmin && (
@@ -538,7 +511,7 @@ function ChargingSessionsPage() {
                     }}
                   />
 
-                  Verworfene Ladevorgänge anzeigen
+                  {t('sessions.filter.discarded')}
                 </label>
               )}
             </div>
@@ -561,14 +534,14 @@ function ChargingSessionsPage() {
       {isAdmin && selectedIds.size > 0 && (
         <section className="card session-bulk-actions">
           <strong>
-            {selectedIds.size} ausgewählt
+            {t('sessions.selected', { count: selectedIds.size })}
           </strong>
 
           <input
             type="text"
             value={discardReason}
             maxLength={255}
-            placeholder="Grund (optional), z. B. Testladung"
+            placeholder={t('sessions.discard.reasonPlaceholder')}
             disabled={isChanging}
             onChange={(event) => {
               setDiscardReason(event.target.value)
@@ -581,7 +554,7 @@ function ChargingSessionsPage() {
             disabled={isChanging}
             onClick={handleDiscard}
           >
-            {isChanging ? 'Wird verworfen …' : 'Auswahl verwerfen'}
+            {isChanging ? t('sessions.discard.submitting') : t('sessions.discard.submit')}
           </button>
 
           <button
@@ -592,7 +565,7 @@ function ChargingSessionsPage() {
               setSelectedIds(new Set())
             }}
           >
-            Auswahl aufheben
+            {t('sessions.clearSelection')}
           </button>
         </section>
       )}
@@ -602,11 +575,10 @@ function ChargingSessionsPage() {
         chargingSessions.length > 0 &&
         visibleChargingSessions.length === 0 && (
           <section className="card">
-            <h2>Keine passenden Ladevorgänge</h2>
+            <h2>{t('sessions.noMatch.title')}</h2>
 
             <p className="muted">
-              Mit den ausgewählten Filtern werden keine
-              Ladevorgänge angezeigt.
+              {t('sessions.noMatch.text')}
             </p>
           </section>
         )}
@@ -623,36 +595,36 @@ function ChargingSessionsPage() {
                       <th className="session-select">
                         <input
                           type="checkbox"
-                          aria-label="Alle verwerfbaren auswählen"
+                          aria-label={t('sessions.selectAllAria')}
                           checked={allSelected}
                           disabled={selectableIds.length === 0}
                           onChange={toggleAll}
                         />
                       </th>
                     )}
-                    <th>Zeitraum</th>
+                    <th>{t('sessions.col.period')}</th>
 
                     {isAdmin && (
-                      <th className="session-user">Benutzer</th>
+                      <th className="session-user">{t('sessions.col.user')}</th>
                     )}
 
-                    <th>RFID-Karte</th>
-                    <th>Ladestation</th>
+                    <th>{t('sessions.col.card')}</th>
+                    <th>{t('sessions.col.station')}</th>
 
                     <th className="table-number">
-                      Energie
+                      {t('sessions.col.energy')}
                     </th>
 
                     <th className="table-number">
-                      PV-Anteil
+                      {t('sessions.col.pv')}
                     </th>
 
                     <th className="table-number">
-                      Kosten netto
+                      {t('sessions.col.costNet')}
                     </th>
 
-                    <th>Status</th>
-                    <th>Rechnung</th>
+                    <th>{t('sessions.col.status')}</th>
+                    <th>{t('sessions.col.invoice')}</th>
                     {isAdmin && showDiscarded && <th />}
                   </tr>
                 </thead>
@@ -673,7 +645,7 @@ function ChargingSessionsPage() {
                             {isDiscardable(chargingSession) && (
                               <input
                                 type="checkbox"
-                                aria-label="Ladevorgang auswählen"
+                                aria-label={t('sessions.selectAria')}
                                 checked={selectedIds.has(
                                   chargingSession.id,
                                 )}
@@ -749,9 +721,9 @@ function ChargingSessionsPage() {
                               undefined
                             }
                           >
-                            {getStatusLabel(
+                            {t(getStatusKey(
                               chargingSession,
-                            )}
+                            ))}
                           </span>
                         </td>
 
@@ -763,7 +735,9 @@ function ChargingSessionsPage() {
                               to={`/invoices/${chargingSession.invoice_id}`}
                             >
                               {chargingSession.invoice_number ??
-                                `Entwurf #${chargingSession.invoice_id}`}
+                                t('common.draftNumber', {
+                                  id: chargingSession.invoice_id,
+                                })}
                             </Link>
                           ) : (
                             '–'
@@ -781,7 +755,7 @@ function ChargingSessionsPage() {
                                   handleRestore(chargingSession.id)
                                 }}
                               >
-                                Wiederherstellen
+                                {t('sessions.restore')}
                               </button>
                             )}
                           </td>

@@ -24,6 +24,7 @@ class AuthenticatedUserResponse(BaseModel):
     last_name: str
     is_admin: bool
     active: bool
+    language: str | None = None
 
 
 class PasswordResetRequest(BaseModel):

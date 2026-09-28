@@ -12,6 +12,7 @@ import {
 } from '../api/invoices'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { useTranslation } from '../i18n/useTranslation'
 
 interface InvoiceCancellationFinalizeFormProps {
   cancellationId: number
@@ -39,6 +40,7 @@ function InvoiceCancellationFinalizeForm({
   cancellationId,
   onFinalized,
 }: InvoiceCancellationFinalizeFormProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -59,7 +61,7 @@ function InvoiceCancellationFinalizeForm({
     event.preventDefault()
 
     const confirmed = window.confirm(
-      'Soll die Stornorechnung verbindlich finalisiert werden?',
+      t('cancellationFinalize.confirm'),
     )
 
     if (!confirmed) {
@@ -109,7 +111,7 @@ function InvoiceCancellationFinalizeForm({
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Stornorechnung konnte nicht finalisiert werden.',
+          : t('cancellationFinalize.failed'),
       )
 
       try {
@@ -137,15 +139,13 @@ function InvoiceCancellationFinalizeForm({
   return (
     <section className="card detail-section">
       <p className="eyebrow">
-        Storno abschließen
+        {t('cancellationFinalize.eyebrow')}
       </p>
 
-      <h2>Stornorechnung finalisieren</h2>
+      <h2>{t('cancellationFinalize.title')}</h2>
 
       <p className="muted finalize-intro">
-        Nach der Finalisierung wird die
-        Stornorechnung unveränderlich und als PDF
-        archiviert.
+        {t('cancellationFinalize.intro')}
       </p>
 
       <form
@@ -153,7 +153,7 @@ function InvoiceCancellationFinalizeForm({
         onSubmit={handleSubmit}
       >
         <label className="form-field">
-          <span>Stornodatum</span>
+          <span>{t('cancellationFinalize.date')}</span>
 
           <input
             type="date"
@@ -184,8 +184,8 @@ function InvoiceCancellationFinalizeForm({
             disabled={isSubmitting}
           >
             {isSubmitting
-              ? 'Stornorechnung wird finalisiert …'
-              : 'Stornorechnung verbindlich finalisieren'}
+              ? t('cancellationFinalize.submitting')
+              : t('cancellationFinalize.submit')}
           </button>
         </div>
       </form>
