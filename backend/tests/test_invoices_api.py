@@ -1894,3 +1894,84 @@ def test_discarded_session_is_not_invoiced(
     else:
         # ohne den verworfenen Vorgang gibt es nichts abzurechnen
         assert response.status_code in (400, 409, 422)
+
+
+# --------------------------------------------------------------------------
+# Sprache der Rechnung
+# --------------------------------------------------------------------------
+def create_draft_for(client: TestClient, user_id: int) -> dict:
+    response = client.post(
+        "/api/invoices/drafts",
+        json={
+            "user_id": user_id,
+            "service_period_start": "2026-06-01T00:00:00",
+            "service_period_end": "2026-07-01T00:00:00",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_draft_without_language_is_german(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.models.invoice import Invoice
+
+    user, _ = create_billable_session(database_session)
+
+    draft = create_draft_for(client, user.id)
+
+    assert draft["items"][0]["description"].startswith("Ladevorgang ")
+    assert " an " in draft["items"][0]["description"]
+    assert database_session.get(Invoice, draft["id"]).language == "de"
+
+
+def test_draft_uses_recipient_language(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.models.invoice import Invoice
+
+    user, _ = create_billable_session(database_session)
+    user.language = "en"
+    database_session.commit()
+
+    draft = create_draft_for(client, user.id)
+
+    assert draft["items"][0]["description"].startswith("Charging session ")
+    assert " at " in draft["items"][0]["description"]
+    assert database_session.get(Invoice, draft["id"]).language == "en"
+
+
+def test_cancellation_keeps_language_of_original(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.models.invoice import Invoice
+
+    user, _ = create_billable_session(database_session)
+    user.language = "en"
+    database_session.commit()
+
+    draft = create_draft_for(client, user.id)
+    assert client.post(
+        f"/api/invoices/{draft['id']}/finalize",
+        json={"issue_date": "2026-07-05"},
+    ).status_code == 200
+
+    # die Sprache des Benutzers ändert sich später – das Storno bleibt englisch
+    user.language = "de"
+    database_session.commit()
+
+    response = client.post(
+        f"/api/invoices/{draft['id']}/cancellations",
+        json={"reason": "Fehlerhafte Abrechnung"},
+    )
+
+    assert response.status_code == 201
+    cancellation = response.json()
+    assert cancellation["items"][0]["description"].startswith(
+        "Cancellation of Charging session "
+    )
+    assert database_session.get(Invoice, cancellation["id"]).language == "en"

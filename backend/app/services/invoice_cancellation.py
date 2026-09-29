@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.i18n import translate
 from app.models.invoice import Invoice, InvoiceItem
 from app.utils.utc import utc_now
 
@@ -122,8 +123,9 @@ def create_cancellation_draft(
             original_invoice.service_period_end
         ),
         currency=original_invoice.currency,
-        # Storno im Format der ursprünglichen Rechnung
+        # Storno in Format und Sprache der ursprünglichen Rechnung
         locale=original_invoice.locale,
+        language=original_invoice.language,
         total_net=-original_invoice.total_net,
         vat_amount=-original_invoice.vat_amount,
         total_gross=-original_invoice.total_gross,
@@ -145,9 +147,10 @@ def create_cancellation_draft(
                 reversed_invoice_item_id=original_item.id,
                 rebills_invoice_item_id=None,
                 position_number=original_item.position_number,
-                description=(
-                    "Storno zu "
-                    f"{original_item.description}"
+                description=translate(
+                    original_invoice.language,
+                    "item.cancellation",
+                    description=original_item.description,
                 ),
                 session_start=original_item.session_start,
                 session_end=original_item.session_end,

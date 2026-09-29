@@ -23,6 +23,7 @@ import AdminPasswordPolicyForm from './AdminPasswordPolicyForm'
 import AdminAccessSettingsForm from './AdminAccessSettingsForm'
 import AdminInvoiceExportSettingsForm from './AdminInvoiceExportSettingsForm'
 import AdminHagerSettingsForm from './AdminHagerSettingsForm'
+import { formatDate } from '../utils/dateFormat'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
@@ -41,10 +42,7 @@ function decimalValuesEqual(
 function formatValidFrom(
   value: string,
 ): string {
-  const [year, month, day] =
-    value.slice(0, 10).split('-')
-
-  return `${day}.${month}.${year}`
+  return formatDate(value.slice(0, 10))
 }
 
 function AdminSettingsPage() {
@@ -338,7 +336,7 @@ function AdminSettingsPage() {
 
         handleRequestError(
           error,
-          'Die Einstellungen konnten nicht geladen werden.',
+          t('settings.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -408,7 +406,7 @@ function AdminSettingsPage() {
 
     if (!normalizedAppName) {
       setErrorMessage(
-        'Der Anwendungsname darf nicht leer sein.',
+        t('settings.appNameMissing'),
       )
       setSuccessMessage(null)
       return
@@ -421,7 +419,7 @@ function AdminSettingsPage() {
       Number(normalizedBaseFee) < 0
     ) {
       setErrorMessage(
-        'Die monatliche Grundgebühr muss mindestens 0 sein.',
+        t('settings.baseFeeInvalid'),
       )
       setSuccessMessage(null)
       return
@@ -435,7 +433,7 @@ function AdminSettingsPage() {
       Number(normalizedVatRate) > 100
     ) {
       setErrorMessage(
-        'Der Umsatzsteuersatz muss zwischen 0 und 100 liegen.',
+        t('settings.vatRange'),
       )
       setSuccessMessage(null)
       return
@@ -448,7 +446,7 @@ function AdminSettingsPage() {
       Number(normalizedPostalDeliveryFee) < 0
     ) {
       setErrorMessage(
-        'Das Briefporto muss mindestens 0 sein.',
+        t('settings.postalFeeInvalid'),
       )
       setSuccessMessage(null)
       return
@@ -460,7 +458,7 @@ function AdminSettingsPage() {
       paymentTermDays > 3650
     ) {
       setErrorMessage(
-        'Das Zahlungsziel muss eine ganze Zahl zwischen 0 und 3650 sein.',
+        t('settings.paymentTermInvalid'),
       )
       setSuccessMessage(null)
       return
@@ -471,7 +469,7 @@ function AdminSettingsPage() {
       !normalizedIssuerName
     ) {
       setErrorMessage(
-        'Für den Rechnungssteller ist ein Name erforderlich.',
+        t('settings.issuer.nameMissing'),
       )
       setSuccessMessage(null)
       return
@@ -482,7 +480,7 @@ function AdminSettingsPage() {
       !normalizedIssuerAddress
     ) {
       setErrorMessage(
-        'Für den Rechnungssteller ist eine Anschrift erforderlich.',
+        t('settings.issuer.addressMissing'),
       )
       setSuccessMessage(null)
       return
@@ -494,7 +492,7 @@ function AdminSettingsPage() {
       !normalizedVatId
     ) {
       setErrorMessage(
-        'Bitte gib eine Steuernummer oder USt-IdNr. an.',
+        t('settings.issuer.taxMissing'),
       )
       setSuccessMessage(null)
       return
@@ -507,7 +505,7 @@ function AdminSettingsPage() {
       )
     ) {
       setErrorMessage(
-        'Die IBAN muss aus 15 bis 34 Buchstaben und Ziffern bestehen.',
+        t('settings.bank.ibanInvalid'),
       )
       setSuccessMessage(null)
       return
@@ -520,7 +518,7 @@ function AdminSettingsPage() {
       )
     ) {
       setErrorMessage(
-        'Die BIC muss 8 oder 11 Buchstaben und Ziffern enthalten.',
+        t('settings.bank.bicInvalid'),
       )
       setSuccessMessage(null)
       return
@@ -532,7 +530,7 @@ function AdminSettingsPage() {
       )
     ) {
       setErrorMessage(
-        'Das Rechnungspräfix darf nur aus 1 bis 20 Buchstaben und Ziffern bestehen.',
+        t('settings.invoicePrefixInvalid'),
       )
       setSuccessMessage(null)
       return
@@ -659,12 +657,12 @@ function AdminSettingsPage() {
       await refreshSettings()
 
       setSuccessMessage(
-        'Die globalen Einstellungen wurden gespeichert.',
+        t('settings.saved'),
       )
     } catch (error) {
       handleRequestError(
         error,
-        'Die Einstellungen konnten nicht gespeichert werden.',
+        t('settings.saveFailed'),
       )
     } finally {
       setIsSaving(false)
@@ -703,7 +701,7 @@ function AdminSettingsPage() {
       gridPriceValue < 0
     ) {
       setEnergyErrorMessage(
-        'Der Netzpreis muss mindestens 0 sein.',
+        t('settings.energy.gridInvalid'),
       )
       return
     }
@@ -713,7 +711,7 @@ function AdminSettingsPage() {
       pvPriceValue < 0
     ) {
       setEnergyErrorMessage(
-        'Der PV-Preis muss mindestens 0 sein.',
+        t('settings.energy.pvInvalid'),
       )
       return
     }
@@ -724,7 +722,7 @@ function AdminSettingsPage() {
       vatRateValue > 100
     ) {
       setEnergyErrorMessage(
-        'Der Umsatzsteuersatz muss zwischen 0 und 100 liegen.',
+        t('settings.vatRange'),
       )
       return
     }
@@ -745,7 +743,7 @@ function AdminSettingsPage() {
       )
     ) {
       setEnergySuccessMessage(
-        'Es wurden keine Preisänderungen vorgenommen.',
+        t('settings.energy.noChanges'),
       )
       return
     }
@@ -792,10 +790,9 @@ function AdminSettingsPage() {
       )
 
       setEnergySuccessMessage(
-        'Die Energiepreise wurden mit ' +
-          `Gültigkeit ab ${formatValidFrom(
-            updatedEnergyPrice.valid_from,
-          )} gespeichert.`,
+        t('settings.energy.saved', {
+          date: formatValidFrom(updatedEnergyPrice.valid_from),
+        }),
       )
     } catch (error) {
       if (
@@ -814,7 +811,7 @@ function AdminSettingsPage() {
       setEnergyErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Energiepreise konnten nicht gespeichert werden.',
+          : t('settings.energy.saveFailed'),
       )
     } finally {
       setIsSavingEnergyPrice(false)
@@ -826,14 +823,13 @@ function AdminSettingsPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Administration
+            {t('common.administration')}
           </p>
 
-          <h1>Einstellungen</h1>
+          <h1>{t('settings.title')}</h1>
 
           <p className="muted">
-            Anwendungsname und Vorgaben für neue
-            Rechnungen verwalten.
+            {t('settings.intro')}
           </p>
         </div>
       </header>
@@ -841,7 +837,7 @@ function AdminSettingsPage() {
       {isLoading && (
         <section className="card">
           <p className="muted">
-            Einstellungen werden geladen …
+            {t('settings.loading')}
           </p>
         </section>
       )}
@@ -870,10 +866,10 @@ function AdminSettingsPage() {
           onSubmit={handleSubmit}
         >
           <section className="settings-section">
-            <h2>Allgemein</h2>
+            <h2>{t('settings.general.title')}</h2>
 
             <label className="form-field settings-name-field">
-              <span>Anwendungsname</span>
+              <span>{t('settings.appName')}</span>
 
               <input
                 type="text"
@@ -886,8 +882,7 @@ function AdminSettingsPage() {
               />
 
               <small className="muted">
-                Wird als Browser-Titel und in E-Mails
-                angezeigt.
+                {t('settings.appNameHint')}
               </small>
             </label>
 
@@ -910,7 +905,7 @@ function AdminSettingsPage() {
             </label>
 
             <label className="form-field settings-name-field">
-              <span>Girocode auf Rechnungen</span>
+              <span>{t('settings.girocode')}</span>
 
               <select
                 value={invoiceGirocodeEnabled ? 'yes' : 'no'}
@@ -920,35 +915,28 @@ function AdminSettingsPage() {
                   )
                 }}
               >
-                <option value="no">Nein</option>
-                <option value="yes">Ja</option>
+                <option value="no">{t('common.no')}</option>
+                <option value="yes">{t('common.yes')}</option>
               </select>
 
               <small className="muted">
-                Fügt einen Zahlungs-QR-Code für die
-                Banking-App hinzu. Verwendet Name,
-                Bankverbindung, Betrag und Nummer der
-                Rechnung. Gilt für neu erzeugte PDFs
-                mit positivem Zahlbetrag. Bereits
-                archivierte PDFs bleiben unverändert.
+                {t('settings.girocodeHint')}
               </small>
             </label>
           </section>
 
           <section className="settings-section">
             <div>
-              <h2>Rechnungssteller</h2>
+              <h2>{t('settings.issuer.title')}</h2>
 
               <p className="muted">
-                Diese Angaben werden bei neuen
-                Rechnungsentwürfen gespeichert und
-                später im Rechnungs-PDF verwendet.
+                {t('settings.issuer.intro')}
               </p>
             </div>
 
             <div className="form-grid settings-business-grid">
               <label className="form-field settings-wide-field">
-                <span>Name des Rechnungsstellers</span>
+                <span>{t('settings.issuer.name')}</span>
 
                 <input
                   type="text"
@@ -963,7 +951,7 @@ function AdminSettingsPage() {
               </label>
 
               <label className="form-field">
-                <span>Anschrift des Rechnungsstellers</span>
+                <span>{t('settings.issuer.address')}</span>
 
                 <textarea
                   rows={3}
@@ -977,12 +965,12 @@ function AdminSettingsPage() {
                 />
 
                 <small className="muted">
-                  Mehrzeilige Anschriften sind möglich.
+                  {t('settings.issuer.addressHint')}
                 </small>
               </label>
 
               <label className="form-field">
-                <span>Telefon</span>
+                <span>{t('settings.issuer.phone')}</span>
 
                 <input
                   type="text"
@@ -996,13 +984,12 @@ function AdminSettingsPage() {
                 />
 
                 <small className="muted">
-                  Optional. Erscheint auf der Rechnung,
-                  wenn gesetzt.
+                  {t('settings.issuer.phoneHint')}
                 </small>
               </label>
 
               <label className="form-field">
-                <span>Steuernummer</span>
+                <span>{t('settings.issuer.taxNumber')}</span>
 
                 <input
                   type="text"
@@ -1017,7 +1004,7 @@ function AdminSettingsPage() {
               </label>
 
               <label className="form-field">
-                <span>USt-IdNr.</span>
+                <span>{t('settings.issuer.vatId')}</span>
 
                 <input
                   type="text"
@@ -1035,17 +1022,16 @@ function AdminSettingsPage() {
 
           <section className="settings-section">
             <div>
-              <h2>Bankverbindung</h2>
+              <h2>{t('settings.bank.title')}</h2>
 
               <p className="muted">
-                Die Bankverbindung wird auf neuen
-                Rechnungen ausgegeben.
+                {t('settings.bank.intro')}
               </p>
             </div>
 
             <div className="form-grid settings-business-grid">
               <label className="form-field settings-wide-field">
-                <span>Bankname</span>
+                <span>{t('settings.bank.name')}</span>
 
                 <input
                   type="text"
@@ -1060,7 +1046,7 @@ function AdminSettingsPage() {
               </label>
 
               <label className="form-field">
-                <span>IBAN</span>
+                <span>{t('settings.bank.iban')}</span>
 
                 <input
                   type="text"
@@ -1075,13 +1061,12 @@ function AdminSettingsPage() {
                 />
 
                 <small className="muted">
-                  Leerzeichen werden beim Speichern
-                  automatisch entfernt.
+                  {t('settings.bank.ibanHint')}
                 </small>
               </label>
 
               <label className="form-field">
-                <span>BIC</span>
+                <span>{t('settings.bank.bic')}</span>
 
                 <input
                   type="text"
@@ -1098,11 +1083,11 @@ function AdminSettingsPage() {
             </div>
           </section>
 
-          <h2>Abrechnung</h2>
+          <h2>{t('settings.billing.title')}</h2>
 
           <div className="form-grid settings-billing-grid">
             <label className="form-field">
-              <span>Zahlen- und Datumsformat</span>
+              <span>{t('settings.locale')}</span>
 
               <select
                 value={locale}
@@ -1110,21 +1095,20 @@ function AdminSettingsPage() {
                   setLocale(event.target.value)
                 }}
               >
-                <option value="de-DE">Deutsch (Deutschland) – 1.234,56 · 31.12.2026</option>
-                <option value="de-AT">Deutsch (Österreich) – 1 234,56 · 31.12.2026</option>
-                <option value="de-CH">Deutsch (Schweiz) – 1’234.56 · 31.12.2026</option>
-                <option value="en-GB">English (UK) – 1,234.56 · 31/12/2026</option>
-                <option value="en-US">English (US) – 1,234.56 · 12/31/2026</option>
+                <option value="de-DE">{t('settings.locale.deDE')}</option>
+                <option value="de-AT">{t('settings.locale.deAT')}</option>
+                <option value="de-CH">{t('settings.locale.deCH')}</option>
+                <option value="en-GB">{t('settings.locale.enGB')}</option>
+                <option value="en-US">{t('settings.locale.enUS')}</option>
               </select>
 
               <small className="muted">
-                Gilt für die Anzeige und für neue Rechnungen.
-                Bereits erstellte Rechnungen behalten ihr Format.
+                {t('settings.localeHint')}
               </small>
             </label>
 
             <label className="form-field">
-              <span>Währung</span>
+              <span>{t('settings.currency')}</span>
 
               <select
                 value={currency}
@@ -1132,20 +1116,19 @@ function AdminSettingsPage() {
                   setCurrency(event.target.value)
                 }}
               >
-                <option value="EUR">EUR – Euro</option>
-                <option value="CHF">CHF – Schweizer Franken</option>
-                <option value="GBP">GBP – Britisches Pfund</option>
-                <option value="USD">USD – US-Dollar</option>
+                <option value="EUR">{t('settings.currency.EUR')}</option>
+                <option value="CHF">{t('settings.currency.CHF')}</option>
+                <option value="GBP">{t('settings.currency.GBP')}</option>
+                <option value="USD">{t('settings.currency.USD')}</option>
               </select>
 
               <small className="muted">
-                Nach der ersten Rechnung nicht mehr änderbar.
-                Der Girocode ist nur mit EUR möglich.
+                {t('settings.currencyHint')}
               </small>
             </label>
 
             <label className="form-field">
-              <span>Abrechnungs-Startdatum</span>
+              <span>{t('settings.billingStart')}</span>
 
               <input
                 type="date"
@@ -1158,16 +1141,13 @@ function AdminSettingsPage() {
               />
 
               <small className="muted">
-                Ladevorgänge vor diesem Datum und
-                Grundgebühren für frühere Monate werden
-                bei neuen Rechnungen ignoriert. Leer
-                bedeutet: kein Stichtag.
+                {t('settings.billingStartHint')}
               </small>
             </label>
 
               <label className="form-field">
               <span>
-                Monatliche Grundgebühr netto
+                {t('settings.baseFee')}
               </span>
 
               <input
@@ -1183,15 +1163,13 @@ function AdminSettingsPage() {
               />
 
               <small className="muted">
-                Betrag je zugeordneter
-                RFID-Karte und Monat.
+                {t('settings.baseFeeHint')}
               </small>
               </label>
 
             <label className="form-field">
               <span>
-                Umsatzsteuer Grundgebühr und
-                Briefporto (%)
+                {t('settings.baseFeeVat')}
               </span>
 
               <input
@@ -1208,7 +1186,7 @@ function AdminSettingsPage() {
             </label>
 
             <label className="form-field">
-              <span>Briefporto netto</span>
+              <span>{t('settings.postalFee')}</span>
 
               <input
                 type="text"
@@ -1223,15 +1201,13 @@ function AdminSettingsPage() {
               />
 
               <small className="muted">
-                Wird nur bei Briefzustellung und nur bei
-                einem Betrag größer als 0 als Position
-                „Briefporto“ berechnet.
+                {t('settings.postalFeeHint')}
               </small>
             </label>
 
             <label className="form-field">
               <span>
-                Zahlungsziel in Tagen
+                {t('settings.paymentTerm')}
               </span>
 
               <input
@@ -1249,15 +1225,13 @@ function AdminSettingsPage() {
               />
 
               <small className="muted">
-                Wird bei neu finalisierten
-                Rechnungen zum Rechnungsdatum
-                addiert.
+                {t('settings.paymentTermHint')}
               </small>
             </label>
 
               <label className="form-field">
                 <span>
-                  Rechnungsnummer-Präfix
+                  {t('settings.invoicePrefix')}
                 </span>
 
                 <input
@@ -1273,15 +1247,12 @@ function AdminSettingsPage() {
                 />
 
                 <small className="muted">
-                  Beispiel: RE ergibt
-                  RE-2026-000001. Das Jahr und die
-                  laufende Nummer werden automatisch
-                  ergänzt.
+                  {t('settings.invoicePrefixHint')}
                 </small>
               </label>
 
               <label className="form-field">
-                <span>Rechnungsformat</span>
+                <span>{t('settings.pdfFormat')}</span>
 
                 <select
                   value={invoicePdfFormat}
@@ -1294,19 +1265,16 @@ function AdminSettingsPage() {
                   }}
                 >
                   <option value="standard">
-                    Standard-PDF
+                    {t('settings.pdfFormat.standard')}
                   </option>
 
                   <option value="pdfa-2b">
-                    PDF/A-2b
+                    {t('settings.pdfFormat.pdfa')}
                   </option>
                 </select>
 
                 <small className="muted">
-                  Gilt für neu archivierte Rechnungen
-                  und Stornorechnungen. Bereits
-                  archivierte Dateien bleiben
-                  unverändert.
+                  {t('settings.pdfFormatHint')}
                 </small>
               </label>
           </div>
@@ -1318,8 +1286,8 @@ function AdminSettingsPage() {
               disabled={isSaving}
             >
               {isSaving
-                ? 'Einstellungen werden gespeichert …'
-                : 'Einstellungen speichern'}
+                ? t('settings.saving')
+                : t('settings.save')}
             </button>
           </div>
         </form>
@@ -1331,17 +1299,16 @@ function AdminSettingsPage() {
         >
           <section className="settings-section">
             <div>
-              <h2>Energiepreise</h2>
+              <h2>{t('settings.energy.title')}</h2>
 
               <p className="muted">
-                Aktuell gültige Nettopreise je
-                Kilowattstunde verwalten.
+                {t('settings.energy.intro')}
               </p>
             </div>
 
             {currentEnergyPrice !== null ? (
               <p className="muted">
-                Aktuell gültig seit{' '}
+                {t('settings.energy.currentSince')}{' '}
                 <strong>
                   {formatValidFrom(
                     currentEnergyPrice.valid_from,
@@ -1350,8 +1317,7 @@ function AdminSettingsPage() {
               </p>
             ) : (
               <p className="muted">
-                Es ist noch kein Energietarif
-                vorhanden.
+                {t('settings.energy.none')}
               </p>
             )}
 
@@ -1376,7 +1342,7 @@ function AdminSettingsPage() {
             <div className="form-grid settings-billing-grid">
               <label className="form-field">
                 <span>
-                  Netzpreis netto je kWh
+                  {t('settings.energy.gridPrice')}
                 </span>
 
                 <input
@@ -1394,7 +1360,7 @@ function AdminSettingsPage() {
 
               <label className="form-field">
                 <span>
-                  PV-Preis netto je kWh
+                  {t('settings.energy.pvPrice')}
                 </span>
 
                 <input
@@ -1412,7 +1378,7 @@ function AdminSettingsPage() {
 
               <label className="form-field">
                 <span>
-                  Umsatzsteuer Energie (%)
+                  {t('settings.energy.vat')}
                 </span>
 
                 <input
@@ -1437,8 +1403,8 @@ function AdminSettingsPage() {
               disabled={isSavingEnergyPrice}
             >
               {isSavingEnergyPrice
-                ? 'Energiepreise werden gespeichert …'
-                : 'Energiepreise speichern'}
+                ? t('settings.energy.saving')
+                : t('settings.energy.save')}
             </button>
           </div>
         </form>

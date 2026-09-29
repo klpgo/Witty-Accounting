@@ -25,6 +25,8 @@ import {
   SettingsApiError,
 } from '../api/settings'
 import { getDisplayLocale } from '../utils/dateFormat'
+import { useTranslation } from '../i18n/useTranslation'
+import { useAppSettings } from '../settings/useAppSettings'
 
 function sortUsers(users: User[]): User[] {
   return [...users].sort((first, second) => {
@@ -49,9 +51,10 @@ function sortUsers(users: User[]): User[] {
 
 function formatLastLogin(
   value: string | null,
+  neverText: string,
 ): string {
   if (value === null) {
-    return 'Noch nie'
+    return neverText
   }
 
   const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(
@@ -72,6 +75,8 @@ function formatLastLogin(
 }
 
 function AdminUsersPage() {
+  const { t } = useTranslation()
+  const { defaultLanguage } = useAppSettings()
   const navigate = useNavigate()
   const { user: currentUser, signOut } = useAuth()
   const [
@@ -99,6 +104,8 @@ function AdminUsersPage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [address, setAddress] = useState('')
+  // '' = Standardsprache des Mandanten
+  const [language, setLanguage] = useState('')
   const [invoiceDeliveryMethod, setInvoiceDeliveryMethod] =
     useState<InvoiceDeliveryMethod>('email')
   const [active, setActive] = useState(false)
@@ -254,7 +261,7 @@ function AdminUsersPage() {
 
         handleRequestError(
           error,
-          'Die Benutzer konnten nicht geladen werden.',
+          t('users.loadFailed'),
         )
       } finally {
         setIsLoading(false)
@@ -275,6 +282,7 @@ function AdminUsersPage() {
       setLastName('')
       setAddress('')
       setInvoiceDeliveryMethod('email')
+      setLanguage('')
       setActive(true)
       setIsAdmin(false)
       setNewPassword('')
@@ -288,6 +296,7 @@ function AdminUsersPage() {
       setFirstName('')
       setLastName('')
       setAddress('')
+      setLanguage('')
       setInvoiceDeliveryMethod('email')
       setActive(false)
       setIsAdmin(false)
@@ -301,6 +310,7 @@ function AdminUsersPage() {
     setFirstName(selectedUser.first_name)
     setLastName(selectedUser.last_name)
     setAddress(selectedUser.address ?? '')
+    setLanguage(selectedUser.language ?? '')
     setInvoiceDeliveryMethod(
       getInvoiceDeliveryMethod(selectedUser),
     )
@@ -363,6 +373,7 @@ function AdminUsersPage() {
             ),
             active,
             is_admin: isAdmin,
+            language: language || null,
           },
         )
 
@@ -377,9 +388,9 @@ function AdminUsersPage() {
         setSelectedUserId(createdUser.id)
 
         setSuccessMessage(
-          `Benutzer ${createdUser.first_name} ` +
-            `${createdUser.last_name} wurde angelegt. ` +
-            'Die Einladungsmail wurde versendet.',
+          t('users.created', {
+            name: `${createdUser.first_name} ${createdUser.last_name}`,
+          }),
         )
 
         return
@@ -402,6 +413,7 @@ function AdminUsersPage() {
           ),
           active,
           is_admin: isAdmin,
+          language: language || null,
         },
       )
 
@@ -416,15 +428,16 @@ function AdminUsersPage() {
       )
 
       setSuccessMessage(
-        `Benutzer ${updatedUser.first_name} ` +
-          `${updatedUser.last_name} wurde gespeichert.`,
+        t('users.saved', {
+          name: `${updatedUser.first_name} ${updatedUser.last_name}`,
+        }),
       )
     } catch (error) {
       handleRequestError(
         error,
         isCreating
-          ? 'Der Benutzer konnte nicht angelegt werden.'
-          : 'Der Benutzer konnte nicht gespeichert werden.',
+          ? t('users.createFailed')
+          : t('users.saveFailed'),
       )
     } finally {
       setIsSaving(false)
@@ -442,8 +455,9 @@ function AdminUsersPage() {
 
     if (newPassword.length < passwordMinLength) {
       setErrorMessage(
-        'Das neue Passwort muss mindestens ' +
-          `${passwordMinLength} Zeichen lang sein.`,
+        t('users.resetPassword.minLength', {
+          count: passwordMinLength,
+        }),
       )
 
       return
@@ -451,7 +465,7 @@ function AdminUsersPage() {
 
     if (newPassword !== confirmPassword) {
       setErrorMessage(
-        'Die beiden Passwörter stimmen nicht überein.',
+        t('resetPassword.mismatch'),
       )
 
       return
@@ -484,13 +498,14 @@ function AdminUsersPage() {
       setConfirmPassword('')
 
       setSuccessMessage(
-        `Das Passwort für ${selectedUser.first_name} ` +
-          `${selectedUser.last_name} wurde zurückgesetzt.`,
+        t('users.passwordReset', {
+          name: `${selectedUser.first_name} ${selectedUser.last_name}`,
+        }),
       )
     } catch (error) {
       handleRequestError(
         error,
-        'Das Passwort konnte nicht zurückgesetzt werden.',
+        t('users.passwordResetFailed'),
       )
     } finally {
       setIsResettingPassword(false)
@@ -502,14 +517,13 @@ function AdminUsersPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Administration
+            {t('common.administration')}
           </p>
 
-          <h1>Benutzerverwaltung</h1>
+          <h1>{t('users.title')}</h1>
 
           <p className="muted">
-            Stammdaten, Zugriffsstatus und
-            Administratorrechte verwalten.
+            {t('users.intro')}
           </p>
         </div>
         <button
@@ -517,14 +531,14 @@ function AdminUsersPage() {
           type="button"
           onClick={startCreatingUser}
         >
-          Neuer Benutzer
+          {t('users.new')}
         </button>
       </header>
 
       {isLoading && (
         <section className="card">
           <p className="muted">
-            Benutzer werden geladen …
+            {t('users.loading')}
           </p>
         </section>
       )}
@@ -549,10 +563,10 @@ function AdminUsersPage() {
 
       {!isLoading && users.length === 0 && (
         <section className="card">
-          <h2>Keine Benutzer vorhanden</h2>
+          <h2>{t('users.empty.title')}</h2>
 
           <p className="muted">
-            Es wurden keine Benutzer gefunden.
+            {t('users.empty.text')}
           </p>
         </section>
       )}
@@ -570,7 +584,7 @@ function AdminUsersPage() {
               }
             />
 
-            Inaktive Benutzer ausblenden
+            {t('users.hideInactive')}
           </label>
         </section>
       )}
@@ -582,11 +596,11 @@ function AdminUsersPage() {
               <table className="data-table admin-users-table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>E-Mail</th>
-                    <th>Letzte Anmeldung</th>
-                    <th>Status</th>
-                    <th>Rolle</th>
+                    <th>{t('users.col.name')}</th>
+                    <th>{t('users.col.email')}</th>
+                    <th>{t('users.col.lastLogin')}</th>
+                    <th>{t('users.col.status')}</th>
+                    <th>{t('users.col.role')}</th>
                     <th />
                   </tr>
                 </thead>
@@ -614,6 +628,7 @@ function AdminUsersPage() {
                       <td>
                         {formatLastLogin(
                           managedUser.last_login,
+                          t('users.never'),
                         )}
                       </td>
 
@@ -626,15 +641,15 @@ function AdminUsersPage() {
                           }
                         >
                           {managedUser.active
-                            ? 'Aktiv'
-                            : 'Inaktiv'}
+                            ? t('common.active')
+                            : t('common.inactive')}
                         </span>
                       </td>
 
                       <td>
                         {managedUser.is_admin
-                          ? 'Administrator'
-                          : 'Benutzer'}
+                          ? t('users.role.admin')
+                          : t('users.role.user')}
                       </td>
 
                       <td>
@@ -645,7 +660,7 @@ function AdminUsersPage() {
                             selectUser(managedUser.id)
                           }
                         >
-                          Bearbeiten
+                          {t('common.edit')}
                         </button>
                       </td>
                     </tr>
@@ -661,13 +676,13 @@ function AdminUsersPage() {
               <div>
                 <p className="eyebrow">
                   {isCreating
-                    ? 'Neuanlage'
-                    : `Benutzer #${selectedUser?.id}`}
+                    ? t('users.form.creating')
+                    : t('users.form.userNumber', { id: selectedUser?.id ?? '' })}
                 </p>
 
                 <h2>
                   {isCreating
-                    ? 'Neuer Benutzer'
+                    ? t('users.new')
                     : `${selectedUser?.first_name} ${selectedUser?.last_name}`}
                 </h2>
               </div>
@@ -678,7 +693,7 @@ function AdminUsersPage() {
               >
                 <div className="form-grid">
                   <label className="form-field">
-                    Vorname
+                    {t('profile.firstName')}
                     <input
                       type="text"
                       value={firstName}
@@ -693,7 +708,7 @@ function AdminUsersPage() {
                   </label>
 
                   <label className="form-field">
-                    Nachname
+                    {t('profile.lastName')}
                     <input
                       type="text"
                       value={lastName}
@@ -709,7 +724,7 @@ function AdminUsersPage() {
                 </div>
 
                 <label className="form-field">
-                  E-Mail-Adresse
+                  {t('common.email')}
                   <input
                     type="email"
                     value={email}
@@ -722,7 +737,7 @@ function AdminUsersPage() {
                 </label>
 
                 <label className="form-field">
-                  Anschrift
+                  {t('profile.address')}
                   <textarea
                     value={address}
                     maxLength={500}
@@ -733,18 +748,40 @@ function AdminUsersPage() {
                   />
                 </label>
 
+                <label className="form-field">
+                  {t('common.language')}
+                  <select
+                    value={language}
+                    onChange={(event) =>
+                      setLanguage(event.target.value)
+                    }
+                  >
+                    <option value="">
+                      {t('common.language.systemDefault', {
+                        language: t(
+                          defaultLanguage === 'en'
+                            ? 'language.en'
+                            : 'language.de',
+                        ),
+                      })}
+                    </option>
+                    <option value="de">{t('language.de')}</option>
+                    <option value="en">{t('language.en')}</option>
+                  </select>
+                  <small className="muted">
+                    {t('users.form.languageHint')}
+                  </small>
+                </label>
+
                 {isCreating && (
                   <p className="form-hint">
-                    Nach dem Anlegen erhält der Benutzer
-                    eine signierte E-Mail mit einem
-                    einmaligen Link, über den er sein
-                    persönliches Passwort festlegt.
+                    {t('users.form.inviteHint')}
                   </p>
                 )}
 
                 <div>
                   <p className="form-label">
-                    Rechnungszustellung
+                    {t('users.form.delivery')}
                   </p>
 
                   <div className="checkbox-group">
@@ -759,7 +796,7 @@ function AdminUsersPage() {
                       }
                     />
 
-                    Per E-Mail
+                    {t('profile.delivery.email')}
                   </label>
 
                   <label className="checkbox-field">
@@ -773,7 +810,7 @@ function AdminUsersPage() {
                       }
                     />
 
-                    Per Brief (Porto wird berechnet)
+                    {t('profile.delivery.post')}
                   </label>
 
                   <label className="checkbox-field">
@@ -787,8 +824,7 @@ function AdminUsersPage() {
                       }
                     />
 
-                    Manueller Download aus dem Portal
-                    nach Benachrichtigung per E-Mail
+                    {t('profile.delivery.portal')}
                   </label>
                   </div>
                 </div>
@@ -805,7 +841,7 @@ function AdminUsersPage() {
                       }
                     />
 
-                    Benutzer ist aktiv
+                    {t('users.form.active')}
                   </label>
 
                   <label className="checkbox-field">
@@ -820,15 +856,13 @@ function AdminUsersPage() {
                       }
                     />
 
-                    Administratorrechte
+                    {t('users.form.admin')}
                   </label>
                 </div>
 
                 {isOwnAccount && (
                   <p className="form-hint">
-                    Der eigene Zugang kann hier nicht
-                    deaktiviert oder zum normalen
-                    Benutzer herabgestuft werden.
+                    {t('users.form.ownAccountHint')}
                   </p>
                 )}
 
@@ -840,11 +874,11 @@ function AdminUsersPage() {
                   >
                     {isSaving
                       ? isCreating
-                        ? 'Wird angelegt …'
-                        : 'Wird gespeichert …'
+                        ? t('users.form.creatingBusy')
+                        : t('common.saving')
                       : isCreating
-                        ? 'Benutzer anlegen'
-                        : 'Benutzer speichern'}
+                        ? t('users.form.create')
+                        : t('users.form.save')}
                   </button>
                 </div>
               </form>
@@ -856,12 +890,12 @@ function AdminUsersPage() {
                    <div className="admin-divider" />
 
                    <div>
-                     <h2>Passwort zurücksetzen</h2>
+                     <h2>{t('users.resetPassword.title')}</h2>
 
                      <p className="muted">
-                       Das neue Passwort muss mindestens
-                       {' '}{passwordMinLength} Zeichen lang
-                       sein.
+                       {t('users.resetPassword.minLength', {
+                         count: passwordMinLength,
+                       })}
                      </p>
                    </div>
 
@@ -870,7 +904,7 @@ function AdminUsersPage() {
                      onSubmit={handlePasswordReset}
                    >
                      <label className="form-field">
-                       Neues Passwort
+                       {t('passwordFields.new')}
                        <input
                          type="password"
                          value={newPassword}
@@ -886,7 +920,7 @@ function AdminUsersPage() {
                      </label>
 
                      <label className="form-field">
-                       Passwort wiederholen
+                       {t('passwordFields.confirm')}
                        <input
                          type="password"
                          value={confirmPassword}
@@ -908,8 +942,8 @@ function AdminUsersPage() {
                          disabled={isResettingPassword}
                        >
                          {isResettingPassword
-                           ? 'Wird zurückgesetzt …'
-                           : 'Passwort zurücksetzen'}
+                           ? t('users.resetPassword.submitting')
+                           : t('users.resetPassword.title')}
                        </button>
                      </div>
                    </form>

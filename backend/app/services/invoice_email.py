@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
+from app.i18n import translate
 from app.models.invoice import Invoice
 from app.models.global_settings import GlobalSettings
 from app.services.invoice_archive import (
@@ -477,16 +478,15 @@ def send_smime_test_email(
 
 
 def create_subject(invoice: Invoice) -> str:
-    document_label = (
-        "Stornorechnung"
+    """Betreff in der Sprache der Rechnung."""
+    return translate(
+        invoice.language,
+        "email.subject.cancellation"
         if invoice.document_type == "cancellation"
-        else "Rechnung"
+        else "email.subject.invoice",
+        number=invoice.invoice_number,
     )
 
-    return (
-        f"{document_label} "
-        f"{invoice.invoice_number}"
-    )
 
 def create_body(
     invoice: Invoice,
@@ -494,28 +494,34 @@ def create_body(
     sender_name: str,
     portal_url: str | None = None,
 ) -> str:
-    document_label = (
-        "Ladestrom-Stornorechnung"
+    """Text in der Sprache der Rechnung."""
+    language = invoice.language
+    document = (
+        "cancellation"
         if invoice.document_type == "cancellation"
-        else "Ladestrom-Rechnung"
+        else "invoice"
     )
 
     delivery_text = (
-        f"Ihre {document_label} "
-        f"{invoice.invoice_number} steht im Portal zum "
-        "Download bereit:\n"
-        f"{portal_url}\n"
-        if portal_url is not None
-        else (
-            f"im Anhang erhalten Sie Ihre {document_label} "
-            f"{invoice.invoice_number} als PDF-Datei.\n"
+        translate(
+            language,
+            f"email.portal.{document}",
+            number=invoice.invoice_number,
         )
+        + f"\n{portal_url}\n"
+        if portal_url is not None
+        else translate(
+            language,
+            f"email.attachment.{document}",
+            number=invoice.invoice_number,
+        )
+        + "\n"
     )
 
     return (
-        "Guten Tag,\n\n"
+        f"{translate(language, 'email.greeting')}\n\n"
         f"{delivery_text}\n"
-        "Mit freundlichen Grüßen\n"
+        f"{translate(language, 'email.closing')}\n"
         f"{sender_name}\n"
     )
 

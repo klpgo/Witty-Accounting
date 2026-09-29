@@ -15,39 +15,37 @@ import {
 } from '../api/imports'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import type { I18nContextValue } from '../i18n/i18nContext'
+import { formatDate } from '../utils/dateFormat'
+import { formatNumber } from '../utils/numberFormat'
+import { useTranslation } from '../i18n/useTranslation'
 
 const MAX_UPLOAD_SIZE_BYTES =
   10 * 1024 * 1024
 
+type Translate = I18nContextValue['t']
+
+
 function validateFile(
   file: File,
+  t: Translate,
 ): string | null {
   if (getImportFileType(file.name) === null) {
-    return (
-      'Bitte wähle eine Datei mit der ' +
-      'Endung .xlsx oder .json aus.'
-    )
+    return t('import.file.invalidType')
   }
 
   if (file.size === 0) {
-    return 'Die ausgewählte Datei ist leer.'
+    return t('import.file.empty')
   }
 
   if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-    return (
-      'Die Datei ist zu groß. ' +
-      'Maximal erlaubt sind 10 MB.'
-    )
+    return t('import.file.tooLarge')
   }
 
   return null
 }
 
-function formatIsoDate(value: string): string {
-  const [year, month, day] = value.split('-')
 
-  return `${day}.${month}.${year}`
-}
 
 
 interface RfidIssueGroup {
@@ -58,6 +56,7 @@ interface RfidIssueGroup {
 
 function rfidIssueGroups(
   result: ImportResult,
+  t: Translate,
 ): RfidIssueGroup[] {
   const hasDetails =
     result.unknown_rfid_cards !== undefined ||
@@ -67,8 +66,8 @@ function rfidIssueGroups(
   if (!hasDetails) {
     return [
       {
-        title: 'Ohne Zuordnung',
-        hint: 'Für diese RFID-Nummern gab es keine gültige Kartenzuordnung.',
+        title: t('import.issue.none.title'),
+        hint: t('import.issue.none.hint'),
         numbers: result.unknown_rfid_numbers,
       },
     ]
@@ -76,25 +75,18 @@ function rfidIssueGroups(
 
   const groups: RfidIssueGroup[] = [
     {
-      title: 'Keine Benutzerzuordnung zum Ladezeitpunkt',
-      hint:
-        'Die Karte existiert, aber zum Zeitpunkt des Ladevorgangs ' +
-        'war keine Benutzerzuordnung gültig. Zuordnung mit ' +
-        'passendem „Gültig von“ anlegen.',
+      title: t('import.issue.noAssignment.title'),
+      hint: t('import.issue.noAssignment.hint'),
       numbers: result.unassigned_rfid_numbers ?? [],
     },
     {
-      title: 'Karte deaktiviert',
-      hint:
-        'Die Karte existiert, ist aber deaktiviert. ' +
-        'Karte aktivieren, falls die Ladevorgänge abgerechnet werden sollen.',
+      title: t('import.issue.inactive.title'),
+      hint: t('import.issue.inactive.hint'),
       numbers: result.inactive_rfid_cards ?? [],
     },
     {
-      title: 'Karte nicht angelegt',
-      hint:
-        'Diese RFID-Nummern sind in Witty unbekannt. ' +
-        'Karte anlegen und einem Benutzer zuordnen.',
+      title: t('import.issue.unknown.title'),
+      hint: t('import.issue.unknown.hint'),
       numbers: result.unknown_rfid_cards ?? [],
     },
   ]
@@ -102,20 +94,15 @@ function rfidIssueGroups(
   return groups.filter((group) => group.numbers.length > 0)
 }
 
+
 function formatFileSize(
   sizeBytes: number,
 ): string {
-  const sizeMegabytes =
-    sizeBytes / 1024 / 1024
-
-  return (
-    sizeMegabytes
-      .toFixed(2)
-      .replace('.', ',') + ' MB'
-  )
+  return `${formatNumber(sizeBytes / 1024 / 1024, 2)} MB`
 }
 
 function AdminImportPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -166,7 +153,7 @@ function AdminImportPage() {
     }
 
     const validationError =
-      validateFile(file)
+      validateFile(file, t)
 
     if (validationError !== null) {
       setSelectedFile(null)
@@ -189,13 +176,13 @@ function AdminImportPage() {
 
     if (selectedFile === null) {
       setErrorMessage(
-        'Bitte wähle zuerst eine Importdatei aus.',
+        t('import.file.missing'),
       )
       return
     }
 
     const validationError =
-      validateFile(selectedFile)
+      validateFile(selectedFile, t)
 
     if (validationError !== null) {
       setErrorMessage(validationError)
@@ -241,10 +228,7 @@ function AdminImportPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : (
-              'Die Datei konnte nicht ' +
-              'importiert werden.'
-            ),
+          : t('import.file.failed'),
       )
     } finally {
       setIsUploading(false)
@@ -261,7 +245,7 @@ function AdminImportPage() {
 
     if (hagerFrom && hagerTo && hagerFrom > hagerTo) {
       setErrorMessage(
-        'Das Startdatum liegt nach dem Enddatum.',
+        t('import.hager.rangeInvalid'),
       )
       return
     }
@@ -319,10 +303,7 @@ function AdminImportPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : (
-              'Die Ladevorgänge konnten nicht ' +
-              'aus der Hager Cloud abgerufen werden.'
-            ),
+          : t('import.hager.failed'),
       )
     } finally {
       setIsFetchingHager(false)
@@ -334,18 +315,13 @@ function AdminImportPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Administration
+            {t('common.administration')}
           </p>
 
-          <h1>Import</h1>
+          <h1>{t('import.title')}</h1>
 
           <p className="muted">
-            Ladevorgänge direkt aus der Hager Cloud
-            abrufen oder aus einer Datei (XLSX-Export
-            bzw. JSON aus hager-fetch) importieren.
-            Neue Ladevorgänge werden automatisch
-            bepreist, bereits vorhandene
-            übersprungen.
+            {t('import.intro')}
           </p>
         </div>
       </header>
@@ -364,22 +340,16 @@ function AdminImportPage() {
         onSubmit={handleHagerImport}
       >
         <div>
-          <h2>Abruf aus der Hager Cloud</h2>
+          <h2>{t('import.hager.title')}</h2>
 
           <p className="muted">
-            Ruft die Ladevorgänge direkt mit den
-            hinterlegten Zugangsdaten ab. Ohne
-            Zeitraum ab dem letzten erfolgreichen
-            Abruf (mit 3 Tagen Überlappung,
-            frühestens ab Abrechnungsbeginn);
-            bereits vorhandene Ladevorgänge werden
-            übersprungen.
+            {t('import.hager.intro')}
           </p>
         </div>
 
         <div className="form-grid">
           <label className="form-field">
-            <span>Von (optional)</span>
+            <span>{t('import.hager.from')}</span>
             <input
               type="date"
               value={hagerFrom}
@@ -391,7 +361,7 @@ function AdminImportPage() {
           </label>
 
           <label className="form-field">
-            <span>Bis (optional)</span>
+            <span>{t('import.hager.to')}</span>
             <input
               type="date"
               value={hagerTo}
@@ -412,8 +382,7 @@ function AdminImportPage() {
               setHagerFetchAll(event.target.checked)
             }}
           />
-          Alle Ladevorgänge ab Abrechnungsbeginn abrufen
-          (vollständiger Abgleich, dauert länger)
+          {t('import.hager.all')}
         </label>
 
         <div className="form-actions">
@@ -423,8 +392,8 @@ function AdminImportPage() {
             disabled={isBusy}
           >
             {isFetchingHager
-              ? 'Ladevorgänge werden abgerufen …'
-              : 'Jetzt aus der Hager Cloud abrufen'}
+              ? t('import.hager.submitting')
+              : t('import.hager.submit')}
           </button>
         </div>
       </form>
@@ -434,16 +403,15 @@ function AdminImportPage() {
         onSubmit={handleSubmit}
       >
         <div>
-          <h2>Import aus Datei</h2>
+          <h2>{t('import.file.title')}</h2>
 
           <p className="muted">
-            Unterstützt werden XLSX- und
-            JSON-Dateien bis maximal 10 MB.
+            {t('import.file.intro')}
           </p>
         </div>
 
         <label className="form-field">
-          <span>Datei auswählen</span>
+          <span>{t('import.file.choose')}</span>
 
           <input
             type="file"
@@ -482,8 +450,8 @@ function AdminImportPage() {
             }
           >
             {isUploading
-              ? 'Datei wird importiert …'
-              : 'Datei importieren'}
+              ? t('import.file.submitting')
+              : t('import.file.submit')}
           </button>
         </div>
       </form>
@@ -495,42 +463,42 @@ function AdminImportPage() {
         >
           <div className="import-result-header">
             <p className="eyebrow">
-              Import abgeschlossen
+              {t('import.result.eyebrow')}
             </p>
 
-            <h2>Importergebnis</h2>
+            <h2>{t('import.result.title')}</h2>
           </div>
 
           <dl className="import-result-grid">
             <div>
-              <dt>Gelesen</dt>
+              <dt>{t('import.result.read')}</dt>
               <dd>{importResult.read}</dd>
             </div>
 
             <div>
-              <dt>Neu importiert</dt>
+              <dt>{t('import.result.imported')}</dt>
               <dd>{importResult.imported}</dd>
             </div>
 
             <div>
-              <dt>Übersprungen</dt>
+              <dt>{t('import.result.skipped')}</dt>
               <dd>{importResult.skipped}</dd>
             </div>
 
             <div>
-              <dt>Bepreist</dt>
+              <dt>{t('import.result.priced')}</dt>
               <dd>{importResult.priced}</dd>
             </div>
 
             <div>
-              <dt>Ohne Preis</dt>
+              <dt>{t('import.result.missingPrice')}</dt>
               <dd>
                 {importResult.missing_price}
               </dd>
             </div>
 
             <div>
-              <dt>Ungültige Energie</dt>
+              <dt>{t('import.result.invalidEnergy')}</dt>
               <dd>
                 {importResult.invalid_energy}
               </dd>
@@ -538,7 +506,7 @@ function AdminImportPage() {
 
             <div>
               <dt>
-                Ohne Kartenzuordnung
+                {t('import.result.unassigned')}
               </dt>
               <dd>
                 {
@@ -552,38 +520,40 @@ function AdminImportPage() {
           {resultFromHager && (
             <p className="muted">
               {importResult.fetched_from
-                ? `Aus der Hager Cloud abgerufen ab ${formatIsoDate(
-                    importResult.fetched_from,
-                  )}.`
-                : 'Alle Ladevorgänge aus der Hager Cloud abgerufen.'}
+                ? t('import.result.fetchedFrom', {
+                    date: formatDate(importResult.fetched_from),
+                  })
+                : t('import.result.fetchedAll')}
             </p>
           )}
 
           {((importResult.skipped_before_billing_start ?? 0) > 0 ||
             (importResult.skipped_empty ?? 0) > 0) && (
             <p className="muted">
-              Nicht übernommen:
-              {(importResult.skipped_before_billing_start ?? 0) > 0 &&
-                ` ${importResult.skipped_before_billing_start} vor dem Abrechnungsbeginn`}
-              {(importResult.skipped_before_billing_start ?? 0) > 0 &&
-                (importResult.skipped_empty ?? 0) > 0 &&
-                ','}
-              {(importResult.skipped_empty ?? 0) > 0 &&
-                ` ${importResult.skipped_empty} ohne Energie (0 kWh)`}
-              .
+              {t('import.result.notTaken', {
+                items: [
+                  (importResult.skipped_before_billing_start ?? 0) > 0
+                    ? t('import.result.beforeBillingStart', {
+                        count: importResult.skipped_before_billing_start ?? 0,
+                      })
+                    : null,
+                  (importResult.skipped_empty ?? 0) > 0
+                    ? t('import.result.withoutEnergy', {
+                        count: importResult.skipped_empty ?? 0,
+                      })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+              })}
             </p>
           )}
 
           {(importResult.reassigned_sessions ?? 0) > 0 && (
             <p className="form-success" role="status">
-              {importResult.reassigned_sessions} ältere
-              {' '}
-              {importResult.reassigned_sessions === 1
-                ? 'Ladevorgang wurde'
-                : 'Ladevorgänge wurden'}
-              {' '}
-              nachträglich einer Kartenzuordnung
-              zugeordnet.
+              {t('import.result.reassigned', {
+                count: importResult.reassigned_sessions ?? 0,
+              })}
             </p>
           )}
 
@@ -592,24 +562,17 @@ function AdminImportPage() {
             .length > 0 && (
             <div className="import-warning">
               <h3>
-                Nicht zugeordnete RFID-Karten
+                {t('import.result.unassignedTitle')}
               </h3>
 
               <p>
-                {importResult.unknown_rfid_sessions}
-                {' '}
-                {importResult.unknown_rfid_sessions === 1
-                  ? 'Ladevorgang konnte'
-                  : 'Ladevorgänge konnten'}
-                {' '}
-                keinem Benutzer zugeordnet werden.
-                Die RFID-Nummern sind gespeichert:
-                Sobald die Ursache behoben ist, werden
-                nicht abgerechnete Ladevorgänge
-                automatisch nachträglich zugeordnet.
+                {t('import.result.unassignedText', {
+                  count: importResult.unknown_rfid_sessions,
+                })}{' '}
+                {t('import.result.unassignedHint')}
               </p>
 
-              {rfidIssueGroups(importResult).map(
+              {rfidIssueGroups(importResult, t).map(
                 (group) => (
                   <div key={group.title}>
                     <h4>{group.title}</h4>

@@ -13,8 +13,10 @@ import {
 } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { useTranslation } from '../i18n/useTranslation'
 
 function AdminAccessSettingsForm() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -94,7 +96,7 @@ function AdminAccessSettingsForm() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Zugriffseinstellungen konnten nicht geladen werden.',
+            : t('settings.access.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -146,7 +148,7 @@ function AdminAccessSettingsForm() {
       )
 
       setSuccessMessage(
-        'Die Zugriffseinstellungen wurden gespeichert.',
+        t('settings.access.saved'),
       )
     } catch (error) {
       if (
@@ -160,7 +162,7 @@ function AdminAccessSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Zugriffseinstellungen konnten nicht gespeichert werden.',
+          : t('settings.access.saveFailed'),
       )
     } finally {
       setIsSaving(false)
@@ -171,7 +173,7 @@ function AdminAccessSettingsForm() {
     return (
       <section className="card">
         <p className="muted">
-          Zugriffseinstellungen werden geladen …
+          {t('settings.access.loading')}
         </p>
       </section>
     )
@@ -184,12 +186,10 @@ function AdminAccessSettingsForm() {
     >
       <section className="settings-section">
         <div>
-          <h2>Dashboard und Zugriff</h2>
+          <h2>{t('settings.access.title')}</h2>
 
           <p className="muted">
-            Die Notiz wird allen angemeldeten Benutzern
-            auf dem Dashboard angezeigt. Im Wartungsmodus
-            können sich nur Administratoren neu anmelden.
+            {t('settings.access.intro')}
           </p>
         </div>
 
@@ -212,7 +212,7 @@ function AdminAccessSettingsForm() {
         )}
 
         <label className="form-field settings-checkbox-field">
-          <span>Wartungsmodus</span>
+          <span>{t('settings.access.maintenance')}</span>
 
           <span className="settings-checkbox-control">
             <input
@@ -225,17 +225,17 @@ function AdminAccessSettingsForm() {
               }}
             />
 
-            Anmeldung nur für Administratoren erlauben
+            {t('settings.access.maintenanceHint')}
           </span>
         </label>
 
         <label className="form-field">
-          Notiz an die Benutzer
+          {t('settings.access.note')}
           <textarea
             value={dashboardNote}
             maxLength={4000}
             rows={6}
-            placeholder="Zum Beispiel: Die nächste Abrechnung erfolgt am 15. August."
+            placeholder={t('settings.access.notePlaceholder')}
             onChange={(event) => {
               setDashboardNote(
                 event.target.value,
@@ -244,8 +244,7 @@ function AdminAccessSettingsForm() {
           />
 
           <span className="form-hint">
-            Leer lassen, wenn derzeit keine Nachricht
-            angezeigt werden soll.
+            {t('settings.access.noteHint')}
           </span>
         </label>
       </section>
@@ -257,8 +256,8 @@ function AdminAccessSettingsForm() {
           disabled={isSaving}
         >
           {isSaving
-            ? 'Dashboard wird gespeichert …'
-            : 'Dashboard und Zugriff speichern'}
+            ? t('settings.access.saving')
+            : t('settings.access.save')}
         </button>
       </div>
     </form>

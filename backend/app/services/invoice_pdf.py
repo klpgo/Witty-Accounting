@@ -29,6 +29,7 @@ from reportlab.platypus import (
 from reportlab.pdfgen import canvas as pdf_canvas
 
 from app.models.invoice import Invoice
+from app.i18n import DEFAULT_LANGUAGE, normalize_language, translate
 from app.utils import locale_format
 from app.services.invoice_girocode import (
     GirocodeError,
@@ -57,6 +58,15 @@ _pdf_currency: ContextVar[str] = ContextVar(
     "pdf_currency",
     default=locale_format.DEFAULT_CURRENCY,
 )
+_pdf_language: ContextVar[str] = ContextVar(
+    "pdf_language",
+    default=DEFAULT_LANGUAGE,
+)
+
+
+def _t(key: str, **params: object) -> str:
+    """Text in der Sprache des gerade erzeugten PDFs."""
+    return translate(_pdf_language.get(), key, **params)
 
 
 def format_decimal(
@@ -220,10 +230,10 @@ class InvoiceCanvas(pdf_canvas.Canvas):
             colors.HexColor("#666666")
         )
     
-        footer_document_label = (
-            "Elektronisch erstellter Stornobeleg"
+        footer_document_label = _t(
+            "pdf.footer.cancellation"
             if self.is_cancellation
-            else "Elektronisch erstellte Rechnung"
+            else "pdf.footer.invoice"
         )
         self.drawString(
             18 * mm,
@@ -235,9 +245,10 @@ class InvoiceCanvas(pdf_canvas.Canvas):
             self.drawRightString(
                 A4[0] - 18 * mm,
                 10 * mm,
-                (
-                    f"Seite {self._pageNumber} "
-                    f"von {page_count}"
+                _t(
+                    "pdf.page",
+                    page=self._pageNumber,
+                    pages=page_count,
                 ),
             )
 
@@ -251,7 +262,7 @@ def build_invoice_pdf(
     issuer_email: str | None = None,
 ) -> bytes:
     """
-    Erzeugt das PDF im Gebietsschema und in der Währung der Rechnung.
+    Erzeugt das PDF in Sprache, Gebietsschema und Währung der Rechnung.
     Beides wird beim Anlegen der Rechnung festgehalten, damit ein später
     erneut erzeugtes PDF der ursprünglichen Rechnung entspricht. Ältere
     Rechnungen ohne Gebietsschema erscheinen wie bisher in de-DE.
@@ -262,6 +273,9 @@ def build_invoice_pdf(
     currency_token = _pdf_currency.set(
         invoice.currency or locale_format.DEFAULT_CURRENCY
     )
+    language_token = _pdf_language.set(
+        normalize_language(getattr(invoice, "language", None))
+    )
 
     try:
         return _build_invoice_pdf(
@@ -270,6 +284,7 @@ def build_invoice_pdf(
             issuer_email=issuer_email,
         )
     finally:
+        _pdf_language.reset(language_token)
         _pdf_currency.reset(currency_token)
         _pdf_locale.reset(locale_token)
 
@@ -416,34 +431,34 @@ def _build_invoice_pdf(
         invoice.document_type == "cancellation"
     )
 
-    header_title_text = (
-        "Ladestromrechnung – Storno"
+    header_title_text = _t(
+        "pdf.title.cancellation"
         if is_cancellation
-        else "Ladestromrechnung"
+        else "pdf.title.invoice"
     )
 
-    issue_date_label = (
-        "Stornodatum"
+    issue_date_label = _t(
+        "pdf.cancellationDate"
         if is_cancellation
-        else "Rechnungsdatum"
+        else "pdf.invoiceDate"
     )
 
-    document_number_label = (
-        "Stornonummer"
+    document_number_label = _t(
+        "pdf.cancellationNumber"
         if is_cancellation
-        else "Rechnungsnummer"
+        else "pdf.invoiceNumber"
     )
 
-    total_label = (
-        "Stornobetrag"
+    total_label = _t(
+        "pdf.cancellationAmount"
         if is_cancellation
-        else "Rechnungsbetrag"
+        else "pdf.invoiceAmount"
     )
 
-    payment_heading = (
-        "Hinweis"
+    payment_heading = _t(
+        "pdf.note"
         if is_cancellation
-        else "Zahlungsbedingung"
+        else "pdf.paymentTerms"
     )
 
     issuer_identifiers: list[str] = []
@@ -515,13 +530,13 @@ def _build_invoice_pdf(
 
     if invoice.issuer_tax_number:
         tax_lines.append(
-            "Steuernummer: "
+            _t("pdf.taxNumber")
             + escape(invoice.issuer_tax_number)
         )
 
     if invoice.issuer_vat_id:
         tax_lines.append(
-            "USt-IdNr.: "
+            _t("pdf.vatId")
             + escape(invoice.issuer_vat_id)
         )
 
@@ -724,7 +739,7 @@ def _build_invoice_pdf(
                 invoice.invoice_number,
             ),
             meta_field(
-                "Leistungszeitraum",
+                _t("pdf.servicePeriod"),
                 service_period_text,
             ),
             meta_field(
@@ -778,11 +793,11 @@ def _build_invoice_pdf(
         metadata.append(
             [
                 meta_field(
-                    "Originalrechnung",
+                    _t("pdf.originalInvoice"),
                     original_number or "-",
                 ),
                 meta_field(
-                    "Stornierungsgrund",
+                    _t("pdf.cancellationReason"),
                     invoice.cancellation_reason or "-",
                 ),
                 "",
@@ -870,47 +885,47 @@ def _build_invoice_pdf(
     item_rows: list[list[object]] = [
         [
             Paragraph(
-                "Pos.",
+                _t("pdf.col.position"),
                 table_header_style,
             ),
             Paragraph(
-                "Datum",
+                _t("pdf.col.date"),
                 table_header_style,
             ),
             Paragraph(
-                "WB",
+                _t("pdf.col.station"),
                 table_header_style,
             ),
             Paragraph(
-                "Gesamt<br/>kWh",
+                _t("pdf.col.energyTotal"),
                 table_header_style,
             ),
             Paragraph(
-                "Netz<br/>kWh",
+                _t("pdf.col.energyGrid"),
                 table_header_style,
             ),
             Paragraph(
-                "PV<br/>kWh",
+                _t("pdf.col.energyPv"),
                 table_header_style,
             ),
             Paragraph(
-                "Netzpreis<br/>EUR/kWh",
+                _t("pdf.col.gridPrice", currency=_pdf_currency.get()),
                 table_header_style,
             ),
             Paragraph(
-                "PV-Preis<br/>EUR/kWh",
+                _t("pdf.col.pvPrice", currency=_pdf_currency.get()),
                 table_header_style,
             ),
             Paragraph(
-                "Netto<br/>EUR",
+                _t("pdf.col.net", currency=_pdf_currency.get()),
                 table_header_style,
             ),
             Paragraph(
-                "USt.<br/>%",
+                _t("pdf.col.vat"),
                 table_header_style,
             ),
             Paragraph(
-                "Brutto<br/>EUR",
+                _t("pdf.col.gross", currency=_pdf_currency.get()),
                 table_header_style,
             ),
         ]
@@ -1166,11 +1181,11 @@ def _build_invoice_pdf(
     totals_table = Table(
         [
             [
-                "Nettobetrag",
+                _t("pdf.totals.net"),
                 format_money(invoice.total_net),
             ],
             [
-                "Umsatzsteuer",
+                _t("pdf.totals.vat"),
                 format_money(invoice.vat_amount),
             ],
             [
@@ -1236,12 +1251,7 @@ def _build_invoice_pdf(
     )
 
     if invoice.document_type == "cancellation":
-        payment_text = (
-            "Dieser Stornobeleg hebt die "
-            "zugehörige Rechnung vollständig auf. "
-            "Für den Stornobeleg besteht kein "
-            "Zahlungsziel."
-        )
+        payment_text = _t("pdf.payment.cancellation")
     else:
         if invoice.due_date is None:
             raise InvoicePdfError(
@@ -1253,19 +1263,15 @@ def _build_invoice_pdf(
         ).days
 
         if payment_term_days == 0:
-            payment_text = (
-                "Der Rechnungsbetrag ist sofort "
-                "(bis "
-                f"{format_date(invoice.due_date)}"
-                ") ohne Abzug fällig."
+            payment_text = _t(
+                "pdf.payment.immediately",
+                date=format_date(invoice.due_date),
             )
         else:
-            payment_text = (
-                "Der Rechnungsbetrag ist innerhalb "
-                f"von {payment_term_days} Tagen "
-                "(bis "
-                f"{format_date(invoice.due_date)}"
-                ") ohne Abzug fällig."
+            payment_text = _t(
+                "pdf.payment.inDays",
+                days=payment_term_days,
+                date=format_date(invoice.due_date),
             )
 
     payment_details: list[object] = [
@@ -1305,7 +1311,7 @@ def _build_invoice_pdf(
                 [
                     "",
                     Paragraph(
-                        "Für Ihre Banking-App",
+                        _t("pdf.girocodeCaption"),
                         caption_style,
                     ),
                 ],
@@ -1349,16 +1355,10 @@ def _build_invoice_pdf(
         story.append(Spacer(1, 7 * mm))
         story.extend(payment_details)
 
-    footer_text = (
-        (
-            "Bitte bewahren Sie diesen Stornobeleg "
-            "zusammen mit der Originalrechnung auf."
-        )
+    footer_text = _t(
+        "pdf.closing.cancellation"
         if is_cancellation
-        else (
-            "Vielen Dank. Bitte bewahren Sie diese "
-            "Rechnung für Ihre Unterlagen auf."
-        )
+        else "pdf.closing.invoice"
     )
 
     story.append(

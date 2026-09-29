@@ -460,3 +460,40 @@ def test_pdf_locale_does_not_leak_into_next_pdf() -> None:
     german.locale = None
 
     assert "2,62 EUR" in extract_text(german)
+
+
+def test_invoice_in_english_language() -> None:
+    invoice = create_finalized_invoice()
+    invoice.language = "en"
+    invoice.locale = "en-GB"
+
+    text = extract_text(invoice)
+
+    assert "Charging invoice" in text
+    assert "Invoice number" in text
+    assert "Service period" in text
+    assert "Net amount" in text
+    assert "EUR 2.62" in text
+    assert "Rechnungsnummer" not in text
+
+
+def test_invoice_without_language_stays_german() -> None:
+    invoice = create_finalized_invoice()
+    invoice.language = None
+
+    text = extract_text(invoice)
+
+    assert "Ladestromrechnung" in text
+    assert "Rechnungsnummer" in text
+    assert "Nettobetrag" in text
+
+
+def test_column_headers_use_invoice_currency() -> None:
+    invoice = create_finalized_invoice()
+    invoice.currency = "CHF"
+    invoice.locale = "de-CH"
+
+    text = extract_text(invoice)
+
+    assert "CHF/kWh" in text
+    assert "EUR/kWh" not in text

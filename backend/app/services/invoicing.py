@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.i18n import normalize_language, translate
+from app.utils import locale_format
 from app.models.charging_session import ChargingSession
 from app.models.energy_price import EnergyPrice
 from app.models.invoice import Invoice, InvoiceItem
@@ -27,21 +29,6 @@ from app.config import settings
 FOUR_DECIMALS = Decimal("0.0001")
 CENT = Decimal("0.01")
 HUNDRED = Decimal("100")
-MONTH_NAMES_DE = (
-    "",
-    "Januar",
-    "Februar",
-    "März",
-    "April",
-    "Mai",
-    "Juni",
-    "Juli",
-    "August",
-    "September",
-    "Oktober",
-    "November",
-    "Dezember",
-)
 
 
 def normalize_optional_text(
@@ -232,7 +219,10 @@ def _next_month_start(value: datetime) -> datetime:
     )
 
 
-def format_billed_days(value: Decimal) -> str:
+def format_billed_days(
+    value: Decimal,
+    locale: str | None = None,
+) -> str:
     normalized = value.quantize(
         FOUR_DECIMALS,
         rounding=ROUND_HALF_UP,
@@ -240,7 +230,7 @@ def format_billed_days(value: Decimal) -> str:
 
     return format(normalized, "f").replace(
         ".",
-        ",",
+        locale_format.locale_format(locale).decimal_separator,
     )
 
 
@@ -884,6 +874,11 @@ def create_invoice_draft(
         locale=(
             getattr(global_settings, "locale", None) or "de-DE"
         ),
+        # Sprache des Empfängers, ersatzweise Standardsprache des Mandanten
+        language=normalize_language(
+            user.language
+            or getattr(global_settings, "default_language", None)
+        ),
         total_net=Decimal("0.00"),
         vat_amount=Decimal("0.00"),
         total_gross=Decimal("0.00"),
@@ -1012,10 +1007,17 @@ def create_invoice_draft(
                 reversed_invoice_item_id=None,
                 rebills_invoice_item_id=rebill_source_item_id,
                 position_number=position_number,
-                description=(
-                    "Ladevorgang "
-                    f"{charging_session.start_time:%d.%m.%Y %H:%M} "
-                    f"an {charging_session.station_id}"
+                description=translate(
+                    invoice.language,
+                    "item.chargingSession",
+                    start=(
+                        locale_format.format_date(
+                            charging_session.start_time.date(),
+                            invoice.locale,
+                        )
+                        + f" {charging_session.start_time:%H:%M}"
+                    ),
+                    station=charging_session.station_id,
                 ),
                 session_start=(
                     charging_session.start_time
@@ -1104,18 +1106,23 @@ def create_invoice_draft(
                 card.description
                 or card.rfid_number
             )
-            month_name = MONTH_NAMES_DE[
-                candidate.fee_month.month
-            ]
+            month_name = translate(
+                invoice.language,
+                f"month.{candidate.fee_month.month}",
+            )
             proration_suffix = ""
 
             if candidate.billed_days != Decimal(
                 candidate.days_in_month
             ):
-                proration_suffix = (
-                    " (anteilig "
-                    f"{format_billed_days(candidate.billed_days)}"
-                    f"/{candidate.days_in_month} Tage)"
+                proration_suffix = translate(
+                    invoice.language,
+                    "item.proration",
+                    days=format_billed_days(
+                        candidate.billed_days,
+                        invoice.locale,
+                    ),
+                    total=candidate.days_in_month,
                 )
 
             db.add(
@@ -1131,12 +1138,13 @@ def create_invoice_draft(
                         candidate.rebill_source_item_id
                     ),
                     position_number=position_number,
-                    description=(
-                        "Monatsgebühr Ladekarte "
-                        f"{card_label} - "
-                        f"{month_name} "
-                        f"{candidate.fee_month.year}"
-                        f"{proration_suffix}"
+                    description=translate(
+                        invoice.language,
+                        "item.monthlyFee",
+                        card=card_label,
+                        month=month_name,
+                        year=candidate.fee_month.year,
+                        proration=proration_suffix,
                     ),
                     session_start=None,
                     session_end=None,
@@ -1217,7 +1225,10 @@ def create_invoice_draft(
                         + len(charging_sessions)
                         + 1
                     ),
-                    description="Briefporto",
+                    description=translate(
+                        invoice.language,
+                        "item.postage",
+                    ),
                     session_start=None,
                     session_end=None,
                     station_id=None,

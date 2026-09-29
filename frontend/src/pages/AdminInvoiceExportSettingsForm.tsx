@@ -14,9 +14,11 @@ import {
 } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { useTranslation } from '../i18n/useTranslation'
 
 
 function AdminInvoiceExportSettingsForm() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -101,7 +103,7 @@ function AdminInvoiceExportSettingsForm() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die SFTP-Einstellungen konnten nicht geladen werden.',
+            : t('settings.export.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -132,7 +134,7 @@ function AdminInvoiceExportSettingsForm() {
 
     if (!normalizedHost) {
       setErrorMessage(
-        'Der SFTP-Host darf nicht leer sein.',
+        t('settings.export.hostMissing'),
       )
       return
     }
@@ -143,21 +145,21 @@ function AdminInvoiceExportSettingsForm() {
       portNumber > 65535
     ) {
       setErrorMessage(
-        'Der SFTP-Port muss zwischen 1 und 65535 liegen.',
+        t('settings.export.portRange'),
       )
       return
     }
 
     if (!normalizedUsername) {
       setErrorMessage(
-        'Der SFTP-Benutzer darf nicht leer sein.',
+        t('settings.export.userMissing'),
       )
       return
     }
 
     if (!normalizedDirectory.startsWith('/')) {
       setErrorMessage(
-        'Das Zielverzeichnis muss ein absoluter Pfad sein.',
+        t('settings.export.directoryAbsolute'),
       )
       return
     }
@@ -167,7 +169,7 @@ function AdminInvoiceExportSettingsForm() {
       (!privateKeyConfigured || !knownHostsConfigured)
     ) {
       setErrorMessage(
-        'Vor dem Aktivieren müssen privater Schlüssel und known_hosts eingerichtet sein.',
+        t('settings.export.keysMissing'),
       )
       return
     }
@@ -196,7 +198,7 @@ function AdminInvoiceExportSettingsForm() {
 
       applySettings(updatedSettings)
       setSuccessMessage(
-        'Die SFTP-Exporteinstellungen wurden gespeichert.',
+        t('settings.export.saved'),
       )
     } catch (error) {
       if (
@@ -210,7 +212,7 @@ function AdminInvoiceExportSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die SFTP-Einstellungen konnten nicht gespeichert werden.',
+          : t('settings.export.saveFailed'),
       )
     } finally {
       setIsSaving(false)
@@ -235,7 +237,10 @@ function AdminInvoiceExportSettingsForm() {
       )
 
       setSuccessMessage(
-        `SFTP-Verbindung zu ${result.host} und Zugriff auf ${result.directory} erfolgreich.`,
+        t('settings.export.testSucceeded', {
+          host: result.host,
+          directory: result.directory,
+        }),
       )
     } catch (error) {
       if (
@@ -249,7 +254,7 @@ function AdminInvoiceExportSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die SFTP-Verbindung konnte nicht getestet werden.',
+          : t('settings.export.testFailed'),
       )
     } finally {
       setIsTesting(false)
@@ -260,7 +265,7 @@ function AdminInvoiceExportSettingsForm() {
     return (
       <section className="card">
         <p className="muted">
-          SFTP-Einstellungen werden geladen …
+          {t('settings.export.loading')}
         </p>
       </section>
     )
@@ -273,13 +278,10 @@ function AdminInvoiceExportSettingsForm() {
     >
       <section className="settings-section">
         <div>
-          <h2>Rechnungsexport per SFTP</h2>
+          <h2>{t('settings.export.title')}</h2>
 
           <p className="muted">
-            Finalisierte, archivierte PDF-Rechnungen
-            können vom Rechnungsdialog aus manuell
-            exportiert werden. Auf dem Zielserver wird
-            automatisch ein Jahresverzeichnis angelegt.
+            {t('settings.export.intro')}
           </p>
         </div>
 
@@ -304,12 +306,12 @@ function AdminInvoiceExportSettingsForm() {
             }}
           />
 
-          <span>SFTP-Rechnungsexport aktivieren</span>
+          <span>{t('settings.export.enable')}</span>
         </label>
 
         <div className="form-grid settings-business-grid">
           <label className="form-field">
-            <span>SFTP-Host</span>
+            <span>{t('settings.export.host')}</span>
             <input
               type="text"
               value={host}
@@ -322,7 +324,7 @@ function AdminInvoiceExportSettingsForm() {
           </label>
 
           <label className="form-field">
-            <span>Port</span>
+            <span>{t('settings.export.port')}</span>
             <input
               type="number"
               min="1"
@@ -337,7 +339,7 @@ function AdminInvoiceExportSettingsForm() {
           </label>
 
           <label className="form-field">
-            <span>Benutzer</span>
+            <span>{t('settings.export.user')}</span>
             <input
               type="text"
               value={username}
@@ -351,7 +353,7 @@ function AdminInvoiceExportSettingsForm() {
           </label>
 
           <label className="form-field settings-wide-field">
-            <span>Zielverzeichnis</span>
+            <span>{t('settings.export.directory')}</span>
             <input
               type="text"
               value={directory}
@@ -367,27 +369,25 @@ function AdminInvoiceExportSettingsForm() {
 
         <div className="settings-secret-status">
           <p>
-            Privater Schlüssel:{' '}
+            {t('settings.export.privateKey', { status: '' })}
             <strong>
               {privateKeyConfigured
-                ? 'eingerichtet'
-                : 'nicht eingerichtet'}
+                ? t('settings.common.configured')
+                : t('settings.common.notConfigured')}
             </strong>
           </p>
           <p>
-            known_hosts:{' '}
+            {t('settings.export.knownHosts', { status: '' })}
             <strong>
               {knownHostsConfigured
-                ? 'eingerichtet'
-                : 'nicht eingerichtet'}
+                ? t('settings.common.configured')
+                : t('settings.common.notConfigured')}
             </strong>
           </p>
         </div>
 
         <p className="muted">
-          Der private Schlüssel und known_hosts werden
-          aus read-only Dateien im Container gelesen und
-          niemals in der Datenbank gespeichert.
+          {t('settings.export.keysHint')}
         </p>
       </section>
 
@@ -398,8 +398,8 @@ function AdminInvoiceExportSettingsForm() {
           disabled={isSaving || isTesting}
         >
           {isSaving
-            ? 'SFTP-Einstellungen werden gespeichert …'
-            : 'SFTP-Einstellungen speichern'}
+            ? t('settings.export.saving')
+            : t('settings.export.save')}
         </button>
 
         <button
@@ -415,8 +415,8 @@ function AdminInvoiceExportSettingsForm() {
           }}
         >
           {isTesting
-            ? 'Verbindung wird getestet …'
-            : 'Verbindung testen'}
+            ? t('settings.common.testingConnection')
+            : t('settings.common.testConnection')}
         </button>
       </div>
     </form>

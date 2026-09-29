@@ -21,6 +21,8 @@ import {
   getDisplayTimeZone,
 } from '../utils/dateFormat'
 import { useAuth } from '../auth/useAuth'
+import type { MessageKey } from '../i18n/de'
+import { useTranslation } from '../i18n/useTranslation'
 
 
 function formatLocalDateTime(
@@ -41,7 +43,10 @@ function formatLocalDateTime(
 }
 
 
-function formatTimestamp(value: string | null): string | null {
+function formatTimestamp(
+  value: string | null,
+  timeSuffix: string,
+): string | null {
   if (!value) {
     return null
   }
@@ -60,19 +65,20 @@ function formatTimestamp(value: string | null): string | null {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    }) + ' Uhr'
+    }) + timeSuffix
   )
 }
 
 
-const STATUS_LABELS: Record<HagerAutoImportStatus, string> = {
-  running: 'läuft',
-  success: 'erfolgreich',
-  error: 'fehlgeschlagen',
+const STATUS_KEYS: Record<HagerAutoImportStatus, MessageKey> = {
+  running: 'settings.autoImport.status.running',
+  success: 'settings.autoImport.status.success',
+  error: 'settings.autoImport.status.error',
 }
 
 
 function AdminHagerSettingsForm() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -164,7 +170,7 @@ function AdminHagerSettingsForm() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Hager-Einstellungen konnten nicht geladen werden.',
+            : t('settings.hager.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -196,7 +202,7 @@ function AdminHagerSettingsForm() {
       !/^\d+$/.test(normalizedInstallationId)
     ) {
       setErrorMessage(
-        'Die Installations-ID besteht nur aus Ziffern.',
+        t('settings.hager.installationDigits'),
       )
       return
     }
@@ -206,7 +212,7 @@ function AdminHagerSettingsForm() {
       !/^\d+$/.test(normalizedSerialNumber)
     ) {
       setErrorMessage(
-        'Die Seriennummer besteht nur aus Ziffern.',
+        t('settings.hager.serialDigits'),
       )
       return
     }
@@ -219,14 +225,14 @@ function AdminHagerSettingsForm() {
       intervalHours > 24
     ) {
       setErrorMessage(
-        'Das Intervall muss zwischen 1 und 24 Stunden liegen.',
+        t('settings.hager.intervalRange'),
       )
       return
     }
 
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(autoStartTime)) {
       setErrorMessage(
-        'Bitte eine gültige Startzeit (HH:MM) angeben.',
+        t('settings.hager.startTimeInvalid'),
       )
       return
     }
@@ -264,7 +270,7 @@ function AdminHagerSettingsForm() {
         ),
       )
       setSuccessMessage(
-        'Die Hager-Zugangsdaten wurden gespeichert.',
+        t('settings.hager.saved'),
       )
     } catch (error) {
       if (
@@ -278,7 +284,7 @@ function AdminHagerSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Hager-Einstellungen konnten nicht gespeichert werden.',
+          : t('settings.hager.saveFailed'),
       )
     } finally {
       setIsSaving(false)
@@ -304,13 +310,17 @@ function AdminHagerSettingsForm() {
       )
 
       setSuccessMessage(
-        'Verbindung zur Hager Cloud erfolgreich' +
-          (result.sessions !== null
-            ? `: ${result.sessions} Ladevorgänge verfügbar`
-            : '') +
-          (latest
-            ? `. Neuester Ladevorgang vom ${latest}.`
-            : '. Noch keine Ladevorgänge vorhanden.'),
+        [
+          t('settings.hager.testSucceeded'),
+          result.sessions !== null
+            ? t('settings.hager.testSessions', { count: result.sessions })
+            : null,
+          latest
+            ? t('settings.hager.testLatest', { date: latest })
+            : t('settings.hager.testNoSessions'),
+        ]
+          .filter(Boolean)
+          .join(' '),
       )
     } catch (error) {
       if (
@@ -324,7 +334,7 @@ function AdminHagerSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Verbindung zur Hager Cloud konnte nicht getestet werden.',
+          : t('settings.hager.testFailed'),
       )
     } finally {
       setIsTesting(false)
@@ -335,7 +345,7 @@ function AdminHagerSettingsForm() {
     return (
       <section className="card">
         <p className="muted">
-          Hager-Einstellungen werden geladen …
+          {t('settings.hager.loading')}
         </p>
       </section>
     )
@@ -348,13 +358,10 @@ function AdminHagerSettingsForm() {
     >
       <section className="settings-section">
         <div>
-          <h2>Hager Cloud</h2>
+          <h2>{t('settings.hager.title')}</h2>
 
           <p className="muted">
-            Zugangsdaten für die Hager Cloud,
-            aus der die Ladevorgänge abgerufen werden.
-            Das Passwort wird verschlüsselt gespeichert
-            und nie wieder angezeigt.
+            {t('settings.hager.intro')}
           </p>
         </div>
 
@@ -372,7 +379,7 @@ function AdminHagerSettingsForm() {
 
         <div className="form-grid settings-business-grid">
           <label className="form-field">
-            <span>Benutzername (E-Mail)</span>
+            <span>{t('settings.hager.username')}</span>
             <input
               type="text"
               value={username}
@@ -386,7 +393,7 @@ function AdminHagerSettingsForm() {
 
           <div className="form-field settings-password-field">
             <span id="hager-password-label">
-              Passwort
+              {t('settings.hager.password')}
             </span>
 
             <input
@@ -402,8 +409,8 @@ function AdminHagerSettingsForm() {
 
             <small className="muted">
               {passwordConfigured
-                ? 'Ein Passwort ist gespeichert. Leer lassen, um es beizubehalten.'
-                : 'Es ist noch kein Passwort gespeichert.'}
+                ? t('settings.hager.passwordStored')
+                : t('settings.hager.passwordMissing')}
             </small>
 
             <label className="settings-checkbox-control settings-password-clear-control">
@@ -420,19 +427,18 @@ function AdminHagerSettingsForm() {
                 }}
               />
 
-              Gespeichertes Passwort beim Speichern
-              löschen
+              {t('settings.hager.clearPassword')}
             </label>
           </div>
 
           <label className="form-field">
-            <span>Installations-ID</span>
+            <span>{t('settings.hager.installationId')}</span>
             <input
               type="text"
               inputMode="numeric"
               value={installationId}
               maxLength={50}
-              placeholder="z. B. 1000143617"
+              placeholder={t('settings.hager.examplePrefix', { value: '1000143617' })}
               onChange={(event) => {
                 setInstallationId(event.target.value)
               }}
@@ -440,13 +446,13 @@ function AdminHagerSettingsForm() {
           </label>
 
           <label className="form-field">
-            <span>Seriennummer</span>
+            <span>{t('settings.hager.serialNumber')}</span>
             <input
               type="text"
               inputMode="numeric"
               value={serialNumber}
               maxLength={50}
-              placeholder="z. B. 322329007044"
+              placeholder={t('settings.hager.examplePrefix', { value: '322329007044' })}
               onChange={(event) => {
                 setSerialNumber(event.target.value)
               }}
@@ -455,20 +461,17 @@ function AdminHagerSettingsForm() {
         </div>
 
         <p className="muted">
-          Installations-ID und Seriennummer stehen in der Adresse
-          der Hager-Weboberfläche: flow.hager.com/e-mobility/
-          <strong>Installations-ID</strong>/<strong>Seriennummer</strong>/…
+          {t('settings.hager.idHint')} flow.hager.com/e-mobility/
+          <strong>{t('settings.hager.installationId')}</strong>/<strong>{t('settings.hager.serialNumber')}</strong>/…
         </p>
       </section>
 
       <section className="settings-section">
         <div>
-          <h2>Import-Regeln</h2>
+          <h2>{t('settings.importRules.title')}</h2>
 
           <p className="muted">
-            Gelten für alle Importe (Hager Cloud, XLSX, JSON).
-            Ladevorgänge vor dem Abrechnungsbeginn werden nie
-            übernommen.
+            {t('settings.importRules.intro')}
           </p>
         </div>
 
@@ -480,20 +483,16 @@ function AdminHagerSettingsForm() {
               setSkipEmptySessions(event.target.checked)
             }}
           />
-          Ladevorgänge ohne Energie (0 kWh) nicht importieren,
-          z. B. abgebrochene oder nicht autorisierte Vorgänge
+          {t('settings.importRules.skipEmpty')}
         </label>
       </section>
 
       <section className="settings-section">
         <div>
-          <h2>Automatischer Abruf</h2>
+          <h2>{t('settings.autoImport.title')}</h2>
 
           <p className="muted">
-            Ruft neue Ladevorgänge regelmäßig aus der Hager Cloud ab,
-            alle N Stunden ab der Startzeit (Ortszeit der Instanz),
-            mindestens einmal täglich. Nach dem Aktivieren erfolgt
-            der erste Abruf innerhalb einer Minute.
+            {t('settings.autoImport.intro')}
           </p>
         </div>
 
@@ -506,19 +505,18 @@ function AdminHagerSettingsForm() {
               setAutoEnabled(event.target.checked)
             }}
           />
-          Automatischen Abruf aktivieren
+          {t('settings.autoImport.enable')}
         </label>
 
         {!savedComplete && (
           <small className="muted">
-            Zuerst Benutzername, Passwort, Installations-ID
-            und Seriennummer speichern.
+            {t('settings.autoImport.credentialsFirst')}
           </small>
         )}
 
         <div className="form-grid settings-business-grid">
           <label className="form-field">
-            <span>Alle … Stunden</span>
+            <span>{t('settings.autoImport.everyHours')}</span>
             <input
               type="number"
               min={1}
@@ -533,7 +531,7 @@ function AdminHagerSettingsForm() {
           </label>
 
           <label className="form-field">
-            <span>Beginnend um</span>
+            <span>{t('settings.autoImport.startingAt')}</span>
             <input
               type="time"
               value={autoStartTime}
@@ -550,48 +548,51 @@ function AdminHagerSettingsForm() {
             {autoStatus.auto_import_enabled &&
               autoStatus.auto_import_next_run_at && (
                 <div>
-                  <dt>Nächster Abruf</dt>
+                  <dt>{t('settings.autoImport.nextRun')}</dt>
                   <dd>
                     {formatTimestamp(
                       autoStatus.auto_import_next_run_at,
-                    )}
+                    t('settings.timeSuffix'),
+)}
                   </dd>
                 </div>
               )}
 
             {autoStatus.last_successful_fetch_at && (
               <div>
-                <dt>Letzter erfolgreicher Abruf</dt>
+                <dt>{t('settings.autoImport.lastSuccess')}</dt>
                 <dd>
                   {formatTimestamp(
                     autoStatus.last_successful_fetch_at,
-                  )}
+                  t('settings.timeSuffix'),
+)}
                   {' '}
-                  (manuell oder automatisch)
+                  {t('settings.autoImport.lastSuccessHint')}
                 </dd>
               </div>
             )}
 
             <div>
-              <dt>Letzter automatischer Abruf</dt>
+              <dt>{t('settings.autoImport.lastRun')}</dt>
               <dd>
                 {autoStatus.auto_import_last_started_at
                   ? `${formatTimestamp(
                       autoStatus.auto_import_last_started_at,
-                    )} – ${
+                    t('settings.timeSuffix'),
+)} – ${
                       autoStatus.auto_import_last_status
-                        ? STATUS_LABELS[
+                        ? t(STATUS_KEYS[
                             autoStatus.auto_import_last_status
-                          ]
-                        : 'unbekannt'
+                          ])
+                        : t('settings.autoImport.unknown')
                     }`
-                  : 'noch nicht erfolgt'}
+                  : t('settings.autoImport.notYet')}
               </dd>
             </div>
 
             {autoStatus.auto_import_last_message && (
               <div>
-                <dt>Ergebnis</dt>
+                <dt>{t('settings.autoImport.result')}</dt>
                 <dd
                   className={
                     autoStatus.auto_import_last_status === 'error'
@@ -614,8 +615,8 @@ function AdminHagerSettingsForm() {
           disabled={isSaving || isTesting}
         >
           {isSaving
-            ? 'Hager-Zugangsdaten werden gespeichert …'
-            : 'Hager-Zugangsdaten speichern'}
+            ? t('settings.hager.saving')
+            : t('settings.hager.save')}
         </button>
 
         <button
@@ -629,15 +630,15 @@ function AdminHagerSettingsForm() {
           title={
             savedComplete
               ? undefined
-              : 'Zuerst Benutzername, Passwort, Installations-ID und Seriennummer speichern.'
+              : t('settings.autoImport.credentialsFirst')
           }
           onClick={() => {
             void handleTest()
           }}
         >
           {isTesting
-            ? 'Verbindung wird getestet …'
-            : 'Verbindung testen'}
+            ? t('settings.common.testingConnection')
+            : t('settings.common.testConnection')}
         </button>
       </div>
     </form>
