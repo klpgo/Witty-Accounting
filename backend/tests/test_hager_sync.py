@@ -308,7 +308,7 @@ def test_failed_import_keeps_last_fetch(sync_db, monkeypatch: pytest.MonkeyPatch
     db, _fetched, _imported = sync_db
 
     def failing_fetch(access, force_login=False, **options):
-        raise HagerConnectionError("Hager Cloud ist nicht erreichbar: ReadTimeout")
+        raise HagerConnectionError("Hager Cloud is not reachable: ReadTimeout")
 
     monkeypatch.setattr(hager_sync, "fetch_all_sessions", failing_fetch)
 

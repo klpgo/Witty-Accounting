@@ -404,9 +404,8 @@ def test_draft_reports_missing_historical_tariff(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Kein gültiger Tarif für "
-            f"Ladevorgang {charging_session.id} "
-            "vom 17.06.2026."
+            f"No valid tariff for charging session {charging_session.id} "
+            "on 17.06.2026."
         )
     }
     assert database_session.scalar(
@@ -441,8 +440,7 @@ def test_create_draft_rejects_missing_recipient_address(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Für den Rechnungsempfänger "
-            "ist keine Anschrift hinterlegt."
+            "No address is stored for the invoice recipient."
         ),
     }
 
@@ -995,7 +993,7 @@ def test_rejects_second_cancellation_draft(
     )
 
     assert second_response.status_code == 409
-    assert "existiert bereits" in (
+    assert "already exists" in (
         second_response.json()["detail"]
     )
 
@@ -1036,7 +1034,7 @@ def test_rejects_cancellation_of_draft_invoice(
     )
 
     assert response.status_code == 409
-    assert "Nur eine finalisierte Rechnung" in (
+    assert "Only a finalized invoice" in (
         response.json()["detail"]
     )
 
@@ -1051,7 +1049,7 @@ def test_rejects_cancellation_for_missing_invoice(
     )
 
     assert response.status_code == 404
-    assert "wurde nicht gefunden" in (
+    assert "was not found" in (
         response.json()["detail"]
     )
 
@@ -1612,8 +1610,7 @@ def test_rejects_deleting_finalized_invoice(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Nur ein Entwurf kann gelöscht "
-            "werden."
+            "Only a draft can be deleted."
         ),
     }
 
@@ -1688,12 +1685,12 @@ def test_sends_invoice_email(
     [
         (
             InvoiceEmailNotFoundError,
-            "Rechnung wurde nicht gefunden.",
+            "Invoice was not found.",
             404,
         ),
         (
             InvoiceEmailStateError,
-            "Die Rechnung ist nicht finalisiert.",
+            "The invoice is not finalized.",
             409,
         ),
         (
@@ -1834,8 +1831,8 @@ def test_failed_pdf_archiving_is_logged_and_can_be_retried(
 
     def failing_archive(db, invoice_id):
         raise InvoiceArchiveError(
-            "Am vorgesehenen Archivpfad existiert "
-            "bereits eine andere Datei."
+            "A different file already exists at the intended archive "
+            "path."
         )
 
     monkeypatch.setattr(invoice_routes, "archive_invoice_pdf", failing_archive)
@@ -1847,10 +1844,10 @@ def test_failed_pdf_archiving_is_logged_and_can_be_retried(
         )
 
     assert finalize_response.status_code == 500
-    assert "bereits eine andere Datei" in finalize_response.json()["detail"]
+    assert "different file already exists" in finalize_response.json()["detail"]
     assert any(
-        "PDF-Archivierung fehlgeschlagen" in record.getMessage()
-        and "bereits eine andere Datei" in record.getMessage()
+        "PDF archiving failed" in record.getMessage()
+        and "different file already exists" in record.getMessage()
         for record in caplog.records
     )
 

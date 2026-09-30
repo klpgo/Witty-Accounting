@@ -576,7 +576,7 @@ def test_invoiced_session_cannot_be_discarded_and_nothing_changes(
     )
 
     assert response.status_code == 409
-    assert "bereits abgerechnet" in response.json()["detail"]
+    assert "already billed" in response.json()["detail"]
     # alle oder keiner: auch der offene Vorgang bleibt unverändert
     database_session.refresh(open_session)
     assert open_session.discarded_at is None

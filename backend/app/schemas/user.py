@@ -73,14 +73,14 @@ class UserProfileUpdate(BaseModel):
     ) -> str:
         if value is None:
             raise ValueError(
-                "Der Wert darf nicht leer sein."
+                "The value must not be empty."
             )
 
         normalized = value.strip()
 
         if not normalized:
             raise ValueError(
-                "Der Wert darf nicht leer sein."
+                "The value must not be empty."
             )
 
         return normalized
@@ -93,8 +93,7 @@ class UserProfileUpdate(BaseModel):
     ) -> str:
         if value is None:
             raise ValueError(
-                "Die E-Mail-Adresse darf nicht "
-                "leer sein."
+                "The email address must not be empty."
             )
 
         normalized = value.strip().lower()
@@ -106,7 +105,7 @@ class UserProfileUpdate(BaseModel):
             or normalized.endswith("@")
         ):
             raise ValueError(
-                "Die E-Mail-Adresse ist ungültig."
+                "The email address is invalid."
             )
 
         return normalized
@@ -138,7 +137,7 @@ class UserProfileUpdate(BaseModel):
     ) -> bool:
         if value is None:
             raise ValueError(
-                "Der Wert darf nicht leer sein."
+                "The value must not be empty."
             )
 
         return value
@@ -173,7 +172,7 @@ class UserAdminUpdate(UserProfileUpdate):
     ) -> bool:
         if value is None:
             raise ValueError(
-                "Der Wert darf nicht leer sein."
+                "The value must not be empty."
             )
 
         return value

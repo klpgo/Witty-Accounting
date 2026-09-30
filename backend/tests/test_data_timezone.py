@@ -67,7 +67,7 @@ def test_leading_colon_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_invalid_timezone_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TZ", "Mitteleuropa")
 
-    with pytest.raises(ValueError, match="Ungültige Zeitzone"):
+    with pytest.raises(ValueError, match="Invalid time zone"):
         Settings(_env_file=None, **REQUIRED)
 
 

@@ -95,7 +95,7 @@ def test_station_label_falls_back_to_wallbox_id() -> None:
 
 
 def test_station_label_missing_raises() -> None:
-    with pytest.raises(ValueError, match="Ladestation"):
+    with pytest.raises(ValueError, match="charging station"):
         station_label({})
 
 
@@ -106,7 +106,7 @@ def test_extract_session_items_supports_all_formats() -> None:
     assert extract_session_items({"sessions": [item]}) == [item]
     assert extract_session_items({"content": [item]}) == [item]
 
-    with pytest.raises(ValueError, match="Unbekanntes JSON-Format"):
+    with pytest.raises(ValueError, match="Unknown JSON format"):
         extract_session_items({"foo": []})
 
 
@@ -139,7 +139,7 @@ def test_import_json_invalid_json(tmp_path: Path) -> None:
     path = tmp_path / "broken.json"
     path.write_text("{kein json", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="kein gültiges JSON"):
+    with pytest.raises(ValueError, match="not valid JSON"):
         import_json(path)
 
 
@@ -150,5 +150,5 @@ def test_import_json_reports_session_index(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="Session 1"):
+    with pytest.raises(ValueError, match="session 1"):
         import_json(path)

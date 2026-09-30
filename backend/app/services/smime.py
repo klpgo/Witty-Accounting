@@ -46,15 +46,14 @@ def read_pkcs12_password(
         password = password_file.read_bytes()
     except OSError as exc:
         raise SmimeSigningError(
-            "Die S/MIME-Passwortdatei konnte "
-            "nicht gelesen werden."
+            "The S/MIME password file could not be read."
         ) from exc
 
     password = password.rstrip(b"\r\n")
 
     if not password:
         raise SmimeSigningError(
-            "Die S/MIME-Passwortdatei ist leer."
+            "The S/MIME password file is empty."
         )
 
     return password
@@ -112,21 +111,19 @@ def validate_signing_material(
         ),
     ):
         raise SmimeSigningError(
-            "Der private S/MIME-Schlüsseltyp "
-            "wird nicht unterstützt."
+            "The S/MIME private key type is not supported."
         )
 
     now = datetime.now(timezone.utc)
 
     if now < certificate.not_valid_before_utc:
         raise SmimeSigningError(
-            "Das S/MIME-Zertifikat ist noch "
-            "nicht gültig."
+            "The S/MIME certificate is not yet valid."
         )
 
     if now > certificate.not_valid_after_utc:
         raise SmimeSigningError(
-            "Das S/MIME-Zertifikat ist abgelaufen."
+            "The S/MIME certificate has expired."
         )
 
     normalized_sender = sender_email.strip().lower()
@@ -138,9 +135,8 @@ def validate_signing_material(
         )
     ):
         raise SmimeSigningError(
-            "Die konfigurierte Absenderadresse "
-            "stimmt nicht mit dem "
-            "S/MIME-Zertifikat überein."
+            "The configured sender address does not match the S/MIME "
+            "certificate."
         )
 
     try:
@@ -153,8 +149,8 @@ def validate_signing_material(
         )
     except x509.ExtensionNotFound as exc:
         raise SmimeSigningError(
-            "Dem S/MIME-Zertifikat fehlt die "
-            "Extended-Key-Usage-Erweiterung."
+            "The S/MIME certificate lacks the Extended Key Usage "
+            "extension."
         ) from exc
 
     if (
@@ -162,8 +158,7 @@ def validate_signing_material(
         not in extended_key_usage
     ):
         raise SmimeSigningError(
-            "Das Zertifikat ist nicht für "
-            "E-Mail-Schutz freigegeben."
+            "The certificate is not approved for email protection."
         )
 
     try:
@@ -176,14 +171,12 @@ def validate_signing_material(
         )
     except x509.ExtensionNotFound as exc:
         raise SmimeSigningError(
-            "Dem S/MIME-Zertifikat fehlt die "
-            "Key-Usage-Erweiterung."
+            "The S/MIME certificate lacks the Key Usage extension."
         ) from exc
 
     if not key_usage.digital_signature:
         raise SmimeSigningError(
-            "Das Zertifikat ist nicht für "
-            "digitale Signaturen freigegeben."
+            "The certificate is not approved for digital signatures."
         )
 
     private_public_key = (
@@ -208,8 +201,7 @@ def validate_signing_material(
 
     if private_public_key != certificate_public_key:
         raise SmimeSigningError(
-            "Der private Schlüssel passt nicht "
-            "zum S/MIME-Zertifikat."
+            "The private key does not match the S/MIME certificate."
         )
 
 
@@ -227,8 +219,7 @@ def load_signing_material(
         pkcs12_data = pkcs12_path.read_bytes()
     except OSError as exc:
         raise SmimeSigningError(
-            "Die S/MIME-PKCS#12-Datei konnte "
-            "nicht gelesen werden."
+            "The S/MIME PKCS#12 file could not be read."
         ) from exc
 
     password = read_pkcs12_password(
@@ -254,12 +245,12 @@ def load_signing_material_from_data(
 ]:
     if not pkcs12_data:
         raise SmimeSigningError(
-            "Die S/MIME-PKCS#12-Datei ist leer."
+            "The S/MIME PKCS#12 file is empty."
         )
 
     if not password:
         raise SmimeSigningError(
-            "Das S/MIME-Passwort ist leer."
+            "The S/MIME password is empty."
         )
 
     try:
@@ -278,20 +269,17 @@ def load_signing_material_from_data(
         UnsupportedAlgorithm,
     ) as exc:
         raise SmimeSigningError(
-            "Die S/MIME-PKCS#12-Datei konnte "
-            "nicht geladen werden."
+            "The S/MIME PKCS#12 file could not be loaded."
         ) from exc
 
     if private_key is None:
         raise SmimeSigningError(
-            "Die S/MIME-PKCS#12-Datei enthält "
-            "keinen privaten Schlüssel."
+            "The S/MIME PKCS#12 file contains no private key."
         )
 
     if certificate is None:
         raise SmimeSigningError(
-            "Die S/MIME-PKCS#12-Datei enthält "
-            "kein Absenderzertifikat."
+            "The S/MIME PKCS#12 file contains no sender certificate."
         )
 
     validate_signing_material(
@@ -358,8 +346,7 @@ def create_signed_content(
         UnsupportedAlgorithm,
     ) as exc:
         raise SmimeSigningError(
-            "Die S/MIME-Signatur konnte nicht "
-            "erstellt werden."
+            "The S/MIME signature could not be created."
         ) from exc
 
 
@@ -456,8 +443,7 @@ def sign_message_with_material(
 
     if header_separator not in outer_bytes:
         raise SmimeSigningError(
-            "Die äußeren Mail-Header konnten "
-            "nicht erzeugt werden."
+            "The outer mail headers could not be created."
         )
 
     outer_headers, _, _ = outer_bytes.partition(

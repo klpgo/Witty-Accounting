@@ -89,8 +89,7 @@ def read_current_energy_price(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                "Es ist noch kein aktuell gültiger "
-                "Energietarif vorhanden."
+                "There is no currently valid energy tariff yet."
             ),
         )
 
@@ -144,8 +143,7 @@ def update_current_energy_price(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Für den heutigen Tag existieren "
-                "mehrere Energietarife."
+                "Several energy tariffs exist for today."
             ),
         )
 
@@ -202,9 +200,8 @@ def update_current_energy_price(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Der heutige Energietarif konnte "
-                "wegen eines Datenbankkonflikts "
-                "nicht gespeichert werden."
+                "Today's energy tariff could not be saved because of a "
+                "database conflict."
             ),
         ) from exc
     except Exception:
@@ -237,8 +234,7 @@ def create_energy_price(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Für diesen Gültigkeitszeitpunkt "
-                "existiert bereits ein Tarif."
+                "A tariff already exists for this validity date."
             ),
         )
 
@@ -259,8 +255,8 @@ def create_energy_price(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Der Tarif konnte wegen eines "
-                "Datenbankkonflikts nicht angelegt werden."
+                "The tariff could not be created because of a database "
+                "conflict."
             ),
         ) from exc
     except Exception:

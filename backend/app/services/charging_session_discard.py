@@ -35,7 +35,7 @@ def load_sessions(db: Session, session_ids: list[int]) -> list[ChargingSession]:
 
     if missing:
         raise ChargingSessionNotFoundError(
-            "Ladevorgänge nicht gefunden: " + ", ".join(map(str, missing))
+            "Charging sessions not found: " + ", ".join(map(str, missing))
         )
 
     return list(sessions)
@@ -43,7 +43,7 @@ def load_sessions(db: Session, session_ids: list[int]) -> list[ChargingSession]:
 
 def blocking_reason(db: Session, charging_session: ChargingSession) -> str | None:
     if charging_session.invoiced or charging_session.invoice_id is not None:
-        return "bereits abgerechnet"
+        return "already billed"
 
     in_invoice = db.scalar(
         select(InvoiceItem.id)
@@ -52,7 +52,7 @@ def blocking_reason(db: Session, charging_session: ChargingSession) -> str | Non
     )
 
     if in_invoice is not None:
-        return "in einem Rechnungsentwurf enthalten"
+        return "contained in an invoice draft"
 
     return None
 
@@ -74,7 +74,7 @@ def discard_sessions(
 
     if problems:
         raise DiscardNotAllowedError(
-            "Folgende Ladevorgänge können nicht verworfen werden: "
+            "The following charging sessions cannot be discarded: "
             + ", ".join(problems)
         )
 

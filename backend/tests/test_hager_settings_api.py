@@ -99,7 +99,7 @@ def test_enable_requires_complete_access(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
-    assert "Installations-ID" in response.json()["detail"]
+    assert "installation ID" in response.json()["detail"]
     assert client.get("/api/settings/hager").json()["auto_import_enabled"] is False
 
 
@@ -141,14 +141,14 @@ def test_last_run_is_returned_with_timezone(
     settings = database_session.get(GlobalSettings, 1)
     settings.hager_auto_import_last_started_at = datetime(2026, 9, 24, 12, 0, 0)
     settings.hager_auto_import_last_status = "success"
-    settings.hager_auto_import_last_message = "2 neu, 3 übersprungen"
+    settings.hager_auto_import_last_message = "2 new, 3 skipped"
     database_session.commit()
 
     data = client.get("/api/settings/hager").json()
 
     assert data["auto_import_last_started_at"].startswith("2026-09-24T12:00:00")
     assert data["auto_import_last_started_at"].endswith(("Z", "+00:00"))
-    assert data["auto_import_last_message"] == "2 neu, 3 übersprungen"
+    assert data["auto_import_last_message"] == "2 new, 3 skipped"
 
 
 def test_serial_number_is_stored_and_validated(client: TestClient) -> None:

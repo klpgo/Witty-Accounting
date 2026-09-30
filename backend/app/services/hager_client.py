@@ -154,8 +154,8 @@ def describe_page(page_html: str) -> str:
     """Aufbau einer Seite ohne Werte – für Fehlermeldungen."""
     title = re.search(r"<title[^>]*>(.*?)</title>", page_html, re.I | re.S)
     lines = [f"Titel: {title.group(1).strip() if title else '-'}",
-             f"Länge: {len(page_html)} Zeichen, <script>-Tags: {len(re.findall(r'<script', page_html, re.I))}",
-             f"'SAMLResponse' im Text: {'ja' if 'SAMLResponse' in page_html else 'nein'}"]
+             f"Length: {len(page_html)} characters, <script> tags: {len(re.findall(r'<script', page_html, re.I))}",
+             f"'SAMLResponse' in text: {'yes' if 'SAMLResponse' in page_html else 'no'}"]
     for form in parse_forms(page_html):
         target = urlsplit(form["action"])
         lines.append(f"Formular {form['method']} {target.netloc}{target.path} Felder: "
@@ -185,7 +185,7 @@ def login(
     protokolliert (nur Host und Pfad, keine Parameter)."""
     log = log or logger.info
     if not email or not password:
-        raise HagerLoginError("E-Mail und Passwort sind erforderlich.")
+        raise HagerLoginError("Email and password are required.")
 
     with httpx.Client(
         follow_redirects=True,
@@ -195,9 +195,9 @@ def login(
     ) as client:
         # 1. SAML-Login starten, Weiterleitungen bis zur Hager-Anmeldeseite folgen
         response = client.get(E3DC_SAML_LOGIN, params={"app": saml_app})
-        log(f"Anmeldeseite: HTTP {response.status_code} {_describe(response.url)}")
+        log(f"Sign-in page: HTTP {response.status_code} {_describe(response.url)}")
         if response.status_code != 200:
-            raise HagerLoginError(f"Anmeldeseite nicht erreichbar (HTTP {response.status_code}).")
+            raise HagerLoginError(f"Sign-in page not reachable (HTTP {response.status_code}).")
 
         # 2. Formular mit email/password absenden
         login_forms = [f for f in parse_forms(response.text) if "password" in f["fields"]]
@@ -210,35 +210,35 @@ def login(
             action, data = str(response.url), {}
         else:
             raise HagerLoginError(
-                f"Kein Anmeldeformular gefunden auf {_describe(response.url)}."
+                f"No sign-in form found at {_describe(response.url)}."
             )
         data.update({"email": email, "password": password})
 
         response = client.post(action, data=data)
-        log(f"Nach Anmeldung: HTTP {response.status_code} {_describe(response.url)}")
+        log(f"After sign-in: HTTP {response.status_code} {_describe(response.url)}")
 
         # 3. Keycloak-Seite mit der SAML-Antwort
         saml_post = find_saml_post(response.text, str(response.url))
         if saml_post is None:
             if any("password" in f["fields"] for f in parse_forms(response.text)) or \
                     "login.hager.com" in str(response.url):
-                raise HagerLoginError("Anmeldung abgelehnt – E-Mail oder Passwort prüfen.")
+                raise HagerLoginError("Sign-in rejected – please check email and password.")
             raise HagerLoginError(
-                f"Keine SAML-Antwort auf {_describe(response.url)} (HTTP {response.status_code}).\n"
-                f"      {describe_page(response.text)}"
+                f"No SAML response at {_describe(response.url)} (HTTP {response.status_code}"
+                f").\n      {describe_page(response.text)}"
             )
 
         target, fields = saml_post
-        log(f"SAML-Antwort gefunden, sende an {_describe(target)}")
+        log(f"SAML response found, sending to {_describe(target)}")
         # 4. SAMLResponse an E3/DC; die Weiterleitung selbst enthält die Tokens
         response = client.post(target, data=fields, follow_redirects=False)
         location = response.headers.get("location", "")
-        log(f"SAML-Antwort: HTTP {response.status_code} -> {_describe(location)}")
+        log(f"SAML response: HTTP {response.status_code} -> {_describe(location)}")
 
     params = dict(parse_qsl(urlsplit(location).query))
     if not params.get("token") or not params.get("reAuthToken"):
         raise HagerLoginError(
-            "Die Anmeldung lieferte keine Tokens – der Ablauf hat sich eventuell geändert."
+            "The sign-in returned no tokens – the flow may have changed."
         )
     return HagerTokens(token=params["token"], reauth_token=params["reAuthToken"])
 
@@ -255,10 +255,10 @@ def refresh(
             headers={"User-Agent": USER_AGENT, "Origin": FLOW_ORIGIN, "Referer": FLOW_ORIGIN + "/"},
         )
     if response.status_code != 200:
-        raise HagerLoginError(f"Token-Erneuerung fehlgeschlagen (HTTP {response.status_code}).")
+        raise HagerLoginError(f"Token renewal failed (HTTP {response.status_code}).")
     data = response.json()
     if not data.get("token") or not data.get("reAuthToken"):
-        raise HagerLoginError("Token-Erneuerung lieferte keine Tokens.")
+        raise HagerLoginError("The token renewal returned no tokens.")
     return HagerTokens(token=data["token"], reauth_token=data["reAuthToken"])
 
 
@@ -298,8 +298,8 @@ def columns_to_rows(data: object) -> list[dict]:
 
     if len(lengths) != 1:
         raise HagerApiError(
-            "E-Mobility-API: Spalten unterschiedlich lang "
-            f"({sorted(lengths)})."
+            f"E-Mobility API: columns of different length ({sorted(lengths)}"
+            ")."
         )
 
     count = lengths.pop()
@@ -356,14 +356,14 @@ def fetch_charging_sessions(
                 response = client.get(url, params=params)
             except httpx.TimeoutException:
                 logger.warning(
-                    "Hager: E-Mobility-API Seite %s ohne Antwort nach %.1f s",
+                    "Hager: E-Mobility API page %s: no response after %.1f s",
                     page,
                     time.monotonic() - started,
                 )
                 raise
 
             logger.info(
-                "Hager: E-Mobility-API Seite %s: HTTP %s in %.1f s",
+                "Hager: E-Mobility API page %s: HTTP %s in %.1f s",
                 page,
                 response.status_code,
                 time.monotonic() - started,
@@ -371,12 +371,12 @@ def fetch_charging_sessions(
 
             if response.status_code in (401, 403):
                 raise HagerUnauthorizedError(
-                    f"E-Mobility-API Seite {page}: HTTP {response.status_code}"
+                    f"E-Mobility API page {page}: HTTP {response.status_code}"
                 )
 
             if response.status_code != 200:
                 raise HagerApiError(
-                    f"E-Mobility-API Seite {page}: HTTP {response.status_code}"
+                    f"E-Mobility API page {page}: HTTP {response.status_code}"
                 )
 
             page_rows = columns_to_rows(response.json())
@@ -402,8 +402,8 @@ def fetch_charging_sessions(
 
                 if not ordered:
                     logger.warning(
-                        "Hager: Ladevorgänge nicht absteigend sortiert – "
-                        "rufe zur Sicherheit alle Seiten ab"
+                        "Hager: charging sessions not sorted in descending order – "
+                        "fetching all pages to be safe"
                     )
                     early_stop = False
                 else:
@@ -411,13 +411,13 @@ def fetch_charging_sessions(
 
                     if starts[-1] < stop_before:
                         logger.info(
-                            "Hager: Abruf nach Seite %s beendet, ältere "
-                            "Ladevorgänge liegen vor dem Cut-off",
+                            "Hager: fetch stopped after page %s, older charging sessions "
+                            "are before the cut-off",
                             page,
                         )
                         return rows
 
-    raise HagerApiError(f"Mehr als {MAX_PAGES} Seiten – Abbruch.")
+    raise HagerApiError(f"More than {MAX_PAGES} pages – aborting.")
 
 
 def fetch_wallbox_names(

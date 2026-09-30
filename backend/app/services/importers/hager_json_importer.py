@@ -50,12 +50,12 @@ def extract_session_items(payload: Any) -> list[dict[str, Any]]:
         items = payload["content"]
     else:
         raise ValueError(
-            "Unbekanntes JSON-Format: erwartet wird die Ausgabe "
-            "von hager-fetch oder eine Antwort der Hager-API."
+            "Unknown JSON format: expected the output of hager-fetch or "
+            "a response of the Hager API."
         )
 
     if not all(isinstance(item, dict) for item in items):
-        raise ValueError("Die JSON-Datei enthält ungültige Session-Einträge.")
+        raise ValueError("The JSON file contains invalid session entries.")
 
     return items
 
@@ -63,12 +63,12 @@ def extract_session_items(payload: Any) -> list[dict[str, Any]]:
 def parse_utc_to_local(value: Any, field_name: str) -> datetime:
     """'2026-07-15T09:26:37Z' -> naive lokale Zeit (Europe/Berlin)."""
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{field_name} fehlt")
+        raise ValueError(f"{field_name} missing")
 
     try:
         parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     except ValueError as exc:
-        raise ValueError(f"Ungültiger Zeitstempel in {field_name}: {value!r}") from exc
+        raise ValueError(f"Invalid timestamp in {field_name}: {value!r}") from exc
 
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
@@ -91,7 +91,7 @@ def station_label(item: dict[str, Any]) -> str:
     if wallbox_id:
         return f"ID: {wallbox_id}"
 
-    raise ValueError("Ladestation fehlt")
+    raise ValueError("charging station missing")
 
 
 def station_aliases(item: dict[str, Any]) -> set[str]:
@@ -117,7 +117,7 @@ def to_float(value: Any, field_name: str) -> float:
     try:
         return float(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"Ungültiger Zahlenwert in {field_name}: {value!r}") from exc
+        raise ValueError(f"Invalid numeric value in {field_name}: {value!r}") from exc
 
 
 def parse_session(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -129,7 +129,7 @@ def parse_session(item: dict[str, Any]) -> dict[str, Any] | None:
     session = item.get("session")
 
     if not isinstance(session, dict):
-        raise ValueError("Feld 'session' fehlt")
+        raise ValueError("field 'session' missing")
 
     if not session.get("end_date_time"):
         return None
@@ -139,13 +139,13 @@ def parse_session(item: dict[str, Any]) -> dict[str, Any] | None:
     ).strip()
 
     if not hager_session_id:
-        raise ValueError("Session-ID fehlt")
+        raise ValueError("session ID missing")
 
     start_time = parse_utc_to_local(session.get("start_date_time"), "start_date_time")
     end_time = parse_utc_to_local(session.get("end_date_time"), "end_date_time")
 
     if end_time < start_time:
-        raise ValueError("Endzeitpunkt liegt vor dem Startzeitpunkt")
+        raise ValueError("end time is before the start time")
 
     station_id = station_label(item)
     rfid_raw = str(item.get("emobilityToken") or "").strip()
@@ -194,18 +194,18 @@ def parse_charging_row(
     session_id = str(row.get("sessionID") or "").strip()
 
     if not session_id:
-        raise ValueError("sessionID fehlt")
+        raise ValueError("sessionID missing")
 
     wallbox_id = str(row.get("wallboxID") or "").strip()
 
     if not wallbox_id:
-        raise ValueError("wallboxID fehlt")
+        raise ValueError("wallboxID missing")
 
     start_time = parse_utc_to_local(row.get("startAt"), "startAt")
     end_time = parse_utc_to_local(row.get("stopAt"), "stopAt")
 
     if end_time < start_time:
-        raise ValueError("Endzeitpunkt liegt vor dem Startzeitpunkt")
+        raise ValueError("end time is before the start time")
 
     station_id = wallbox_names.get(wallbox_id) or f"ID: {wallbox_id}"
     rfid = str(row.get("authData") or "").strip().upper() or None
@@ -245,7 +245,7 @@ def parse_charging_rows(
         try:
             parsed = parse_charging_row(row, wallbox_names)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Fehler in Ladevorgang {index}: {exc}") from exc
+            raise ValueError(f"Error in charging session {index}: {exc}") from exc
 
         if parsed is None:
             running += 1
@@ -265,12 +265,12 @@ def import_json(path: str | Path) -> tuple[list[dict[str, Any]], int]:
     file_path = Path(path)
 
     if not file_path.is_file():
-        raise FileNotFoundError(f"JSON-Datei nicht gefunden: {file_path}")
+        raise FileNotFoundError(f"JSON file not found: {file_path}")
 
     try:
         payload = json.loads(file_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Die Datei ist kein gültiges JSON: {exc}") from exc
+        raise ValueError(f"The file is not valid JSON: {exc}") from exc
 
     return parse_items(extract_session_items(payload))
 
@@ -291,7 +291,7 @@ def parse_items(
         try:
             parsed = parse_session(item)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Fehler in Session {index}: {exc}") from exc
+            raise ValueError(f"Error in session {index}: {exc}") from exc
 
         if parsed is None:
             running += 1

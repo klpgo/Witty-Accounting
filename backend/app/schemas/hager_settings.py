@@ -94,8 +94,7 @@ class HagerSettingsUpdate(BaseModel):
     ) -> str | None:
         if value and not value.isdigit():
             raise ValueError(
-                "Die Installations-ID besteht nur "
-                "aus Ziffern."
+                "The installation ID may only contain digits."
             )
 
         return value
@@ -108,7 +107,7 @@ class HagerSettingsUpdate(BaseModel):
     ) -> str | None:
         if value and not value.isdigit():
             raise ValueError(
-                "Die Seriennummer besteht nur aus Ziffern."
+                "The serial number may only contain digits."
             )
 
         return value
@@ -132,8 +131,7 @@ class HagerImportRequest(BaseModel):
             self.date_from is not None or self.date_to is not None
         ):
             raise ValueError(
-                "Beim vollständigen Abruf kann kein Zeitraum "
-                "angegeben werden."
+                "No period can be specified for a full fetch."
             )
 
         if (
@@ -142,7 +140,7 @@ class HagerImportRequest(BaseModel):
             and self.date_from > self.date_to
         ):
             raise ValueError(
-                "Das Startdatum liegt nach dem Enddatum."
+                "The start date is after the end date."
             )
 
         return self

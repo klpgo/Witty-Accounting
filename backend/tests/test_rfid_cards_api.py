@@ -333,8 +333,7 @@ def test_assignment_history_returns_not_found(
     assert response.status_code == 404
     assert response.json() == {
         "detail": (
-            "RFID-Karte 999999 wurde nicht "
-            "gefunden."
+            "RFID card 999999 was not found."
         ),
     }
 
@@ -428,8 +427,7 @@ def test_create_rfid_card_rejects_duplicate_number(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Diese RFID-Nummer wird "
-            "bereits verwendet."
+            "This RFID number is already in use."
         ),
     }
 
@@ -570,8 +568,7 @@ def test_update_rfid_card_returns_not_found(
     assert response.status_code == 404
     assert response.json() == {
         "detail": (
-            "RFID-Karte 999999 wurde nicht "
-            "gefunden."
+            "RFID card 999999 was not found."
         ),
     }
 
@@ -704,10 +701,8 @@ def test_create_assignment_rejects_overlap(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Der Zuordnungszeitraum "
-            "überschneidet sich mit einer "
-            "bestehenden Zuordnung dieser "
-            "RFID-Karte."
+            "The assignment period overlaps with an existing assignment "
+            "of this RFID card."
         ),
     }
 
@@ -984,8 +979,7 @@ def test_update_assignment_returns_404(
     assert (
         response.json()["detail"]
         == (
-            "RFID-Zuordnung 999999 "
-            "wurde nicht gefunden."
+            "RFID assignment 999999 was not found."
         )
     )
 
@@ -1026,7 +1020,7 @@ def test_update_assignment_returns_404_for_unknown_user(
     assert response.status_code == 404
     assert (
         response.json()["detail"]
-        == "Benutzer 999999 wurde nicht gefunden."
+        == "User 999999 was not found."
     )
 
 
@@ -1071,7 +1065,7 @@ def test_update_assignment_rejects_overlap(
     )
 
     assert response.status_code == 409
-    assert "überschneidet sich" in (
+    assert "overlaps" in (
         response.json()["detail"]
     )
 
@@ -1114,8 +1108,7 @@ def test_update_assignment_rejects_invalid_period(
     assert (
         response.json()["detail"]
         == (
-            "Das Ende der Zuordnung muss "
-            "nach ihrem Beginn liegen."
+            "The end of the assignment must be after its start."
         )
     )
 
@@ -1166,8 +1159,8 @@ def test_used_assignment_rejects_user_change(
     )
 
     assert response.status_code == 409
-    assert "Benutzer" in response.json()["detail"]
-    assert "nicht geändert" in (
+    assert "user" in response.json()["detail"]
+    assert "cannot be changed" in (
         response.json()["detail"]
     )
 
@@ -1213,8 +1206,8 @@ def test_used_assignment_rejects_start_change(
     )
 
     assert response.status_code == 409
-    assert "Beginn" in response.json()["detail"]
-    assert "nicht geändert" in (
+    assert "start" in response.json()["detail"]
+    assert "cannot be changed" in (
         response.json()["detail"]
     )
 
@@ -1269,7 +1262,7 @@ def test_used_assignment_rejects_end_excluding_session(
     )
 
     assert response.status_code == 409
-    assert "Ladevorgänge" in (
+    assert "charging sessions" in (
         response.json()["detail"]
     )
 

@@ -61,8 +61,7 @@ def get_rfid_card_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"RFID-Karte {card_id} wurde "
-                "nicht gefunden."
+                f"RFID card {card_id} was not found."
             ),
         )
 
@@ -82,8 +81,7 @@ def get_rfid_assignment_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"RFID-Zuordnung {assignment_id} "
-                "wurde nicht gefunden."
+                f"RFID assignment {assignment_id} was not found."
             ),
         )
 
@@ -112,8 +110,7 @@ def ensure_rfid_number_available(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese RFID-Nummer wird "
-                "bereits verwendet."
+                "This RFID number is already in use."
             ),
         )
 
@@ -190,8 +187,7 @@ def create_rfid_card(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese RFID-Nummer wird "
-                "bereits verwendet."
+                "This RFID number is already in use."
             ),
         ) from exc
 
@@ -250,8 +246,7 @@ def update_rfid_card(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese RFID-Nummer wird "
-                "bereits verwendet."
+                "This RFID number is already in use."
             ),
         ) from exc
 
@@ -289,8 +284,7 @@ def create_rfid_card_assignment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Benutzer {payload.user_id} "
-                "wurde nicht gefunden."
+                f"User {payload.user_id} was not found."
             ),
         )
 
@@ -393,8 +387,7 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=(
-                    f"Benutzer {payload.user_id} "
-                    "wurde nicht gefunden."
+                    f"User {payload.user_id} was not found."
                 ),
             )
 
@@ -417,8 +410,7 @@ def update_rfid_card_assignment(
                 status.HTTP_422_UNPROCESSABLE_CONTENT
             ),
             detail=(
-                "Das Ende der Zuordnung muss "
-                "nach ihrem Beginn liegen."
+                "The end of the assignment must be after its start."
             ),
         )
 
@@ -447,9 +439,8 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Der Benutzer einer bereits "
-                    "verwendeten RFID-Zuordnung "
-                    "darf nicht geändert werden."
+                    "The user of an RFID assignment that is already in use "
+                    "cannot be changed."
                 ),
             )
 
@@ -460,9 +451,8 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Der Beginn einer bereits "
-                    "verwendeten RFID-Zuordnung "
-                    "darf nicht geändert werden."
+                    "The start of an RFID assignment that is already in use "
+                    "cannot be changed."
                 ),
             )
 
@@ -474,9 +464,8 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Der neue Zeitraum enthält "
-                    "nicht mehr alle zugehörigen "
-                    "Ladevorgänge."
+                    "The new period no longer contains all related charging "
+                    "sessions."
                 ),
             )
 
@@ -489,9 +478,8 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Der neue Zeitraum enthält "
-                    "nicht mehr alle zugehörigen "
-                    "Ladevorgänge."
+                    "The new period no longer contains all related charging "
+                    "sessions."
                 ),
             )
 
@@ -524,9 +512,8 @@ def update_rfid_card_assignment(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Die RFID-Zuordnung konnte wegen "
-                "eines Datenkonflikts nicht "
-                "geändert werden."
+                "The RFID assignment could not be changed because of a data "
+                "conflict."
             ),
         ) from exc
 

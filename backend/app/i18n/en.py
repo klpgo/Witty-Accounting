@@ -33,6 +33,8 @@ MESSAGES: dict[str, str] = {
     "pdf.cancellationAmount": "Cancellation amount",
     "pdf.paymentTerms": "Payment terms",
     "pdf.note": "Note",
+    "pdf.bankDetails": "Bank details",
+    "pdf.phone": "Phone",
     "pdf.taxNumber": "Tax number: ",
     "pdf.vatId": "VAT ID: ",
     "pdf.servicePeriod": "Service period",
@@ -69,4 +71,23 @@ MESSAGES: dict[str, str] = {
     "email.attachment.invoice": "Please find attached your charging invoice {number} as a PDF file.",
     "email.attachment.cancellation": "Please find attached your charging cancellation invoice {number} as a PDF file.",
     "email.closing": "Kind regards",
+
+    "email.englishBelow": "(English version below)",
+    "account.greeting.named": "Hello {name},",
+    "account.invitation.subject": "Your access to {app}",
+    "account.invitation.intro": (
+        "An account has been created for you at {app}. Please set your "
+        "personal password using the following link:"
+    ),
+    "account.reset.subject": "Reset your password for {app}",
+    "account.reset.intro": "You can set a new password using the following link:",
+    "account.linkValidity": (
+        "The link can be used once and is valid for {minutes} minutes. If you "
+        "did not request this message, you can ignore it."
+    ),
+
+    "test.smtp.subject": "mail server test",
+    "test.smtp.body": "This test message confirms that the mail server settings work.",
+    "test.smime.subject": "S/MIME test",
+    "test.smime.body": "This signed test message confirms that the S/MIME settings work.",
 }

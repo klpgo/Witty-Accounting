@@ -46,7 +46,7 @@ router = APIRouter(
 def save_upload_with_limit(
     file: UploadFile,
     destination,
-    file_label: str = "XLSX-Datei",
+    file_label: str = "XLSX file",
 ) -> int:
     """
     Speichert einen Upload blockweise und bricht bei Überschreitung
@@ -68,8 +68,7 @@ def save_upload_with_limit(
             raise HTTPException(
                 status_code=413,
                 detail=(
-                    f"Die {file_label} ist zu groß. "
-                    "Maximal erlaubt sind 10 MB."
+                    f"The {file_label} is too large. The maximum is 10 MB."
                 ),
             )
 
@@ -95,8 +94,7 @@ def upload_xlsx(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Es werden ausschließlich "
-                "XLSX-Dateien unterstützt."
+                "Only XLSX files are supported."
             ),
         )
 
@@ -120,7 +118,7 @@ def upload_xlsx(
         if uploaded_size == 0:
             raise HTTPException(
                 status_code=400,
-                detail="Die hochgeladene Datei ist leer.",
+                detail="The uploaded file is empty.",
             )
 
         with import_lock(db):
@@ -153,8 +151,7 @@ def upload_xlsx(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Die XLSX-Datei konnte nicht "
-                f"importiert werden: {exc}"
+                f"The XLSX file could not be imported: {exc}"
             ),
         ) from exc
 
@@ -232,8 +229,7 @@ def upload_json(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Es werden ausschließlich "
-                "JSON-Dateien unterstützt."
+                "Only JSON files are supported."
             ),
         )
 
@@ -252,13 +248,13 @@ def upload_json(
             uploaded_size = save_upload_with_limit(
                 file=file,
                 destination=temporary_file,
-                file_label="JSON-Datei",
+                file_label="JSON file",
             )
 
         if uploaded_size == 0:
             raise HTTPException(
                 status_code=400,
-                detail="Die hochgeladene Datei ist leer.",
+                detail="The uploaded file is empty.",
             )
 
         with import_lock(db):
@@ -287,8 +283,7 @@ def upload_json(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Die JSON-Datei konnte nicht "
-                f"importiert werden: {exc}"
+                f"The JSON file could not be imported: {exc}"
             ),
         ) from exc
 
@@ -346,8 +341,7 @@ def import_hager(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Die Daten aus der Hager Cloud konnten nicht "
-                f"importiert werden: {exc}"
+                f"The data from the Hager Cloud could not be imported: {exc}"
             ),
         ) from exc
 

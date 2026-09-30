@@ -88,8 +88,7 @@ def get_global_settings(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             ),
             detail=(
-                "Die globalen Einstellungen wurden "
-                "nicht gefunden."
+                "The global settings were not found."
             ),
         )
 
@@ -198,15 +197,15 @@ def build_smtp_settings_response(
         .smtp_use_database_settings
     ):
         required_values = {
-            "SMTP-Host": global_settings.smtp_host,
-            "SMTP-Port": global_settings.smtp_port,
-            "SMTP-Timeout": (
+            "SMTP host": global_settings.smtp_host,
+            "SMTP port": global_settings.smtp_port,
+            "SMTP timeout": (
                 global_settings.smtp_timeout_seconds
             ),
-            "Absenderadresse": (
+            "sender address": (
                 global_settings.mail_from_address
             ),
-            "Absendername": (
+            "sender name": (
                 global_settings.mail_from_name
             ),
         }
@@ -229,9 +228,7 @@ def build_smtp_settings_response(
                     .HTTP_500_INTERNAL_SERVER_ERROR
                 ),
                 detail=(
-                    "Die gespeicherten "
-                    "SMTP-Einstellungen sind "
-                    "unvollständig: "
+                    "The saved SMTP settings are incomplete: "
                     + ", ".join(missing_names)
                 ),
             )
@@ -423,16 +420,16 @@ def update_invoice_export_settings(
         global_settings.invoice_export_sftp_enabled,
     )
     candidate_values = {
-        "SFTP-Host": updates.get(
+        "SFTP host": updates.get(
             "host",
             global_settings.invoice_export_sftp_host,
         ),
-        "SFTP-Benutzer": updates.get(
+        "SFTP user": updates.get(
             "username",
             global_settings
             .invoice_export_sftp_username,
         ),
-        "SFTP-Zielverzeichnis": updates.get(
+        "SFTP target directory": updates.get(
             "directory",
             global_settings
             .invoice_export_sftp_directory,
@@ -453,8 +450,7 @@ def update_invoice_export_settings(
                     status.HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Zum Aktivieren des SFTP-Exports "
-                    "fehlen: " + ", ".join(missing)
+                    "To enable the SFTP export, the following are missing: " + ", ".join(missing)
                 ),
             )
 
@@ -469,9 +465,7 @@ def update_invoice_export_settings(
                     status.HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Der private Schlüssel für den "
-                    "SFTP-Export ist nicht "
-                    "eingerichtet."
+                    "The private key for the SFTP export is not set up."
                 ),
             )
 
@@ -481,9 +475,7 @@ def update_invoice_export_settings(
                     status.HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Die known_hosts-Datei für den "
-                    "SFTP-Export ist nicht "
-                    "eingerichtet."
+                    "The known_hosts file for the SFTP export is not set up."
                 ),
             )
 
@@ -564,25 +556,25 @@ def update_smtp_settings(
     )
 
     candidate_values = {
-        "SMTP-Host": updates.get(
+        "SMTP host": updates.get(
             "smtp_host",
             global_settings.smtp_host,
         ),
-        "SMTP-Port": updates.get(
+        "SMTP port": updates.get(
             "smtp_port",
             global_settings.smtp_port,
         ),
-        "SMTP-Timeout": updates.get(
+        "SMTP timeout": updates.get(
             "smtp_timeout_seconds",
             global_settings
             .smtp_timeout_seconds,
         ),
-        "Absenderadresse": updates.get(
+        "sender address": updates.get(
             "mail_from_address",
             global_settings
             .mail_from_address,
         ),
-        "Absendername": updates.get(
+        "sender name": updates.get(
             "mail_from_name",
             global_settings.mail_from_name,
         ),
@@ -607,8 +599,8 @@ def update_smtp_settings(
                     .HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Für datenbankbasierte "
-                    "SMTP-Einstellungen fehlen: "
+                    "For database-based SMTP settings, the following are "
+                    "missing: "
                     + ", ".join(missing_names)
                 ),
             )
@@ -678,8 +670,7 @@ def update_smtp_settings(
                     status.HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Die hochgeladene S/MIME-Datei "
-                    "ist ungültig."
+                    "The uploaded S/MIME file is invalid."
                 ),
             ) from exc
 
@@ -689,8 +680,7 @@ def update_smtp_settings(
                     status.HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Die hochgeladene S/MIME-Datei "
-                    "ist leer."
+                    "The uploaded S/MIME file is empty."
                 ),
             )
 
@@ -700,8 +690,7 @@ def update_smtp_settings(
                     status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
                 ),
                 detail=(
-                    "Die S/MIME-Datei darf höchstens "
-                    "65.535 Byte groß sein."
+                    "The S/MIME file may be at most 65,535 bytes."
                 ),
             )
 
@@ -721,8 +710,7 @@ def update_smtp_settings(
                     status.HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Das S/MIME-Zertifikat muss eine "
-                    ".p12- oder .pfx-Datei sein."
+                    "The S/MIME certificate must be a .p12 or .pfx file."
                 ),
             )
 
@@ -767,8 +755,7 @@ def update_smtp_settings(
                     status.HTTP_500_INTERNAL_SERVER_ERROR
                 ),
                 detail=(
-                    "Das gespeicherte S/MIME-Passwort "
-                    "konnte nicht verwendet werden."
+                    "The saved S/MIME password could not be used."
                 ),
             ) from exc
 
@@ -791,8 +778,7 @@ def update_smtp_settings(
                     status.HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Zum S/MIME-Zertifikat ist ein "
-                    "Passwort erforderlich."
+                    "A password is required for the S/MIME certificate."
                 ),
             )
 
@@ -803,7 +789,7 @@ def update_smtp_settings(
             sender_email = (
                 str(
                     candidate_values[
-                        "Absenderadresse"
+                        "sender address"
                     ]
                 )
                 if use_database_settings
@@ -840,9 +826,8 @@ def update_smtp_settings(
                     status.HTTP_422_UNPROCESSABLE_CONTENT
                 ),
                 detail=(
-                    "Vor dem Aktivieren muss ein "
-                    "S/MIME-Zertifikat mit Passwort "
-                    "hochgeladen werden."
+                    "An S/MIME certificate with password must be uploaded before "
+                    "activating."
                 ),
             )
 
@@ -986,8 +971,8 @@ def update_global_settings(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Die Währung kann nicht mehr geändert werden, "
-                "da bereits Rechnungen existieren."
+                "The currency can no longer be changed because invoices "
+                "already exist."
             ),
         )
 
@@ -999,8 +984,8 @@ def update_global_settings(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Der Girocode ist nur mit der Währung EUR möglich. "
-                "Bitte den Girocode deaktivieren oder EUR wählen."
+                "The Girocode is only possible with the currency EUR. Please "
+                "disable the Girocode or choose EUR."
             ),
         )
 

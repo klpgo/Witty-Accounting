@@ -88,7 +88,7 @@ def check_all_tenants(
     try:
         tenants = list_tenants()
     except Exception:
-        logger.exception("Automatischer Hager-Abruf: Mandanten nicht lesbar")
+        logger.exception("Automatic Hager fetch: tenants could not be read")
         return 0
 
     started = 0
@@ -99,7 +99,7 @@ def check_all_tenants(
                 started += 1
         except Exception:
             logger.exception(
-                "Automatischer Hager-Abruf: Prüfung für Mandant %s fehlgeschlagen",
+                "Automatic Hager fetch: check for tenant %s failed",
                 tenant.slug,
             )
 
@@ -161,7 +161,7 @@ def start_if_due(
     with _running_lock:
         _running_tenants.add(tenant.id)
 
-    logger.info("Automatischer Hager-Abruf für Mandant %s gestartet", tenant.slug)
+    logger.info("Automatic Hager fetch for tenant %s started", tenant.slug)
 
     try:
         (submit or _get_executor().submit)(run_import, tenant, session_factory)
@@ -174,40 +174,41 @@ def start_if_due(
 
 
 def summarize(import_result: dict, pricing_result: dict) -> str:
+    """Kurzfassung eines Laufs für die Statusanzeige (englisch)."""
     parts = [
-        f"{import_result['imported']} neu",
-        f"{import_result['skipped']} übersprungen",
+        f"{import_result['imported']} new",
+        f"{import_result['skipped']} skipped",
     ]
 
     if pricing_result.get("missing_price"):
-        parts.append(f"{pricing_result['missing_price']} ohne Preis")
+        parts.append(f"{pricing_result['missing_price']} without price")
 
     if import_result.get("unknown_rfid_sessions"):
         parts.append(
-            f"{import_result['unknown_rfid_sessions']} ohne Kartenzuordnung"
+            f"{import_result['unknown_rfid_sessions']} without card assignment"
         )
 
     if import_result.get("skipped_before_billing_start"):
         parts.append(
-            f"{import_result['skipped_before_billing_start']} vor Abrechnungsbeginn"
+            f"{import_result['skipped_before_billing_start']} before billing start"
         )
 
     if import_result.get("skipped_empty"):
-        parts.append(f"{import_result['skipped_empty']} ohne Energie")
+        parts.append(f"{import_result['skipped_empty']} without energy")
 
     if import_result.get("reassigned_sessions"):
         parts.append(
-            f"{import_result['reassigned_sessions']} nachträglich zugeordnet"
+            f"{import_result['reassigned_sessions']} assigned retroactively"
         )
 
     fetched_from = import_result.get("fetched_from")
     scope = (
-        f"ab {fetched_from:%d.%m.%Y}"
+        f"from {fetched_from:%Y-%m-%d}"
         if fetched_from is not None
-        else "vollständig"
+        else "in full"
     )
 
-    return f"{', '.join(parts)} (abgerufen {scope})"
+    return f"{', '.join(parts)} (fetched {scope})"
 
 
 def run_import(
@@ -240,11 +241,11 @@ def run_import(
         except Exception as exc:
             db.rollback()
             logger.exception(
-                "Automatischer Hager-Abruf für Mandant %s: unerwarteter Fehler",
+                "Automatic Hager fetch for tenant %s: unexpected error",
                 tenant.slug,
             )
             status = STATUS_ERROR
-            message = f"Unerwarteter Fehler: {type(exc).__name__}"
+            message = f"Unexpected error: {type(exc).__name__}"
 
         try:
             db.commit()
@@ -260,14 +261,14 @@ def run_import(
 
         log = logger.info if status == STATUS_SUCCESS else logger.warning
         log(
-            "Automatischer Hager-Abruf für Mandant %s: %s",
+            "Automatic Hager fetch for tenant %s: %s",
             tenant.slug,
             message,
         )
     except Exception:
         db.rollback()
         logger.exception(
-            "Automatischer Hager-Abruf für Mandant %s: Status nicht gespeichert",
+            "Automatic Hager fetch for tenant %s: status not saved",
             tenant.slug,
         )
     finally:

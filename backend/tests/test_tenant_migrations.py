@@ -134,7 +134,7 @@ def test_can_migrate_only_one_tenant() -> None:
 def test_rejects_unknown_tenant_filter() -> None:
     with pytest.raises(
         ValueError,
-        match="nicht gefunden",
+        match="not found",
     ):
         migrate_active_tenants(
             [make_tenant(1, "first")],

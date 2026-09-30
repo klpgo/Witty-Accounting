@@ -141,7 +141,7 @@ def test_list_users_rejects_non_admin(
     assert response.status_code == 403
     assert response.json() == {
         "detail": (
-            "Administratorrechte erforderlich."
+            "Administrator rights required."
         ),
     }
 
@@ -286,7 +286,7 @@ def test_rejects_combined_email_and_post_delivery(
     )
 
     assert response.status_code == 422
-    assert "genau eine" in response.json()["detail"]
+    assert "exactly one" in response.json()["detail"]
 
 
 def test_user_creation_rolls_back_if_invitation_fails(
@@ -518,8 +518,7 @@ def test_update_own_profile_rejects_duplicate_email(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Diese E-Mail-Adresse wird "
-            "bereits verwendet."
+            "This email address is already in use."
         ),
     }
 
@@ -614,9 +613,8 @@ def test_change_own_password_rejects_weak_password(
     assert response.status_code == 422
     assert response.json() == {
         "detail": (
-            "Das Passwort muss einen "
-            "Großbuchstaben, eine Zahl und "
-            "ein Sonderzeichen enthalten."
+            "The password must contain an uppercase letter, a digit and "
+            "a special character."
         ),
     }
 
@@ -654,8 +652,7 @@ def test_change_own_password_rejects_wrong_password(
     assert response.status_code == 400
     assert response.json() == {
         "detail": (
-            "Das aktuelle Passwort ist "
-            "nicht korrekt."
+            "The current password is incorrect."
         ),
     }
 
@@ -897,9 +894,8 @@ def test_admin_password_reset_rejects_weak_password(
     assert response.status_code == 422
     assert response.json() == {
         "detail": (
-            "Das Passwort muss einen "
-            "Großbuchstaben, eine Zahl und "
-            "ein Sonderzeichen enthalten."
+            "The password must contain an uppercase letter, a digit and "
+            "a special character."
         ),
     }
 
@@ -974,8 +970,7 @@ def test_admin_user_routes_return_not_found(
     assert response.status_code == 404
     assert response.json() == {
         "detail": (
-            "Benutzer 999999 wurde nicht "
-            "gefunden."
+            "User 999999 was not found."
         ),
     }
 

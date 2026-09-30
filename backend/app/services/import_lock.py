@@ -55,8 +55,8 @@ def import_lock(
 
     if not lock.acquire(timeout=timeout):
         raise ImportBusyError(
-            "Ein anderer Import läuft noch. Bitte in einigen Minuten "
-            "erneut versuchen."
+            "Another import is still running. Please try again in a few "
+            "minutes."
         )
 
     try:

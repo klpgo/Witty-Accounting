@@ -473,6 +473,7 @@ def test_invoice_in_english_language() -> None:
     assert "Invoice number" in text
     assert "Service period" in text
     assert "Net amount" in text
+    assert "Bank details" in text
     assert "EUR 2.62" in text
     assert "Rechnungsnummer" not in text
 

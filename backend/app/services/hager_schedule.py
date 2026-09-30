@@ -32,7 +32,7 @@ def parse_start_time(value: str) -> time:
 
     if match is None:
         raise ValueError(
-            "Die Startzeit muss im Format HH:MM angegeben werden."
+            "The start time must be given in the format HH:MM."
         )
 
     return time(int(match.group(1)), int(match.group(2)))
@@ -41,7 +41,7 @@ def parse_start_time(value: str) -> time:
 def validate_interval(hours: int) -> int:
     if not MIN_INTERVAL_HOURS <= hours <= MAX_INTERVAL_HOURS:
         raise ValueError(
-            "Das Intervall muss zwischen 1 und 24 Stunden liegen."
+            "The interval must be between 1 and 24 hours."
         )
 
     return hours
@@ -89,7 +89,7 @@ def latest_slot(now: datetime, start: time, interval_hours: int) -> datetime:
         if reached:
             return max(reached)
 
-    raise RuntimeError("Kein Abrufzeitpunkt gefunden.")  # pragma: no cover
+    raise RuntimeError("No fetch time found.")  # pragma: no cover
 
 
 def next_slot(now: datetime, start: time, interval_hours: int) -> datetime:
@@ -102,7 +102,7 @@ def next_slot(now: datetime, start: time, interval_hours: int) -> datetime:
             if slot > now_utc:
                 return slot
 
-    raise RuntimeError("Kein Abrufzeitpunkt gefunden.")  # pragma: no cover
+    raise RuntimeError("No fetch time found.")  # pragma: no cover
 
 
 def is_due(

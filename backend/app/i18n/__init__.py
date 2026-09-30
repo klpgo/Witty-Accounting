@@ -27,3 +27,28 @@ def translate(language: str | None, key: str, **params: object) -> str:
     text = catalog.get(key) or de.MESSAGES[key]
 
     return text.format(**params) if params else text
+
+
+# Zweisprachige E-Mails (Konto- und Test-E-Mails): Deutsch oben, Englisch
+# darunter, getrennt durch eine Linie. Für Empfänger, deren Sprache beim
+# Versand nicht feststeht (z. B. Einladung).
+BILINGUAL_SEPARATOR = "\n" + "-" * 40 + "\n\n"
+
+
+def bilingual_subject(key: str, **params: object) -> str:
+    """Betreff "Deutsch / English"; bei gleichem Text nur einmal."""
+    german = translate("de", key, **params)
+    english = translate("en", key, **params)
+
+    return german if german == english else f"{german} / {english}"
+
+
+def bilingual_text(render) -> str:
+    """Text zweisprachig: render(language) liefert den Text je Sprache."""
+    return (
+        translate("de", "email.englishBelow")
+        + "\n\n"
+        + render("de")
+        + BILINGUAL_SEPARATOR
+        + render("en")
+    )

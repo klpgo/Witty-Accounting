@@ -70,7 +70,7 @@ async function getErrorMessage(
     // Die Antwort enthielt kein JSON.
   }
 
-  return `Anfrage fehlgeschlagen (${response.status}).`
+  return `Request failed (${response.status}).`
 }
 
 export type ImportFileType = 'xlsx' | 'json'
@@ -100,7 +100,7 @@ export async function uploadImportFile(
 
   if (fileType === null) {
     throw new ImportApiError(
-      'Es werden nur XLSX- und JSON-Dateien unterstützt.',
+      'Only XLSX and JSON files are supported.',
       400,
     )
   }

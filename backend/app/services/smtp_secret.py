@@ -26,8 +26,7 @@ def get_fernet() -> Fernet:
 
     if encryption_key is None:
         raise SmtpSecretConfigurationError(
-            "Der Verschlüsselungsschlüssel für "
-            "Mail-Einstellungen ist nicht konfiguriert."
+            "The encryption key for mail settings is not configured."
         )
 
     try:
@@ -38,8 +37,7 @@ def get_fernet() -> Fernet:
         )
     except (TypeError, ValueError) as exc:
         raise SmtpSecretConfigurationError(
-            "Der Verschlüsselungsschlüssel für "
-            "Mail-Einstellungen ist ungültig."
+            "The encryption key for mail settings is invalid."
         ) from exc
 
 
@@ -48,8 +46,7 @@ def encrypt_smtp_password(
 ) -> str:
     if not password:
         raise SmtpSecretError(
-            "Ein leeres SMTP-Passwort kann nicht "
-            "verschlüsselt werden."
+            "An empty SMTP password cannot be encrypted."
         )
 
     encrypted = get_fernet().encrypt(
@@ -72,8 +69,7 @@ def decrypt_smtp_password(
         ValueError,
     ) as exc:
         raise SmtpSecretDecryptionError(
-            "Das gespeicherte SMTP-Passwort "
-            "konnte nicht entschlüsselt werden."
+            "The saved SMTP password could not be decrypted."
         ) from exc
 
     return decrypted.decode("utf-8")
@@ -84,8 +80,7 @@ def encrypt_smime_password(
 ) -> str:
     if not password:
         raise SmtpSecretError(
-            "Ein leeres S/MIME-Passwort kann nicht "
-            "verschlüsselt werden."
+            "An empty S/MIME password cannot be encrypted."
         )
 
     encrypted = get_fernet().encrypt(
@@ -108,8 +103,7 @@ def decrypt_smime_password(
         ValueError,
     ) as exc:
         raise SmtpSecretDecryptionError(
-            "Das gespeicherte S/MIME-Passwort "
-            "konnte nicht entschlüsselt werden."
+            "The saved S/MIME password could not be decrypted."
         ) from exc
 
     return decrypted.decode("utf-8")

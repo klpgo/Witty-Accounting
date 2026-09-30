@@ -25,7 +25,7 @@ def test_second_import_waits_and_gives_up_after_timeout() -> None:
     worker.start()
     acquired.wait(5)
 
-    with pytest.raises(ImportBusyError, match="anderer Import"):
+    with pytest.raises(ImportBusyError, match="Another import"):
         with import_lock(db, timeout=0.1):
             pass
 

@@ -71,8 +71,8 @@ class Settings(BaseSettings):
             ZoneInfo(name)
         except (ZoneInfoNotFoundError, ValueError) as exc:
             raise ValueError(
-                f"Ungültige Zeitzone '{value}'. Erwartet wird ein "
-                "IANA-Name wie Europe/Berlin (Umgebungsvariable TZ)."
+                f"Invalid time zone '{value}'. Expected an IANA name such as "
+                "Europe/Berlin (environment variable TZ)."
             ) from exc
 
         return name

@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.i18n import bilingual_subject, bilingual_text, translate
 from app.config import settings
 from app.models.global_settings import GlobalSettings
 from app.models.password_reset_token import (
@@ -203,29 +204,30 @@ def build_password_reset_message(
     display_name = (
         f"{user.first_name} {user.last_name}"
     ).strip()
-    greeting = (
-        f"Guten Tag {display_name},"
-        if display_name
-        else "Guten Tag,"
+    purpose_key = (
+        "account.invitation"
+        if purpose == "invitation"
+        else "account.reset"
+    )
+    subject = bilingual_subject(
+        f"{purpose_key}.subject",
+        app=application_name,
     )
 
-    if purpose == "invitation":
-        subject = (
-            f"Ihr Zugang zu {application_name}"
+    def render(language: str) -> str:
+        greeting = (
+            translate(language, "account.greeting.named", name=display_name)
+            if display_name
+            else translate(language, "email.greeting")
         )
-        introduction = (
-            f"für Sie wurde ein Benutzerkonto bei "
-            f"{application_name} angelegt. Legen Sie "
-            "über den folgenden Link Ihr persönliches "
-            "Passwort fest:"
-        )
-    else:
-        subject = (
-            f"Passwort für {application_name} zurücksetzen"
-        )
-        introduction = (
-            "über den folgenden Link können Sie ein "
-            "neues Passwort festlegen:"
+
+        return (
+            f"{greeting}\n\n"
+            f"{translate(language, f'{purpose_key}.intro', app=application_name)}\n\n"
+            f"{reset_url}\n\n"
+            f"{translate(language, 'account.linkValidity', minutes=effective_configuration.expire_minutes)}\n\n"
+            f"{translate(language, 'email.closing')}\n"
+            f"{sender_name}\n"
         )
 
     message = EmailMessage()
@@ -238,16 +240,7 @@ def build_password_reset_message(
     message["To"] = user.email.strip()
     message["Subject"] = subject
     message.set_content(
-        f"{greeting}\n\n"
-        f"{introduction}\n\n"
-        f"{reset_url}\n\n"
-        "Der Link ist einmalig und "
-        f"{effective_configuration.expire_minutes} "
-        "Minuten gültig. Falls Sie diese Nachricht "
-        "nicht angefordert haben, können Sie sie "
-        "ignorieren.\n\n"
-        "Mit freundlichen Grüßen\n"
-        f"{sender_name}\n",
+        bilingual_text(render),
         subtype="plain",
         charset="utf-8",
     )
@@ -269,8 +262,7 @@ def sign_password_reset_message(
         )
     except MailSmimeConfigurationError as exc:
         raise PasswordResetEmailError(
-            "Die E-Mail konnte nicht mit S/MIME "
-            "signiert werden."
+            "The email could not be signed with S/MIME."
         ) from exc
 
 
@@ -322,8 +314,7 @@ def send_password_reset_email(
             recipient_email=user.email.strip(),
             signed_message=signed_message,
             delivery_error_message=(
-                "Die Passwort-E-Mail konnte nicht "
-                "versendet werden."
+                "The password email could not be sent."
             ),
         )
     except InvoiceEmailDeliveryError as exc:

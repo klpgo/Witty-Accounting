@@ -256,7 +256,7 @@ class GlobalSettingsUpdate(BaseModel):
     ) -> object:
         if value is None:
             raise ValueError(
-                "Der Einstellungswert darf nicht null sein."
+                "The setting value must not be null."
             )
 
         return value
@@ -271,7 +271,7 @@ class GlobalSettingsUpdate(BaseModel):
 
         if not normalized:
             raise ValueError(
-                "Der Anwendungsname darf nicht leer sein."
+                "The application name must not be empty."
             )
 
         return normalized
@@ -294,10 +294,8 @@ class GlobalSettingsUpdate(BaseModel):
             or parsed.fragment
         ):
             raise ValueError(
-                "Die öffentliche Frontend-Adresse muss "
-                "eine vollständige HTTP- oder HTTPS-URL "
-                "ohne Zugangsdaten, Parameter oder Fragment "
-                "sein."
+                "The public frontend address must be a complete HTTP or "
+                "HTTPS URL without credentials, parameters or fragment."
             )
 
         return normalized

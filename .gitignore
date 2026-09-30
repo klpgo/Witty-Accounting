@@ -5,6 +5,8 @@ __pycache__/
 *.pyd
 *.swp
 *.md
+!README.md
+!docs/*.md
 
 # Virtual Environments
 .venv/

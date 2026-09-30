@@ -18,8 +18,7 @@ class HagerSecretError(SmtpSecretError):
 def encrypt_hager_password(password: str) -> str:
     if not password:
         raise HagerSecretError(
-            "Ein leeres Hager-Passwort kann nicht "
-            "verschlüsselt werden."
+            "An empty Hager password cannot be encrypted."
         )
 
     return (
@@ -40,8 +39,7 @@ def decrypt_hager_password(encrypted_password: str) -> str:
         ValueError,
     ) as exc:
         raise HagerSecretError(
-            "Das gespeicherte Hager-Passwort "
-            "konnte nicht entschlüsselt werden."
+            "The saved Hager password could not be decrypted."
         ) from exc
 
     return decrypted.decode("utf-8")

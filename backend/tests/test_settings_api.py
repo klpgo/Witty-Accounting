@@ -312,7 +312,7 @@ def test_cannot_enable_invoice_export_without_secret_files(
     )
 
     assert response.status_code == 422
-    assert "private Schlüssel" in response.json()[
+    assert "private key" in response.json()[
         "detail"
     ]
 
@@ -1225,7 +1225,7 @@ def test_rejects_smime_upload_without_password(
     )
 
     assert response.status_code == 422
-    assert "Passwort" in response.json()["detail"]
+    assert "password" in response.json()["detail"]
 
 
 def test_sends_smime_test_email_to_admin(
@@ -1325,7 +1325,7 @@ def test_smtp_test_reports_configuration_error(
         recipient_email: str,
     ) -> SmtpTestEmailResult:
         raise InvoiceEmailConfigurationError(
-            "Der E-Mail-Versand ist deaktiviert."
+            "Email delivery is disabled."
         )
 
     monkeypatch.setattr(
@@ -1341,7 +1341,7 @@ def test_smtp_test_reports_configuration_error(
     assert response.status_code == 422
     assert response.json() == {
         "detail": (
-            "Der E-Mail-Versand ist deaktiviert."
+            "Email delivery is disabled."
         ),
     }
 
@@ -1356,8 +1356,7 @@ def test_smtp_test_reports_delivery_error(
         recipient_email: str,
     ) -> SmtpTestEmailResult:
         raise InvoiceEmailDeliveryError(
-            "Die SMTP-Testnachricht konnte "
-            "nicht versendet werden."
+            "The SMTP test message could not be sent."
         )
 
     monkeypatch.setattr(
@@ -1373,8 +1372,7 @@ def test_smtp_test_reports_delivery_error(
     assert response.status_code == 502
     assert response.json() == {
         "detail": (
-            "Die SMTP-Testnachricht konnte "
-            "nicht versendet werden."
+            "The SMTP test message could not be sent."
         ),
     }
 
@@ -1493,7 +1491,7 @@ def test_currency_is_fixed_once_invoices_exist(
     )
 
     assert response.status_code == 409
-    assert "bereits Rechnungen" in response.json()["detail"]
+    assert "invoices already exist" in response.json()["detail"]
 
     # das Gebietsschema bleibt änderbar
     assert admin_client.patch(

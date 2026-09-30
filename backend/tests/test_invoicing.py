@@ -304,8 +304,7 @@ def test_rejects_incomplete_draft_when_tariff_is_missing(
     with pytest.raises(
         MissingEnergyPriceError,
         match=(
-            "Kein gültiger Tarif für "
-            "Ladevorgang .* vom 17.06.2026"
+            "No valid tariff for charging session .* on 17.06.2026"
         ),
     ):
         create_invoice_draft(
@@ -385,8 +384,8 @@ def test_explains_period_before_billing_start_date(
     with pytest.raises(
         NoBillableSessionsError,
         match=(
-            "Leistungszeitraum liegt vollständig vor "
-            "dem Abrechnungs-Startdatum 01.10.2026"
+            "service period lies entirely before the billing start date "
+            "01.10.2026"
         ),
     ):
         create_invoice_draft(
@@ -1467,7 +1466,7 @@ def test_rejects_second_cancellation_draft(
 
     with pytest.raises(
         InvoiceAlreadyCancelledError,
-        match="existiert bereits",
+        match="already exists",
     ):
         create_cancellation_draft(
             database_session,
@@ -1500,7 +1499,7 @@ def test_rejects_cancellation_of_draft_invoice(
 
     with pytest.raises(
         InvoiceCancellationStateError,
-        match="Nur eine finalisierte Rechnung",
+        match="Only a finalized invoice",
     ):
         create_cancellation_draft(
             database_session,
@@ -1541,7 +1540,7 @@ def test_rejects_empty_cancellation_reason(
 
     with pytest.raises(
         InvoiceCancellationError,
-        match="Stornierungsgrund ist erforderlich",
+        match="reason for the cancellation is required",
     ):
         create_cancellation_draft(
             database_session,
@@ -1555,7 +1554,7 @@ def test_rejects_cancellation_for_missing_invoice(
 ) -> None:
     with pytest.raises(
         InvoiceCancellationNotFoundError,
-        match="wurde nicht gefunden",
+        match="was not found",
     ):
         create_cancellation_draft(
             database_session,
@@ -1602,7 +1601,7 @@ def test_rejects_cancellation_of_cancellation_document(
 
     with pytest.raises(
         InvoiceCancellationStateError,
-        match="Nur eine normale Rechnung",
+        match="Only a regular invoice",
     ):
         create_cancellation_draft(
             database_session,
@@ -1862,7 +1861,7 @@ def test_rejects_second_cancellation_finalization(
 
     with pytest.raises(
         InvoiceCancellationStateError,
-        match="Nur ein Storno-Entwurf",
+        match="Only a cancellation draft",
     ):
         finalize_cancellation(
             database_session,
@@ -1914,8 +1913,7 @@ def test_rejects_cancellation_date_before_invoice_date(
     with pytest.raises(
         InvoiceCancellationStateError,
         match=(
-            "Stornodatum darf nicht vor "
-            "dem Rechnungsdatum liegen"
+            "cancellation date must not be before the invoice date"
         ),
     ):
         finalize_cancellation(

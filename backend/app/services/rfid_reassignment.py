@@ -47,7 +47,7 @@ def classify_rfid(
         )
     except RFIDAssignmentOverlapError:
         logger.warning(
-            "Mehrere gültige Zuordnungen für RFID %s am %s",
+            "Several valid assignments for RFID %s on %s",
             rfid_number,
             at.isoformat(),
         )
@@ -139,8 +139,8 @@ def reassign_open_sessions(db: Session) -> int:
 
     if reassigned:
         logger.info(
-            "%s Ladevorgänge nachträglich einer RFID-Zuordnung "
-            "zugeordnet",
+            "%s charging sessions retroactively assigned to an RFID "
+            "assignment",
             reassigned,
         )
 
@@ -163,6 +163,6 @@ def reassign_after_change(db: Session) -> int:
     except Exception:
         db.rollback()
         logger.exception(
-            "Nachträgliche RFID-Zuordnung fehlgeschlagen"
+            "Retroactive RFID assignment failed"
         )
         return 0

@@ -67,7 +67,7 @@ def test_hager_connection_test_returns_summary(
     ("error", "status_code"),
     [
         (HagerConfigurationError("fehlt: Passwort"), 422),
-        (HagerConnectionError("Anmeldung abgelehnt"), 502),
+        (HagerConnectionError("Sign-in rejected"), 502),
     ],
 )
 def test_hager_connection_test_maps_errors(
@@ -161,14 +161,14 @@ def test_import_hager_connection_error_returns_502(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail(db: Any, date_from=None, date_to=None, fetch_all=False) -> None:
-        raise HagerConnectionError("Hager Cloud ist nicht erreichbar: ConnectTimeout")
+        raise HagerConnectionError("Hager Cloud is not reachable: ConnectTimeout")
 
     monkeypatch.setattr("app.api.routes.imports.import_from_hager", fail)
 
     response = client.post("/api/imports/hager")
 
     assert response.status_code == 502
-    assert "nicht erreichbar" in response.json()["detail"]
+    assert "not reachable" in response.json()["detail"]
 
 
 def test_import_hager_fetch_all(
@@ -215,14 +215,14 @@ def test_import_hager_while_another_import_runs_returns_409(
     from app.services.import_lock import ImportBusyError
 
     def busy(db: Any, date_from=None, date_to=None, fetch_all=False) -> None:
-        raise ImportBusyError("Ein anderer Import läuft noch.")
+        raise ImportBusyError("Another import is still running.")
 
     monkeypatch.setattr("app.api.routes.imports.import_from_hager", busy)
 
     response = client.post("/api/imports/hager")
 
     assert response.status_code == 409
-    assert "anderer Import" in response.json()["detail"]
+    assert "Another import" in response.json()["detail"]
 
 
 def test_import_hager_with_changed_timezone_returns_409(
@@ -232,7 +232,7 @@ def test_import_hager_with_changed_timezone_returns_409(
     from app.services.data_timezone import DataTimezoneMismatchError
 
     def mismatch(db: Any, date_from=None, date_to=None, fetch_all=False) -> None:
-        raise DataTimezoneMismatchError("Die Daten liegen in Europe/Berlin.")
+        raise DataTimezoneMismatchError("The data is stored in Europe/Berlin.")
 
     monkeypatch.setattr("app.api.routes.imports.import_from_hager", mismatch)
 

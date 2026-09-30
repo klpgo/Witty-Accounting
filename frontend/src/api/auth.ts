@@ -40,7 +40,7 @@ async function getErrorMessage(
     // Response did not contain JSON.
   }
 
-  return `Anfrage fehlgeschlagen (${response.status}).`
+  return `Request failed (${response.status}).`
 }
 
 export async function login(

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
-from app.i18n import translate
+from app.i18n import bilingual_subject, bilingual_text, translate
 from app.models.invoice import Invoice
 from app.models.global_settings import GlobalSettings
 from app.services.invoice_archive import (
@@ -148,9 +148,7 @@ def load_smtp_configuration(
             except SmtpSecretError as exc:
                 raise (
                     InvoiceEmailConfigurationError(
-                        "Das gespeicherte "
-                        "SMTP-Passwort konnte nicht "
-                        "verwendet werden."
+                        "The saved SMTP password could not be used."
                     )
                 ) from exc
     else:
@@ -189,32 +187,32 @@ def load_smtp_configuration(
 
     if not mail_sending_enabled:
         raise InvoiceEmailConfigurationError(
-            "Der E-Mail-Versand ist deaktiviert."
+            "Email delivery is disabled."
         )
 
     if smtp_host is None:
         raise InvoiceEmailConfigurationError(
-            "Der SMTP-Host ist nicht konfiguriert."
+            "The SMTP host is not configured."
         )
 
     if smtp_port is None:
         raise InvoiceEmailConfigurationError(
-            "Der SMTP-Port ist nicht konfiguriert."
+            "The SMTP port is not configured."
         )
 
     if smtp_timeout is None:
         raise InvoiceEmailConfigurationError(
-            "Der SMTP-Timeout ist nicht konfiguriert."
+            "The SMTP timeout is not configured."
         )
 
     if from_address is None:
         raise InvoiceEmailConfigurationError(
-            "Die Absenderadresse ist nicht konfiguriert."
+            "The sender address is not configured."
         )
 
     if from_name is None:
         raise InvoiceEmailConfigurationError(
-            "Der Absendername ist nicht konfiguriert."
+            "The sender name is not configured."
         )
 
     if (
@@ -222,8 +220,7 @@ def load_smtp_configuration(
         and smtp_password is None
     ):
         raise InvoiceEmailConfigurationError(
-            "Für den SMTP-Benutzernamen ist "
-            "kein Passwort konfiguriert."
+            "No password is configured for the SMTP username."
         )
 
     if (
@@ -231,8 +228,7 @@ def load_smtp_configuration(
         and smtp_username is None
     ):
         raise InvoiceEmailConfigurationError(
-            "Für das SMTP-Passwort ist kein "
-            "Benutzername konfiguriert."
+            "No username is configured for the SMTP password."
         )
 
     return SmtpConfiguration(
@@ -316,15 +312,18 @@ def build_smtp_test_message(
     )
     message["To"] = recipient_email
     message["Subject"] = (
-        "Witty-Accounting Mailserver-Test"
+        "Witty-Accounting "
+        + bilingual_subject("test.smtp.subject")
     )
 
     message.set_content(
-        "Guten Tag,\n\n"
-        "diese Testnachricht bestätigt, dass die "
-        "Mailserver-Einstellungen funktionieren.\n\n"
-        "Mit freundlichen Grüßen\n"
-        f"{sender_name}\n",
+        bilingual_text(
+            lambda language: _test_body(
+                language,
+                "test.smtp.body",
+                sender_name,
+            )
+        ),
         subtype="plain",
         charset="utf-8",
     )
@@ -343,8 +342,7 @@ def send_smtp_test_email(
 
     if not normalized_recipient_email:
         raise InvoiceEmailRecipientError(
-            "Für den Administrator ist keine "
-            "E-Mail-Adresse hinterlegt."
+            "No email address is stored for the administrator."
         )
 
     smtp_configuration = load_smtp_configuration(
@@ -370,8 +368,7 @@ def send_smtp_test_email(
             normalized_recipient_email
         ),
         delivery_error_message=(
-            "Die SMTP-Testnachricht konnte nicht "
-            "versendet werden."
+            "The SMTP test message could not be sent."
         ),
     )
 
@@ -399,15 +396,17 @@ def build_smime_test_message(
     )
     message["To"] = recipient_email
     message["Subject"] = (
-        "Witty-Accounting S/MIME-Test"
+        "Witty-Accounting "
+        + bilingual_subject("test.smime.subject")
     )
     message.set_content(
-        "Guten Tag,\n\n"
-        "diese signierte Testnachricht bestätigt, "
-        "dass die S/MIME-Einstellungen "
-        "funktionieren.\n\n"
-        "Mit freundlichen Grüßen\n"
-        f"{sender_name}\n",
+        bilingual_text(
+            lambda language: _test_body(
+                language,
+                "test.smime.body",
+                sender_name,
+            )
+        ),
         subtype="plain",
         charset="utf-8",
     )
@@ -426,8 +425,7 @@ def send_smime_test_email(
 
     if not normalized_recipient_email:
         raise InvoiceEmailRecipientError(
-            "Für den Administrator ist keine "
-            "E-Mail-Adresse hinterlegt."
+            "No email address is stored for the administrator."
         )
 
     smtp_configuration = load_smtp_configuration(
@@ -450,14 +448,12 @@ def send_smime_test_email(
         )
     except MailSmimeConfigurationError as exc:
         raise InvoiceEmailConfigurationError(
-            "Die S/MIME-Testnachricht konnte nicht "
-            f"signiert werden: {exc}"
+            f"The S/MIME test message could not be signed: {exc}"
         ) from exc
 
     if signed_message is None:
         raise InvoiceEmailConfigurationError(
-            "Die S/MIME-Konfiguration ist "
-            "unvollständig."
+            "The S/MIME configuration is incomplete."
         )
 
     deliver_email_message(
@@ -466,14 +462,22 @@ def send_smime_test_email(
         recipient_email=normalized_recipient_email,
         signed_message=signed_message,
         delivery_error_message=(
-            "Die S/MIME-Testnachricht konnte nicht "
-            "versendet werden."
+            "The S/MIME test message could not be sent."
         ),
     )
 
     return SmtpTestEmailResult(
         recipient_email=normalized_recipient_email,
         subject=str(message["Subject"]),
+    )
+
+
+def _test_body(language: str, body_key: str, sender_name: str) -> str:
+    return (
+        f"{translate(language, 'email.greeting')}\n\n"
+        f"{translate(language, body_key)}\n\n"
+        f"{translate(language, 'email.closing')}\n"
+        f"{sender_name}\n"
     )
 
 
@@ -582,8 +586,7 @@ def sign_invoice_message(
         )
     except MailSmimeConfigurationError as exc:
         raise InvoiceEmailConfigurationError(
-            "Die Rechnung konnte nicht mit "
-            f"S/MIME signiert werden: {exc}"
+            f"The invoice could not be signed with S/MIME: {exc}"
         ) from exc
 
 
@@ -602,26 +605,24 @@ def send_invoice_email(
 
     if invoice is None:
         raise InvoiceEmailNotFoundError(
-            f"Rechnung {invoice_id} "
-            "wurde nicht gefunden."
+            f"Invoice {invoice_id} was not found."
         )
 
     if invoice.status != "finalized":
         raise InvoiceEmailStateError(
-            "Nur finalisierte Rechnungen "
-            "können per E-Mail versendet werden."
+            "Only finalized invoices can be sent by email."
         )
 
     if not invoice.invoice_number:
         raise InvoiceEmailStateError(
-            "Die Rechnung hat keine Rechnungsnummer."
+            "The invoice has no invoice number."
         )
 
     user = invoice.user
 
     if user is None:
         raise InvoiceEmailRecipientError(
-            "Der Rechnung ist kein Benutzer zugeordnet."
+            "No user is assigned to the invoice."
         )
 
     is_portal_delivery = (
@@ -634,16 +635,14 @@ def send_invoice_email(
         and not is_portal_delivery
     ):
         raise InvoiceEmailRecipientError(
-            "Für diesen Benutzer ist die "
-            "Briefzustellung ausgewählt."
+            "Postal delivery is selected for this user."
         )
 
     recipient_email = user.email.strip()
 
     if not recipient_email:
         raise InvoiceEmailRecipientError(
-            "Für den Benutzer ist keine "
-            "E-Mail-Adresse hinterlegt."
+            "No email address is stored for the user."
         )
 
     smtp_configuration = load_smtp_configuration(
@@ -661,8 +660,7 @@ def send_invoice_email(
         )
     except InvoiceArchiveError as exc:
         raise InvoiceEmailStateError(
-            "Das archivierte Rechnungs-PDF "
-            f"ist nicht verfügbar: {exc}"
+            f"The archived invoice PDF is not available: {exc}"
         ) from exc
 
     pdf_data = None
@@ -712,8 +710,7 @@ def send_invoice_email(
         recipient_email=recipient_email,
         signed_message=signed_message,
         delivery_error_message=(
-            "Die Rechnung konnte nicht per "
-            "E-Mail versendet werden."
+            "The invoice could not be sent by email."
         ),
     )
 

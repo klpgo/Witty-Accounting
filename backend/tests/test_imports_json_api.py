@@ -85,7 +85,7 @@ def test_upload_json_rejects_other_extensions(
 
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "Es werden ausschließlich JSON-Dateien unterstützt."
+        "Only JSON files are supported."
     )
 
 
@@ -94,7 +94,7 @@ def test_upload_json_invalid_content_returns_400(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_import(db: Any, path: str | Path) -> dict[str, Any]:
-        raise ValueError("Die Datei ist kein gültiges JSON")
+        raise ValueError("The file is not valid JSON")
 
     monkeypatch.setattr(
         "app.api.routes.imports.import_json_to_db",
@@ -107,4 +107,4 @@ def test_upload_json_invalid_content_returns_400(
     )
 
     assert response.status_code == 400
-    assert "kein gültiges JSON" in response.json()["detail"]
+    assert "not valid JSON" in response.json()["detail"]

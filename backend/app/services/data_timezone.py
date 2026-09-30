@@ -47,8 +47,8 @@ def ensure_data_timezone(
 
     if stored != timezone_name:
         raise DataTimezoneMismatchError(
-            f"Die Daten dieses Mandanten liegen in der Zeitzone {stored}, "
-            f"eingestellt ist aber {timezone_name}. Bitte beim Container "
-            f"TZ wieder auf {stored} setzen – ein Wechsel der "
-            "Zeitzone würde alle gespeicherten Zeiten verschieben."
+            f"The data of this tenant is stored in the time zone {stored}"
+            f", but {timezone_name} is configured. Please set TZ for the "
+            f"container back to {stored} – changing the time zone would "
+            "shift all stored times."
         )

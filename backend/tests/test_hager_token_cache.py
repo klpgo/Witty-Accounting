@@ -45,7 +45,7 @@ class FakeHager:
     def refresh(self, reauth_token: str) -> HagerTokens:
         self.refreshes += 1
         if self.fail_refresh:
-            raise HagerLoginError("abgelehnt")
+            raise HagerLoginError("rejected")
         return self._tokens(f"refresh-{self.refreshes}")
 
 

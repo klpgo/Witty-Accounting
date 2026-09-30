@@ -51,7 +51,7 @@ class PasswordResetRequest(BaseModel):
             or normalized.endswith("@")
         ):
             raise ValueError(
-                "Die E-Mail-Adresse ist ungültig."
+                "The email address is invalid."
             )
 
         return normalized

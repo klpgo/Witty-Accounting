@@ -103,7 +103,7 @@ def test_login_follows_saml_chain_and_returns_tokens() -> None:
 
 
 def test_login_with_wrong_password_raises() -> None:
-    with pytest.raises(hager_client.HagerLoginError, match="abgelehnt"):
+    with pytest.raises(hager_client.HagerLoginError, match="rejected"):
         hager_client.login(
             "user@example.com",
             "falsch",
@@ -176,7 +176,7 @@ def test_login_logs_steps_without_parameters(
         if record.name == "app.services.hager_client"
     ]
 
-    assert any("Anmeldeseite" in message for message in messages)
+    assert any("Sign-in page" in message for message in messages)
     text = "\n".join(messages)
     # nur Host und Pfad: keine Query-Parameter, Tokens oder SAML-Daten
     assert "?" not in text
@@ -230,7 +230,7 @@ def test_columns_to_rows() -> None:
     ) == [{"id": 1, "startAt": "a"}, {"id": 2, "startAt": "b"}]
     assert hager_client.columns_to_rows({}) == []
 
-    with pytest.raises(hager_client.HagerApiError, match="unterschiedlich lang"):
+    with pytest.raises(hager_client.HagerApiError, match="different length"):
         hager_client.columns_to_rows({"id": [1, 2], "startAt": ["a"]})
 
 

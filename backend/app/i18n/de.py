@@ -41,6 +41,8 @@ MESSAGES: dict[str, str] = {
     "pdf.cancellationAmount": "Stornobetrag",
     "pdf.paymentTerms": "Zahlungsbedingung",
     "pdf.note": "Hinweis",
+    "pdf.bankDetails": "Bankverbindung",
+    "pdf.phone": "Tel.",
     "pdf.taxNumber": "Steuernummer: ",
     "pdf.vatId": "USt-IdNr.: ",
     "pdf.servicePeriod": "Leistungszeitraum",
@@ -78,4 +80,28 @@ MESSAGES: dict[str, str] = {
     "email.attachment.invoice": "im Anhang erhalten Sie Ihre Ladestrom-Rechnung {number} als PDF-Datei.",
     "email.attachment.cancellation": "im Anhang erhalten Sie Ihre Ladestrom-Stornorechnung {number} als PDF-Datei.",
     "email.closing": "Mit freundlichen Grüßen",
+
+    # Konto-E-Mails (zweisprachig: Deutsch oben, Englisch darunter)
+    "email.englishBelow": "(English version below)",
+    "account.greeting.named": "Guten Tag {name},",
+    "account.invitation.subject": "Ihr Zugang zu {app}",
+    "account.invitation.intro": (
+        "für Sie wurde ein Benutzerkonto bei {app} angelegt. Legen Sie über "
+        "den folgenden Link Ihr persönliches Passwort fest:"
+    ),
+    "account.reset.subject": "Passwort für {app} zurücksetzen",
+    "account.reset.intro": "über den folgenden Link können Sie ein neues Passwort festlegen:",
+    "account.linkValidity": (
+        "Der Link ist einmalig und {minutes} Minuten gültig. Falls Sie diese "
+        "Nachricht nicht angefordert haben, können Sie sie ignorieren."
+    ),
+
+    # Test-E-Mails
+    "test.smtp.subject": "Mailserver-Test",
+    "test.smtp.body": "diese Testnachricht bestätigt, dass die Mailserver-Einstellungen funktionieren.",
+    "test.smime.subject": "S/MIME-Test",
+    "test.smime.body": (
+        "diese signierte Testnachricht bestätigt, dass die "
+        "S/MIME-Einstellungen funktionieren."
+    ),
 }

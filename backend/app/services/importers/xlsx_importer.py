@@ -44,7 +44,7 @@ def validate_headers(header_row: tuple[object, ...] | None) -> None:
     angeordnet sind.
     """
     if header_row is None:
-        raise ValueError("Die XLSX-Datei enthält keine Kopfzeile")
+        raise ValueError("The XLSX file has no header row")
 
     actual_headers = tuple(
         str(header_row[index] or "").strip()
@@ -64,12 +64,11 @@ def validate_headers(header_row: tuple[object, ...] | None) -> None:
     ):
         if expected != actual:
             differences.append(
-                f"Spalte {index}: erwartet {expected!r}, "
-                f"gefunden {actual!r}"
+                f"Column {index}: expected {expected!r}, found {actual!r}"
             )
 
     raise ValueError(
-        "Ungültige XLSX-Kopfzeile. "
+        "Invalid XLSX header row. "
         + "; ".join(differences)
     )
 
@@ -86,7 +85,7 @@ def parse_duration(duration: str) -> timedelta:
     normalized_duration = duration.strip()
 
     if not normalized_duration:
-        raise ValueError("Dauer fehlt")
+        raise ValueError("duration missing")
 
     match = re.fullmatch(
         r"(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?",
@@ -94,7 +93,7 @@ def parse_duration(duration: str) -> timedelta:
     )
 
     if not match:
-        raise ValueError(f"Ungültiges Dauerformat: {duration!r}")
+        raise ValueError(f"Invalid duration format: {duration!r}")
 
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2) or 0)
@@ -176,7 +175,7 @@ def parse_start_time(value: Any) -> datetime:
         return value
 
     if value is None:
-        raise ValueError("Startdatum fehlt")
+        raise ValueError("start date missing")
 
     return datetime.strptime(
         str(value).strip(),
@@ -195,12 +194,12 @@ def import_xlsx(path: str | Path) -> list[dict[str, Any]]:
 
     if not file_path.exists():
         raise FileNotFoundError(
-            f"XLSX-Datei nicht gefunden: {file_path}"
+            f"XLSX file not found: {file_path}"
         )
 
     if not file_path.is_file():
         raise ValueError(
-            f"Der angegebene Pfad ist keine Datei: {file_path}"
+            f"The given path is not a file: {file_path}"
         )
 
     workbook = load_workbook(
@@ -238,8 +237,8 @@ def import_xlsx(path: str | Path) -> list[dict[str, Any]]:
 
             if len(row) < 9:
                 raise ValueError(
-                    f"XLSX-Zeile {row_number} enthält nur "
-                    f"{len(row)} statt 9 Spalten"
+                    f"XLSX row {row_number} contains only {len(row)} instead of 9 "
+                    "columns"
                 )
 
             (
@@ -285,7 +284,7 @@ def import_xlsx(path: str | Path) -> list[dict[str, Any]]:
                 ).strip()
 
                 if not station_id:
-                    raise ValueError("Ladestation fehlt")
+                    raise ValueError("charging station missing")
 
                 import_hash = create_import_hash(
                     start_time=start_time,
@@ -317,7 +316,7 @@ def import_xlsx(path: str | Path) -> list[dict[str, Any]]:
 
             except (TypeError, ValueError) as exc:
                 raise ValueError(
-                    f"Fehler in XLSX-Zeile {row_number}: {exc}"
+                    f"Error in XLSX row {row_number}: {exc}"
                 ) from exc
 
     finally:

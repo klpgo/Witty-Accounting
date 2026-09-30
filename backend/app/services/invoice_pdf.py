@@ -140,18 +140,17 @@ def format_iban_display(value: str) -> str:
 def validate_invoice(invoice: Invoice) -> None:
     if invoice.status != "finalized":
         raise InvoiceNotFinalizedError(
-            "Nur finalisierte Rechnungen können "
-            "als PDF erzeugt werden."
+            "Only finalized invoices can be generated as PDF."
         )
 
     if not invoice.invoice_number:
         raise IncompleteInvoicePdfDataError(
-            "Die Rechnungsnummer fehlt."
+            "The invoice number is missing."
         )
 
     if invoice.issue_date is None:
         raise IncompleteInvoicePdfDataError(
-            "Das Rechnungsdatum fehlt."
+            "The invoice date is missing."
         )
 
     if (
@@ -159,32 +158,32 @@ def validate_invoice(invoice: Invoice) -> None:
         and invoice.due_date is None
     ):
         raise InvoicePdfError(
-            "Das Zahlungsziel fehlt."
+            "The payment due date is missing."
         )
 
     if not invoice.issuer_name:
         raise IncompleteInvoicePdfDataError(
-            "Der Rechnungssteller fehlt."
+            "The invoice issuer is missing."
         )
 
     if not invoice.issuer_address:
         raise IncompleteInvoicePdfDataError(
-            "Die Anschrift des Ausstellers fehlt."
+            "The issuer's address is missing."
         )
 
     if not invoice.recipient_name:
         raise IncompleteInvoicePdfDataError(
-            "Der Rechnungsempfänger fehlt."
+            "The invoice recipient is missing."
         )
 
     if not invoice.recipient_address:
         raise IncompleteInvoicePdfDataError(
-            "Die Anschrift des Empfängers fehlt."
+            "The recipient's address is missing."
         )
 
     if not invoice.items:
         raise IncompleteInvoicePdfDataError(
-            "Die Rechnung enthält keine Positionen."
+            "The invoice has no line items."
         )
 
 
@@ -489,7 +488,7 @@ def _build_invoice_pdf(
 
         if bank_details:
             issuer_identifiers.append(
-                "<b>Bankverbindung:</b> "
+                "<b>" + _t("pdf.bankDetails") + ":</b> "
                 + " | ".join(bank_details)
             )
 
@@ -510,7 +509,7 @@ def _build_invoice_pdf(
                 f"<b>{escape(invoice.issuer_name)}</b><br/>"
                 f"{multiline_text(invoice.issuer_address)}"
                 + (
-                    "<br/>Tel.: "
+                    "<br/>" + _t("pdf.phone") + ": "
                     + escape(invoice.issuer_phone)
                     if invoice.issuer_phone
                     else ""
@@ -870,7 +869,7 @@ def _build_invoice_pdf(
         story.append(
             Paragraph(
                 (
-                    "<b>Hinweis:</b> "
+                    "<b>" + _t("pdf.note") + ":</b> "
                     + "<br/>".join(
                         escape(note)
                         for note in assignment_notes
@@ -975,10 +974,8 @@ def _build_invoice_pdf(
 
         if item.item_type != "charging_session":
             raise IncompleteInvoicePdfDataError(
-                "Die Rechnungsposition "
-                f"{item.id} besitzt den "
-                f"unbekannten Typ "
-                f"{item.item_type!r}."
+                f"Invoice line item {item.id} has the unknown type {item.item_type!r}"
+                "."
             )
 
         if any(
@@ -994,9 +991,8 @@ def _build_invoice_pdf(
             )
         ):
             raise IncompleteInvoicePdfDataError(
-                "Für die Ladeposition "
-                f"{item.id} fehlen "
-                "abrechnungsrelevante Daten."
+                f"Billing-relevant data is missing for charging line item {item.id}"
+                "."
             )
 
         item_rows.append(
@@ -1255,7 +1251,7 @@ def _build_invoice_pdf(
     else:
         if invoice.due_date is None:
             raise InvoicePdfError(
-                "Das Zahlungsziel fehlt."
+                "The payment due date is missing."
             )
 
         payment_term_days = (

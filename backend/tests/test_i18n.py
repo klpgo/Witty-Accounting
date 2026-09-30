@@ -41,3 +41,19 @@ def test_german_item_texts_are_unchanged() -> None:
         year=2026,
         proration=translate("de", "item.proration", days="15,5", total=31),
     ) == "Monatsgebühr Ladekarte Karte 1 - Juli 2026 (anteilig 15,5/31 Tage)"
+
+
+
+def test_bilingual_subject_and_text() -> None:
+    from app.i18n import BILINGUAL_SEPARATOR, bilingual_subject, bilingual_text
+
+    assert bilingual_subject(
+        "account.reset.subject", app="Witty"
+    ) == "Passwort für Witty zurücksetzen / Reset your password for Witty"
+
+    text = bilingual_text(lambda language: translate(language, "email.greeting"))
+
+    assert text.startswith("(English version below)")
+    german, english = text.split(BILINGUAL_SEPARATOR)
+    assert german.endswith("Guten Tag,")
+    assert english == "Hello,"

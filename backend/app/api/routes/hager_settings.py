@@ -42,7 +42,7 @@ def load_global_settings(db: Session) -> GlobalSettings:
     if global_settings is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Die globalen Einstellungen wurden nicht gefunden.",
+            detail="The global settings were not found.",
         )
 
     return global_settings
@@ -189,9 +189,8 @@ def update_hager_settings(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Für den automatischen Abruf müssen Benutzername, "
-                "Passwort, Installations-ID und Seriennummer "
-                "gespeichert sein."
+                "For automatic fetching, username, password, installation ID "
+                "and serial number must be saved."
             ),
         )
 

@@ -58,23 +58,23 @@ def load_access(db: Session) -> HagerAccess:
 
     if global_settings is None:
         raise HagerConfigurationError(
-            "Die globalen Einstellungen wurden nicht gefunden."
+            "The global settings were not found."
         )
 
     missing = [
         label
         for label, value in (
-            ("Benutzername", global_settings.hager_username),
-            ("Passwort", global_settings.hager_password_encrypted),
-            ("Installations-ID", global_settings.hager_installation_id),
-            ("Seriennummer", global_settings.hager_serial_number),
+            ("username", global_settings.hager_username),
+            ("password", global_settings.hager_password_encrypted),
+            ("installation ID", global_settings.hager_installation_id),
+            ("serial number", global_settings.hager_serial_number),
         )
         if not value
     ]
 
     if missing:
         raise HagerConfigurationError(
-            "Für den Abruf aus der Hager Cloud fehlen: "
+            "The following are missing for fetching from the Hager Cloud: "
             + ", ".join(missing)
         )
 
@@ -115,9 +115,8 @@ def call_with_token(
                 raise
 
             logger.warning(
-                "Hager: Abruf mit gespeichertem Token "
-                "fehlgeschlagen (%s), melde neu an und "
-                "wiederhole",
+                "Hager: fetch with stored token failed (%s), signing in "
+                "again and retrying",
                 type(exc).__name__,
             )
             token_cache.invalidate(access.username)
@@ -135,8 +134,7 @@ def call_with_token(
         raise HagerConnectionError(str(exc)) from exc
     except httpx.HTTPError as exc:
         raise HagerConnectionError(
-            "Hager Cloud ist nicht erreichbar: "
-            f"{type(exc).__name__}"
+            f"Hager Cloud is not reachable: {type(exc).__name__}"
         ) from exc
 
 
@@ -195,7 +193,7 @@ def wallbox_names(db: Session, access: HagerAccess) -> dict[str, str]:
             )
         )
     except HagerConnectionError as exc:
-        logger.warning("Hager: Wallbox-Namen nicht abrufbar: %s", exc)
+        logger.warning("Hager: wallbox names not available: %s", exc)
 
     return names
 
@@ -377,7 +375,7 @@ def _import_from_hager(
         info=info,
     )
     logger.info(
-        "Hager: %s Ladevorgänge auf %s Seite(n) abgerufen, ab %s",
+        "Hager: %s charging sessions fetched on %s page(s), from %s",
         len(items),
         info.get("pages", "?"),
         effective_from.isoformat() if effective_from else "Beginn",

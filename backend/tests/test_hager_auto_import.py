@@ -136,7 +136,7 @@ def test_due_tenant_runs_and_records_success(fake_import) -> None:
     assert fake_import == ["import"]
     assert settings.hager_auto_import_last_status == STATUS_SUCCESS
     assert settings.hager_auto_import_last_message == (
-        "2 neu, 3 übersprungen (abgerufen ab 21.09.2026)"
+        "2 new, 3 skipped (fetched from 2026-09-21)"
     )
     assert settings.hager_auto_import_last_started_at == (
         NOW.astimezone(UTC).replace(tzinfo=None)
@@ -191,7 +191,7 @@ def test_start_is_recorded_before_import_runs(fake_import) -> None:
 
 def test_error_is_recorded(fake_import, monkeypatch: pytest.MonkeyPatch) -> None:
     def failing_import(db):
-        raise HagerConnectionError("Anmeldung abgelehnt – E-Mail oder Passwort prüfen.")
+        raise HagerConnectionError("Sign-in rejected – please check email and password.")
 
     monkeypatch.setattr(hager_auto_import, "import_from_hager", failing_import)
 
@@ -203,7 +203,7 @@ def test_error_is_recorded(fake_import, monkeypatch: pytest.MonkeyPatch) -> None
 
     settings = databases.settings(tenant)
     assert settings.hager_auto_import_last_status == STATUS_ERROR
-    assert "Anmeldung abgelehnt" in settings.hager_auto_import_last_message
+    assert "Sign-in rejected" in settings.hager_auto_import_last_message
     assert tenant.id not in hager_auto_import._running_tenants
 
 
@@ -224,7 +224,7 @@ def test_unexpected_error_is_recorded_without_details(
 
     settings = databases.settings(tenant)
     assert settings.hager_auto_import_last_status == STATUS_ERROR
-    assert settings.hager_auto_import_last_message == "Unerwarteter Fehler: KeyError"
+    assert settings.hager_auto_import_last_message == "Unexpected error: KeyError"
 
 
 def test_each_tenant_uses_its_own_schedule(fake_import) -> None:
@@ -264,7 +264,7 @@ def test_broken_tenant_does_not_block_others(fake_import) -> None:
 
     def session_factory(tenant: TenantContext) -> Session:
         if tenant.id == broken.id:
-            raise RuntimeError("Datenbank nicht erreichbar")
+            raise RuntimeError("Database not reachable")
         return databases.session(tenant)
 
     started = check_all_tenants(
@@ -280,7 +280,7 @@ def test_broken_tenant_does_not_block_others(fake_import) -> None:
 
 def test_registry_error_is_handled() -> None:
     def failing_registry():
-        raise RuntimeError("Kontroll-Datenbank nicht erreichbar")
+        raise RuntimeError("Control database not reachable")
 
     assert check_all_tenants(now=NOW, list_tenants=failing_registry) == 0
 
@@ -292,7 +292,7 @@ def test_busy_import_is_recorded_as_error(
     from app.services.import_lock import ImportBusyError
 
     def busy_import(db):
-        raise ImportBusyError("Ein anderer Import läuft noch.")
+        raise ImportBusyError("Another import is still running.")
 
     monkeypatch.setattr(hager_auto_import, "import_from_hager", busy_import)
 
@@ -304,4 +304,4 @@ def test_busy_import_is_recorded_as_error(
 
     settings = databases.settings(tenant)
     assert settings.hager_auto_import_last_status == STATUS_ERROR
-    assert "anderer Import" in settings.hager_auto_import_last_message
+    assert "Another import" in settings.hager_auto_import_last_message

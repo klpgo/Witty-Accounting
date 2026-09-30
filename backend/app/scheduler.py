@@ -23,7 +23,7 @@ def heartbeat():
 
 def start_scheduler() -> None:
     if scheduler.running:
-        logger.info("Scheduler läuft bereits")
+        logger.info("Scheduler is already running")
         return
 
     scheduler.add_job(
@@ -36,7 +36,7 @@ def start_scheduler() -> None:
 
     scheduler.start()
 
-    logger.info("Scheduler gestartet")
+    logger.info("Scheduler started")
 
 
 def stop_scheduler() -> None:
@@ -49,4 +49,4 @@ def stop_scheduler() -> None:
 
     shutdown()
 
-    logger.info("Scheduler gestoppt")
+    logger.info("Scheduler stopped")

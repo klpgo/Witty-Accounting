@@ -185,8 +185,7 @@ def test_rejects_duplicate_valid_from(
     assert second_response.status_code == 409
     assert second_response.json() == {
         "detail": (
-            "Für diesen Gültigkeitszeitpunkt "
-            "existiert bereits ein Tarif."
+            "A tariff already exists for this validity date."
         )
     }
 
@@ -375,8 +374,7 @@ def test_current_energy_price_returns_not_found(
     assert response.status_code == 404
     assert response.json() == {
         "detail": (
-            "Es ist noch kein aktuell gültiger "
-            "Energietarif vorhanden."
+            "There is no currently valid energy tariff yet."
         ),
     }
 

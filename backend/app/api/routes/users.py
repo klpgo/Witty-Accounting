@@ -58,9 +58,8 @@ def ensure_valid_delivery_method(
                 status.HTTP_422_UNPROCESSABLE_CONTENT
             ),
             detail=(
-                "Bitte wählen Sie genau eine "
-                "Rechnungszustellung: E-Mail, Brief "
-                "oder manueller Portal-Download."
+                "Please choose exactly one invoice delivery method: email, "
+                "post or manual portal download."
             ),
         )
 
@@ -89,8 +88,7 @@ def ensure_email_available(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese E-Mail-Adresse wird "
-                "bereits verwendet."
+                "This email address is already in use."
             ),
         )
 
@@ -108,8 +106,7 @@ def get_user_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Benutzer {user_id} wurde "
-                "nicht gefunden."
+                f"User {user_id} was not found."
             ),
         )
 
@@ -249,8 +246,7 @@ def update_own_profile(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese E-Mail-Adresse wird "
-                "bereits verwendet."
+                "This email address is already in use."
             ),
         ) from exc
 
@@ -281,8 +277,7 @@ def change_own_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Das aktuelle Passwort ist "
-                "nicht korrekt."
+                "The current password is incorrect."
             ),
         )
 
@@ -398,9 +393,8 @@ def create_new_user(
                 status.HTTP_503_SERVICE_UNAVAILABLE
             ),
             detail=(
-                "Der Benutzer konnte nicht angelegt "
-                "werden, weil die Einladungsmail "
-                "nicht versendet werden konnte."
+                "The user could not be created because the invitation email "
+                "could not be sent."
             ),
         ) from exc
     except IntegrityError as exc:
@@ -409,8 +403,7 @@ def create_new_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese E-Mail-Adresse wird "
-                "bereits verwendet."
+                "This email address is already in use."
             ),
         ) from exc
 
@@ -543,8 +536,7 @@ def update_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese E-Mail-Adresse wird "
-                "bereits verwendet."
+                "This email address is already in use."
             ),
         ) from exc
 

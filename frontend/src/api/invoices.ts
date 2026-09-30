@@ -102,7 +102,7 @@ async function getErrorMessage(
     // Die Antwort enthielt kein JSON.
   }
 
-  return `Anfrage fehlgeschlagen (${response.status}).`
+  return `Request failed (${response.status}).`
 }
 
 export async function listInvoices(

@@ -540,10 +540,8 @@ def find_billable_monthly_base_fee_candidates(
 
         if charge.user_id != user_id:
             raise InvoiceDraftError(
-                "Die gespeicherte Grundgebühr für "
-                f"RFID-Karte {assignment.rfid_card_id} "
-                f"und Monat {fee_month:%m.%Y} ist "
-                "einem anderen Benutzer zugeordnet."
+                f"The stored base fee for RFID card {assignment.rfid_card_id} "
+                f"and month {fee_month:%m.%Y} is assigned to another user."
             )
 
         if (
@@ -608,15 +606,14 @@ def create_invoice_draft(
 ) -> Invoice:
     if service_period_start >= service_period_end:
         raise InvalidServicePeriodError(
-            "Das Ende des Leistungszeitraums "
-            "muss nach dem Beginn liegen."
+            "The end of the service period must be after its start."
         )
 
     user = db.get(User, user_id)
 
     if user is None:
         raise InvoiceUserNotFoundError(
-            f"Benutzer {user_id} wurde nicht gefunden."
+            f"User {user_id} was not found."
         )
 
     global_settings = db.get(
@@ -640,12 +637,10 @@ def create_invoice_draft(
 
         if service_period_end <= billing_start:
             raise NoBillableSessionsError(
-                "Der gewählte Leistungszeitraum liegt "
-                "vollständig vor dem Abrechnungs-"
-                "Startdatum "
-                f"{global_settings.billing_start_date:%d.%m.%Y}. "
-                "Ladevorgänge und Grundgebühren vor "
-                "diesem Datum werden nicht abgerechnet."
+                "The selected service period lies entirely before the "
+                f"billing start date {global_settings.billing_start_date:%d.%m.%Y}"
+                ". Charging sessions and base fees before this date are not "
+                "billed."
             )
 
         effective_service_period_start = max(
@@ -708,17 +703,14 @@ def create_invoice_draft(
 
                 if pricing_status == "missing_price":
                     raise MissingEnergyPriceError(
-                        "Kein gültiger Tarif für "
-                        "Ladevorgang "
-                        f"{charging_session.id} vom "
-                        f"{charging_session.start_time:%d.%m.%Y}."
+                        f"No valid tariff for charging session {charging_session.id} "
+                        f"on {charging_session.start_time:%d.%m.%Y}."
                     )
 
                 if pricing_status == "invalid_energy":
                     raise InvalidChargingSessionError(
-                        "Ungültige Energiemengen bei "
-                        "Ladevorgang "
-                        f"{charging_session.id}."
+                        f"Invalid energy values for charging session {charging_session.id}"
+                        "."
                     )
 
             charging_sessions.append(
@@ -744,10 +736,8 @@ def create_invoice_draft(
         and not monthly_base_fee_candidates
     ):
         raise NoBillableSessionsError(
-            "Für diesen Benutzer und Zeitraum "
-            "wurden keine abrechenbaren "
-            "Ladevorgänge oder Grundgebühren "
-            "gefunden."
+            "No billable charging sessions or base fees were found for "
+            "this user and period."
         )
 
     recipient_name = " ".join(
@@ -761,8 +751,7 @@ def create_invoice_draft(
 
     if not user.address:
         raise InvoiceDraftError(
-            "Für den Rechnungsempfänger ist "
-            "keine Anschrift hinterlegt."
+            "No address is stored for the invoice recipient."
         )
 
     database_business_settings_configured = (
@@ -828,21 +817,18 @@ def create_invoice_draft(
 
     if issuer_name is None:
         raise InvoiceDraftError(
-            "Für den Rechnungssteller ist "
-            "kein Name konfiguriert."
+            "No name is configured for the invoice issuer."
         )
 
     if issuer_address is None:
         raise InvoiceDraftError(
-            "Für den Rechnungssteller ist "
-            "keine Anschrift konfiguriert."
+            "No address is configured for the invoice issuer."
         )
 
     if not issuer_tax_number and not issuer_vat_id:
         raise InvoiceDraftError(
-            "Für den Rechnungssteller muss "
-            "eine Steuernummer oder USt-IdNr. "
-            "konfiguriert sein."
+            "A tax number or VAT ID must be configured for the invoice "
+            "issuer."
         )
 
     invoice = Invoice(
@@ -913,8 +899,7 @@ def create_invoice_draft(
 
             if energy_price is None:
                 raise MissingEnergyPriceError(
-                    "Kein gültiger Tarif für "
-                    f"Ladevorgang {charging_session.id}."
+                    f"No valid tariff for charging session {charging_session.id}."
                 )
 
             energy_total = to_decimal(
@@ -944,8 +929,8 @@ def create_invoice_draft(
                 or energy_grid < 0
             ):
                 raise InvalidChargingSessionError(
-                    "Ungültige Energiemengen bei "
-                    f"Ladevorgang {charging_session.id}."
+                    f"Invalid energy values for charging session {charging_session.id}"
+                    "."
                 )
 
             cost_grid = to_decimal(
@@ -1289,18 +1274,17 @@ def finalize_invoice(
 
     if invoice is None:
         raise InvoiceNotFoundError(
-            f"Rechnung {invoice_id} wurde nicht gefunden."
+            f"Invoice {invoice_id} was not found."
         )
 
     if invoice.status != "draft":
         raise InvoiceAlreadyFinalizedError(
-            f"Rechnung {invoice_id} ist bereits finalisiert."
+            f"Invoice {invoice_id} is already finalized."
         )
 
     if not invoice.items:
         raise EmptyInvoiceError(
-            "Eine Rechnung ohne Positionen "
-            "kann nicht finalisiert werden."
+            "An invoice without line items cannot be finalized."
         )
 
     final_issue_date = (
@@ -1322,8 +1306,7 @@ def finalize_invoice(
 
     if payment_term_days < 0:
         raise InvalidDueDateError(
-            "Die konfigurierte Zahlungsfrist "
-            "darf nicht negativ sein."
+            "The configured payment term must not be negative."
         )
 
     final_due_date = (
@@ -1335,8 +1318,7 @@ def finalize_invoice(
 
     if final_due_date < final_issue_date:
         raise InvalidDueDateError(
-            "Das Zahlungsziel darf nicht vor "
-            "dem Rechnungsdatum liegen."
+            "The payment due date must not be before the invoice date."
         )
 
     invoice_number_prefix = (
@@ -1366,9 +1348,8 @@ def finalize_invoice(
 
                 if charging_session is None:
                     raise InvoiceItemStateError(
-                        "Der Ladeposition "
-                        f"{item.id} ist kein "
-                        "Ladevorgang zugeordnet."
+                        f"No charging session is assigned to charging line item {item.id}"
+                        "."
                     )
 
                 if (
@@ -1382,9 +1363,8 @@ def finalize_invoice(
                 ):
                     raise (
                         InvoiceSessionAlreadyInvoicedError(
-                            "Ladevorgang "
-                            f"{charging_session.id} "
-                            "wurde bereits fakturiert."
+                            f"Charging session {charging_session.id} has already been "
+                            "invoiced."
                         )
                     )
 
@@ -1401,9 +1381,7 @@ def finalize_invoice(
 
                 if base_fee_charge is None:
                     raise InvoiceItemStateError(
-                        "Der Grundgebührenposition "
-                        f"{item.id} ist keine "
-                        "Grundgebühr zugeordnet."
+                        f"No base fee is assigned to base fee line item {item.id}."
                     )
 
                 if (
@@ -1412,10 +1390,8 @@ def finalize_invoice(
                     != invoice.id
                 ):
                     raise InvoiceItemStateError(
-                        "Die Grundgebühr "
-                        f"{base_fee_charge.id} ist "
-                        "nicht mehr diesem "
-                        "Rechnungsentwurf zugeordnet."
+                        f"Base fee {base_fee_charge.id} is no longer assigned to this "
+                        "invoice draft."
                     )
 
                 base_fee_charge.invoiced = True
@@ -1428,9 +1404,8 @@ def finalize_invoice(
                 continue
 
             raise InvoiceItemStateError(
-                "Die Rechnungsposition "
-                f"{item.id} besitzt den unbekannten "
-                f"Typ {item.item_type!r}."
+                f"Invoice line item {item.id} has the unknown type {item.item_type!r}"
+                "."
             )
 
         db.commit()

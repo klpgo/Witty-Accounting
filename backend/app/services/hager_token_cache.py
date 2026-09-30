@@ -120,8 +120,7 @@ class HagerTokenCache:
 
             if entry and entry.access_expires_at - now > ACCESS_MARGIN_SECONDS:
                 logger.info(
-                    "Hager: Zugriffstoken aus dem Cache verwendet "
-                    "(noch %.0f s gültig)",
+                    "Hager: access token taken from the cache (valid for %.0f s)",
                     entry.access_expires_at - now,
                 )
                 return entry.tokens.token
@@ -131,17 +130,16 @@ class HagerTokenCache:
             if entry and entry.reauth_expires_at - now > REAUTH_MARGIN_SECONDS:
                 try:
                     tokens = self._refresh(entry.tokens.reauth_token)
-                    logger.info("Hager: Token über Re-Auth erneuert")
+                    logger.info("Hager: token renewed via re-auth")
                 except (HagerLoginError, httpx.HTTPError) as exc:
                     logger.warning(
-                        "Hager: Token-Erneuerung fehlgeschlagen (%s), "
-                        "melde neu an",
+                        "Hager: token renewal failed (%s), signing in again",
                         type(exc).__name__,
                     )
 
             if tokens is None:
                 tokens = self._login(username, password)
-                logger.info("Hager: neu angemeldet")
+                logger.info("Hager: signed in again")
 
             self._store(key, tokens)
 
