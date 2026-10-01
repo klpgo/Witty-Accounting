@@ -14,7 +14,7 @@ from typing import Any, Callable, TypeVar
 
 import httpx
 
-from sqlalchemy import select, update
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.global_settings import GlobalSettings
@@ -23,7 +23,11 @@ from app.services.hager_secret import decrypt_hager_password
 from app.services.hager_token_cache import token_cache
 from app.services.data_timezone import ensure_data_timezone
 from app.services.import_lock import import_lock
-from app.models.charging_session import ChargingSession
+from app.services.wallboxes import (
+    display_names,
+    ensure_wallboxes,
+    update_hager_names,
+)
 from app.services.importers.hager_json_importer import (
     import_charging_rows_to_db,
     parse_utc_to_local,
@@ -159,43 +163,35 @@ def fetch_all_sessions(
     )
 
 
-def known_wallbox_names(db: Session) -> dict[str, str]:
-    """Namen, die Witty für Wallbox-IDs bereits kennt (auch für
-    inzwischen getauschte Geräte). Der jüngste Name gewinnt."""
-    rows = db.execute(
-        select(ChargingSession.wallbox_id, ChargingSession.station_id)
-        .where(
-            ChargingSession.wallbox_id.is_not(None),
-            ChargingSession.station_id.not_like("ID: %"),
-        )
-        .order_by(ChargingSession.start_time)
-    ).all()
-
-    return {wallbox_id: station_id for wallbox_id, station_id in rows}
-
-
-def wallbox_names(db: Session, access: HagerAccess) -> dict[str, str]:
+def wallbox_names(
+    db: Session,
+    access: HagerAccess,
+    wallbox_ids: set[str] | None = None,
+) -> dict[str, str]:
     """
-    Namen der Wallboxen: aktive Geräte laut Hager, ergänzt um bereits
-    bekannte Namen. Ist die Liste nicht abrufbar, bleiben die bekannten
-    Namen – der Import selbst scheitert daran nicht.
+    Angezeigte Namen der Wallboxen ({Wallbox-ID: Name}) aus der Tabelle der
+    Wallboxen. Vorher werden die Namen aus der Hager Cloud übernommen und
+    für unbekannte IDs Einträge angelegt. Ist die Namensliste der Hager
+    Cloud nicht abrufbar, gelten die gespeicherten Namen – der Import
+    scheitert daran nicht.
     """
-    names = known_wallbox_names(db)
-
     try:
-        names.update(
+        update_hager_names(
+            db,
             call_with_token(
                 access,
                 lambda token: hager_client.fetch_wallbox_names(
                     token,
                     access.installation_id,
                 ),
-            )
+            ),
         )
     except HagerConnectionError as exc:
         logger.warning("Hager: wallbox names not available: %s", exc)
 
-    return names
+    ensure_wallboxes(db, wallbox_ids or set())
+
+    return display_names(db)
 
 
 def session_local_start(item: dict[str, Any]) -> datetime | None:
@@ -384,7 +380,15 @@ def _import_from_hager(
     result = import_charging_rows_to_db(
         db,
         filter_by_local_date(items, effective_from, date_to),
-        wallbox_names(db, access),
+        wallbox_names(
+            db,
+            access,
+            {
+                str(row.get("wallboxID") or "").strip()
+                for row in items
+                if row.get("wallboxID")
+            },
+        ),
     )
 
     if date_from is None and date_to is None:

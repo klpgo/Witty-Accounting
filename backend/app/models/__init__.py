@@ -19,6 +19,7 @@ from app.models.rfid_card_assignment import (
     RFIDCardAssignment,
 )
 from app.models.user import User
+from app.models.wallbox import Wallbox
 
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "RFIDCard",
     "RFIDCardAssignment",
     "User",
+    "Wallbox",
 ]

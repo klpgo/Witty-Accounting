@@ -94,16 +94,15 @@ function toDateTimeInputValue(
   return value.slice(0, 19)
 }
 
-function currentDateTimeInputValue(): string {
+// Vorbelegung für neue Zuordnungen: heute, 00:00 Uhr. Eine Zuordnung, die
+// um Mitternacht beginnt, umfasst den ganzen Tag; eine Uhrzeit ist nur bei
+// einer Übergabe der Karte mitten am Tag nötig.
+function todayStartInputValue(): string {
   const now = new Date()
-  const timezoneOffset =
-    now.getTimezoneOffset() * 60_000
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
 
-  return new Date(
-    now.getTime() - timezoneOffset,
-  )
-    .toISOString()
-    .slice(0, 19)
+  return `${now.getFullYear()}-${month}-${day}T00:00:00`
 }
 
 function AdminRFIDCardsPage() {
@@ -218,7 +217,7 @@ function AdminRFIDCardsPage() {
   function resetAssignmentForm(): void {
     setEditingAssignmentId(null)
     setAssignmentUserId('')
-    setValidFrom(currentDateTimeInputValue())
+    setValidFrom(todayStartInputValue())
     setValidTo('')
     setAssignmentNote('')
   }

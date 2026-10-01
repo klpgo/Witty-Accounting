@@ -709,4 +709,18 @@ export const en: Record<MessageKey, string> = {
   'settings.energy.dateMissing': 'Please enter the date from which the tariff applies.',
   'settings.energy.dateLocked': 'The date lies within a period that has already been billed. Earliest possible date: {date}.',
   'settings.energy.loadFailed': 'The energy prices could not be loaded.',
+
+  // Wallboxes
+  'wallboxes.title': 'Wallboxes',
+  'wallboxes.intro': 'Names of the wallboxes for charging sessions and invoices. Without a custom name, the name from the Hager Cloud is used, otherwise a short form of the ID (“ID: ..XXXXX”). A new name is applied to all charging sessions that have not been billed yet.',
+  'wallboxes.none': 'No wallboxes known yet. They appear after the first fetch from the Hager Cloud.',
+  'wallboxes.col.id': 'ID',
+  'wallboxes.col.hagerName': 'Name in the Hager Cloud',
+  'wallboxes.col.customName': 'Custom name',
+  'wallboxes.col.sessions': 'Charging sessions',
+  'wallboxes.col.lastSession': 'Last charging session',
+  'wallboxes.save': 'Save',
+  'wallboxes.saved': 'Saved: “{name}”, applied to {count} unbilled charging session.|Saved: “{name}”, applied to {count} unbilled charging sessions.',
+  'wallboxes.loadFailed': 'The wallboxes could not be loaded.',
+  'wallboxes.saveFailed': 'The name could not be saved.',
 }

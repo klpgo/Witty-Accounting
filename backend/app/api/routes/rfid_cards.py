@@ -7,13 +7,15 @@ from fastapi import (
     HTTPException,
     status,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
 from app.auth import require_admin
 from app.models.charging_session import ChargingSession
+from app.models.invoice import Invoice, InvoiceItem
+from app.models.monthly_base_fee_charge import MonthlyBaseFeeCharge
 from app.models.rfid_card import RFIDCard
 from app.models.rfid_card_assignment import (
     RFIDCardAssignment,
@@ -34,6 +36,42 @@ from app.services.rfid_assignments import (
 from app.services.rfid_reassignment import (
     reassign_after_change,
 )
+
+
+def assignment_has_billing(db: Session, assignment_id: int) -> bool:
+    """
+    True, wenn ein Ladevorgang oder eine Monatsgebühr der Zuordnung
+    abgerechnet ist oder in einer Rechnung bzw. einem Entwurf steht.
+    Ladevorgänge aus stornierten Rechnungen sind wieder offen.
+    """
+    in_draft = (
+        select(InvoiceItem.charging_session_id)
+        .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+        .where(
+            Invoice.status == "draft",
+            InvoiceItem.charging_session_id.is_not(None),
+        )
+    )
+    billed_sessions = db.scalar(
+        select(func.count(ChargingSession.id)).where(
+            ChargingSession.rfid_assignment_id == assignment_id,
+            or_(
+                ChargingSession.invoiced.is_(True),
+                ChargingSession.id.in_(in_draft),
+            ),
+        )
+    )
+    billed_fees = db.scalar(
+        select(func.count(MonthlyBaseFeeCharge.id)).where(
+            MonthlyBaseFeeCharge.rfid_assignment_id == assignment_id,
+            or_(
+                MonthlyBaseFeeCharge.invoiced.is_(True),
+                MonthlyBaseFeeCharge.invoice_id.is_not(None),
+            ),
+        )
+    )
+
+    return bool(billed_sessions or billed_fees)
 
 
 router = APIRouter(
@@ -444,15 +482,18 @@ def update_rfid_card_assignment(
                 ),
             )
 
+        # Der Beginn bleibt änderbar, solange nichts dieser Zuordnung
+        # abgerechnet ist oder in einem Entwurf steht; die Prüfungen unten
+        # stellen sicher, dass alle Ladevorgänge im Zeitraum bleiben
         if (
-            candidate_valid_from
-            != assignment.valid_from
+            candidate_valid_from != assignment.valid_from
+            and assignment_has_billing(db, assignment.id)
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "The start of an RFID assignment that is already in use "
-                    "cannot be changed."
+                    "The start of an RFID assignment that has already been "
+                    "billed cannot be changed."
                 ),
             )
 

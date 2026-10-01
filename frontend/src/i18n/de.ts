@@ -722,6 +722,20 @@ export const de = {
   'settings.energy.dateMissing': 'Bitte gib das Datum an, ab dem der Tarif gilt.',
   'settings.energy.dateLocked': 'Das Datum liegt in einem bereits abgerechneten Zeitraum. Frühestes mögliches Datum: {date}.',
   'settings.energy.loadFailed': 'Die Energiepreise konnten nicht geladen werden.',
+
+  // Wallboxen
+  'wallboxes.title': 'Wallboxen',
+  'wallboxes.intro': 'Namen der Wallboxen für Ladevorgänge und Rechnungen. Ohne eigenen Namen gilt der Name aus der Hager Cloud, sonst eine Kurzform der ID („ID: ..XXXXX“). Ein neuer Name wird für alle noch nicht abgerechneten Ladevorgänge übernommen.',
+  'wallboxes.none': 'Noch keine Wallboxen bekannt. Sie erscheinen nach dem ersten Abruf aus der Hager Cloud.',
+  'wallboxes.col.id': 'ID',
+  'wallboxes.col.hagerName': 'Name in der Hager Cloud',
+  'wallboxes.col.customName': 'Eigener Name',
+  'wallboxes.col.sessions': 'Ladevorgänge',
+  'wallboxes.col.lastSession': 'Letzter Ladevorgang',
+  'wallboxes.save': 'Speichern',
+  'wallboxes.saved': 'Gespeichert: „{name}“, für {count} nicht abgerechneten Ladevorgang übernommen.|Gespeichert: „{name}“, für {count} nicht abgerechnete Ladevorgänge übernommen.',
+  'wallboxes.loadFailed': 'Die Wallboxen konnten nicht geladen werden.',
+  'wallboxes.saveFailed': 'Der Name konnte nicht gespeichert werden.',
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof de

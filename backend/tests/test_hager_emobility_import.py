@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.database import Base
 from app.models.charging_session import ChargingSession
-from app.services.hager_sync import known_wallbox_names
 from app.services.importers.hager_json_importer import (
     import_charging_rows_to_db,
     parse_charging_row,
@@ -78,7 +77,8 @@ def test_parse_converts_wh_to_kwh_and_utc_to_local_time() -> None:
 def test_parse_unknown_wallbox_uses_id() -> None:
     parsed = parse_charging_row(row(wallboxID="C7Hk"), NAMES)
 
-    assert parsed["station_id"] == "ID: C7Hk"
+    # Kurzform der ID, solange kein Name bekannt ist
+    assert parsed["station_id"] == "ID: ..C7Hk"
 
 
 def test_parse_without_card() -> None:
@@ -171,23 +171,6 @@ def test_invoiced_legacy_session_is_not_changed() -> None:
         assert result["imported"] == 0
         assert stored.wallbox_id is None
         assert stored.rfid_number is None
-
-
-def test_known_wallbox_names_keep_names_of_replaced_devices() -> None:
-    with create_database_session() as db:
-        db.add(legacy_session(wallbox_id="C4Pku", station_id="witty plus 5"))
-        db.add(
-            legacy_session(
-                wallbox_id="C7Hk",
-                station_id="ID: C7Hk",
-                hager_session_id="b-2",
-                import_hash="b" * 64,
-                start_time=datetime(2026, 8, 13, 10, 0),
-            )
-        )
-        db.commit()
-
-        assert known_wallbox_names(db) == {"C4Pku": "witty plus 5"}
 
 
 # --------------------------------------------------------------------------
@@ -290,3 +273,11 @@ def test_discarded_sessions_are_not_priced_or_reassigned() -> None:
 
         assert price_charging_sessions(db)["read"] == 0
         assert reassign_open_sessions(db) == 0
+
+
+def test_parse_shortens_long_wallbox_id() -> None:
+    parsed = parse_charging_row(row(wallboxID="C7Hkmi9cQsCdmZ4K4Uydb3"), NAMES)
+
+    assert parsed["station_id"] == "ID: ..Uydb3"
+    # frühere Schreibweise mit vollständiger ID wird weiterhin erkannt
+    assert "ID: C7Hkmi9cQsCdmZ4K4Uydb3" in parsed["station_aliases"]

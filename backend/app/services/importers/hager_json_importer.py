@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.models.charging_session import ChargingSession
 from app.services.importers.xlsx_importer import create_import_hash
 from app.services.data_timezone import ensure_data_timezone
+from app.services.wallboxes import fallback_name
 from app.services.importers.import_filters import (
     ExclusionCounter,
     ImportFilters,
@@ -207,7 +208,7 @@ def parse_charging_row(
     if end_time < start_time:
         raise ValueError("end time is before the start time")
 
-    station_id = wallbox_names.get(wallbox_id) or f"ID: {wallbox_id}"
+    station_id = wallbox_names.get(wallbox_id) or fallback_name(wallbox_id)
     rfid = str(row.get("authData") or "").strip().upper() or None
     energy_total_kwh = to_float(row.get("energyAll"), "energyAll") / WH_PER_KWH
     energy_pv_kwh = to_float(row.get("energySolar"), "energySolar") / WH_PER_KWH
@@ -218,7 +219,12 @@ def parse_charging_row(
         "end_time": end_time,
         "status": str(row.get("status") or "").strip(),
         "station_id": station_id,
-        "station_aliases": {station_id, f"ID: {wallbox_id}"},
+        # auch die frühere Schreibweise mit vollständiger ID wiedererkennen
+        "station_aliases": {
+            station_id,
+            fallback_name(wallbox_id),
+            f"ID: {wallbox_id}",
+        },
         "wallbox_id": wallbox_id,
         "rfid": rfid,
         "energy_total_kwh": energy_total_kwh,

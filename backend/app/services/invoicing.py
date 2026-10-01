@@ -3,11 +3,12 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import dataclass
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.i18n import normalize_language, translate
 from app.utils import locale_format
+from app.services.wallboxes import refresh_station_names
 from app.models.charging_session import ChargingSession
 from app.models.energy_price import EnergyPrice
 from app.models.invoice import Invoice, InvoiceItem
@@ -219,6 +220,40 @@ def _next_month_start(value: datetime) -> datetime:
     )
 
 
+def chronological_positions(
+    fee_candidates: list[MonthlyBaseFeeCandidate],
+    charging_sessions: list,
+) -> tuple[list[int], list[int]]:
+    """
+    Positionsnummern in chronologischer Reihenfolge, Monat für Monat:
+    zuerst die Monatsgebühr(en) des Monats, danach dessen Ladevorgänge
+    nach Beginn. Rückgabe: (Positionen der Gebühren, Positionen der
+    Ladevorgänge) in der Reihenfolge der übergebenen Listen.
+    """
+    entries = []
+
+    for index, candidate in enumerate(fee_candidates):
+        month = (candidate.fee_month.year, candidate.fee_month.month)
+        entries.append((month, 0, datetime.min, index, "fee", index))
+
+    for index, (charging_session, _rebill) in enumerate(charging_sessions):
+        start = charging_session.start_time
+        entries.append(((start.year, start.month), 1, start, index, "session", index))
+
+    entries.sort(key=lambda entry: entry[:4])
+
+    fee_positions = [0] * len(fee_candidates)
+    session_positions = [0] * len(charging_sessions)
+
+    for position, entry in enumerate(entries, start=1):
+        if entry[4] == "fee":
+            fee_positions[entry[5]] = position
+        else:
+            session_positions[entry[5]] = position
+
+    return fee_positions, session_positions
+
+
 def format_billed_days(
     value: Decimal,
     locale: str | None = None,
@@ -236,17 +271,47 @@ def format_billed_days(
 
 def _effective_assignment_start_date(
     valid_from: datetime,
+    *,
+    handover: bool,
 ) -> date:
-    # Wechseltag zählt voll für die ALTE Zuordnung: eine
-    # Zuordnung, die mitten am Tag beginnt, zählt diesen
-    # Tag noch nicht mit - erst der Folgetag ist ein
-    # voller Tag der neuen Zuordnung. Beginnt sie exakt um
-    # Mitternacht, gibt es keinen Wechsel mitten im Tag und
-    # der Tag zählt sofort voll.
-    if valid_from.time() == time.min:
+    # Beginnt eine Zuordnung mitten am Tag und übernimmt sie die Karte von
+    # einer anderen Zuordnung, die an diesem Tag endet, zählt der Tag voll
+    # für die ALTE Zuordnung – erst der Folgetag gehört der neuen. Ohne
+    # Übergabe (z. B. erste Zuordnung einer Karte) zählt der Tag voll für
+    # die neue Zuordnung, egal zu welcher Uhrzeit sie beginnt.
+    if valid_from.time() == time.min or not handover:
         return valid_from.date()
 
     return valid_from.date() + timedelta(days=1)
+
+
+def _is_mid_day_handover(
+    db: Session,
+    assignment: RFIDCardAssignment,
+) -> bool:
+    """
+    True, wenn die Karte am ersten Tag der Zuordnung von einer anderen
+    Zuordnung übergeben wird, die an diesem Tag nach 00:00 Uhr endet und
+    den Tag deshalb voll erhält.
+    """
+    valid_from = assignment.valid_from
+
+    if valid_from.time() == time.min:
+        return False
+
+    day_start = datetime.combine(valid_from.date(), time.min)
+    next_day_start = day_start + timedelta(days=1)
+
+    return bool(
+        db.scalar(
+            select(func.count(RFIDCardAssignment.id)).where(
+                RFIDCardAssignment.rfid_card_id == assignment.rfid_card_id,
+                RFIDCardAssignment.id != assignment.id,
+                RFIDCardAssignment.valid_to > day_start,
+                RFIDCardAssignment.valid_to < next_day_start,
+            )
+        )
+    )
 
 
 def _effective_assignment_end_date_exclusive(
@@ -324,7 +389,8 @@ def find_monthly_base_fee_assignments(
             effective_start = max(
                 month_start_date,
                 _effective_assignment_start_date(
-                    assignment.valid_from
+                    assignment.valid_from,
+                    handover=_is_mid_day_handover(db, assignment),
                 ),
             )
 
@@ -560,12 +626,33 @@ def find_billable_monthly_base_fee_candidates(
         if not is_billable:
             continue
 
-        net_amount = to_decimal(
-            charge.net_amount
-        ).quantize(
-            FOUR_DECIMALS,
-            rounding=ROUND_HALF_UP,
-        )
+        # Noch nicht abgerechneter Eintrag (z. B. aus einem gelöschten Entwurf
+        # oder nach einem Storno): Betrag neu aus Grundgebühr und aktuellen
+        # Tagen berechnen – die Tage können sich durch eine geänderte
+        # Zuordnung verschoben haben. Ohne eingestellte Grundgebühr bleibt
+        # der gespeicherte Betrag.
+        if (
+            configured_net_amount is not None
+            and configured_vat_rate is not None
+            and configured_net_amount > 0
+        ):
+            net_amount = (
+                configured_net_amount
+                * assignment_period.billed_days
+                / Decimal(assignment_period.days_in_month)
+            ).quantize(
+                FOUR_DECIMALS,
+                rounding=ROUND_HALF_UP,
+            )
+            vat_rate = configured_vat_rate
+        else:
+            net_amount = to_decimal(
+                charge.net_amount
+            ).quantize(
+                FOUR_DECIMALS,
+                rounding=ROUND_HALF_UP,
+            )
+            vat_rate = to_decimal(charge.vat_rate)
 
         if net_amount <= 0:
             continue
@@ -585,9 +672,7 @@ def find_billable_monthly_base_fee_candidates(
                     rebill_source_item_id
                 ),
                 net_amount=net_amount,
-                vat_rate=to_decimal(
-                    charge.vat_rate
-                ).quantize(
+                vat_rate=vat_rate.quantize(
                     CENT,
                     rounding=ROUND_HALF_UP,
                 ),
@@ -883,14 +968,24 @@ def create_invoice_draft(
         db.add(invoice)
         db.flush()
 
-        for position_number, (
+        # Stationsnamen aus der Tabelle der Wallboxen (eigener Name, Name aus
+        # der Hager Cloud oder Kurzform der ID)
+        refresh_station_names(
+            db,
+            [charging_session for charging_session, _rebill in charging_sessions],
+        )
+
+        fee_positions, session_positions = chronological_positions(
+            monthly_base_fee_candidates,
+            charging_sessions,
+        )
+
+        for (
             charging_session,
             rebill_source_item_id,
-        ) in enumerate(
+        ), position_number in zip(
             charging_sessions,
-            start=(
-                len(monthly_base_fee_candidates) + 1
-            ),
+            session_positions,
         ):
             energy_price = find_energy_price(
                 db,
@@ -1039,9 +1134,9 @@ def create_invoice_draft(
             total_net += net_amount_cents
             total_vat += vat_amount
             total_gross += gross_amount
-        for position_number, candidate in enumerate(
+        for candidate, position_number in zip(
             monthly_base_fee_candidates,
-            start=1,
+            fee_positions,
         ):
             charge = candidate.charge
 
@@ -1063,6 +1158,10 @@ def create_invoice_draft(
                 db.add(charge)
                 db.flush()
             else:
+                # noch nicht abgerechnet: Betrag neu übernehmen (z. B. nach
+                # geändertem Beginn der Zuordnung oder neuer Grundgebühr)
+                charge.net_amount = candidate.net_amount
+                charge.vat_rate = candidate.vat_rate
                 charge.invoice_id = invoice.id
                 charge.invoiced = False
 

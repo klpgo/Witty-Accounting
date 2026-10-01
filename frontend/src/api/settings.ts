@@ -633,6 +633,47 @@ export async function updateEnergyPrice(
   )
 }
 
+export interface Wallbox {
+  id: number
+  wallbox_id: string
+  hager_name: string | null
+  custom_name: string | null
+  // eigener Name, sonst Name aus der Hager Cloud, sonst "ID: ..XXXXX"
+  display_name: string
+  session_count: number
+  last_session_at: string | null
+}
+
+export interface WallboxUpdateResult extends Wallbox {
+  updated_sessions: number
+}
+
+export async function listWallboxes(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<Wallbox[]> {
+  return readEnergyResponse<Wallbox[]>(
+    await fetch(`${API_BASE_URL}/wallboxes`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+}
+
+export async function updateWallboxName(
+  accessToken: string,
+  wallboxPk: number,
+  customName: string,
+): Promise<WallboxUpdateResult> {
+  return readEnergyResponse<WallboxUpdateResult>(
+    await fetch(`${API_BASE_URL}/wallboxes/${wallboxPk}`, {
+      method: 'PATCH',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify({ custom_name: customName.trim() || null }),
+    }),
+  )
+}
+
 export async function getHagerSettings(
   accessToken: string,
   signal?: AbortSignal,

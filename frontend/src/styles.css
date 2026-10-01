@@ -210,13 +210,16 @@ h2 {
   background: #ffffff;
 }
 
+/* Zweizeilig: oben Logo/Name und Benutzer, darunter die Menüleiste über
+   die volle Breite – unabhängig von der Länge der Menütexte (de/en) */
 .app-header-content {
   display: flex;
   width: min(1120px, calc(100% - 32px));
-  min-height: 76px;
   margin: 0 auto;
+  padding-top: 14px;
   align-items: center;
-  gap: 32px;
+  flex-wrap: wrap;
+  column-gap: 32px;
 }
 
 .app-brand {
@@ -244,24 +247,36 @@ h2 {
   gap: 2px;
 }
 
-.app-brand span {
+/* nur der Untertitel – nicht die Initialen im Logo */
+.app-brand div > span {
   color: #667085;
   font-size: 0.78rem;
 }
 
 .app-nav {
   display: flex;
-  align-self: stretch;
+  order: 3;
+  width: calc(100% + 24px);
+  min-height: 48px;
+  margin: 10px -12px 0;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.app-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-link {
   display: flex;
   align-items: center;
   border-bottom: 3px solid transparent;
-  padding: 0 8px;
+  padding: 0 12px;
   color: #667085;
   font-weight: 650;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .nav-link:hover {
@@ -278,6 +293,10 @@ h2 {
   margin-left: auto;
   align-items: center;
   gap: 16px;
+}
+
+.user-menu .button {
+  white-space: nowrap;
 }
 
 .user-menu-trigger {
@@ -315,7 +334,7 @@ h2 {
 }
 
 .app-main {
-  min-height: calc(100vh - 77px);
+  min-height: calc(100vh - 140px);
 }
 
 .dashboard-page {
@@ -416,15 +435,11 @@ h2 {
 
 @media (max-width: 760px) {
   .app-header-content {
-    min-height: auto;
-    padding: 16px 0;
+    padding-top: 12px;
     align-items: flex-start;
-    flex-wrap: wrap;
   }
 
   .app-nav {
-    order: 3;
-    width: 100%;
     min-height: 42px;
   }
 
@@ -1390,4 +1405,23 @@ select {
   .sessions-overview {
     grid-template-columns: 1fr;
   }
+}
+
+/* Eingabefelder in Tabellen (z. B. Wallbox-Namen): wie Formularfelder,
+   etwas kompakter */
+.data-table input[type="text"] {
+  width: 100%;
+  min-width: 12rem;
+  border: 1px solid #cfd6e2;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 7px 10px;
+  color: #172033;
+  font: inherit;
+  outline: none;
+}
+
+.data-table input[type="text"]:focus {
+  border-color: #3659d9;
+  box-shadow: 0 0 0 3px rgb(54 89 217 / 14%);
 }

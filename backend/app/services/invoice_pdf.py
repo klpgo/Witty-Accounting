@@ -414,6 +414,18 @@ def _build_invoice_pdf(
         parent=right_style,
     )
 
+    # Stationsname in der Positionstabelle: gleiche Schrift wie die Tabelle,
+    # bricht innerhalb der Spalte um – auch mitten in langen Kennungen
+    station_cell_style = ParagraphStyle(
+        "InvoiceStationCell",
+        parent=body_style,
+        fontSize=7,
+        leading=8.5,
+        spaceAfter=0,
+        alignment=TA_CENTER,
+        splitLongWords=True,
+    )
+
     table_header_style = ParagraphStyle(
         "InvoiceTableHeader",
         parent=small_style,
@@ -1001,7 +1013,10 @@ def _build_invoice_pdf(
                 format_date(
                     item.session_start.date()
                 ),
-                item.station_id,
+                Paragraph(
+                    escape(item.station_id),
+                    station_cell_style,
+                ),
                 format_energy(
                     item.energy_total_kwh
                 ),

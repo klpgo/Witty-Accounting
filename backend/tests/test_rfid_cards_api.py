@@ -150,6 +150,7 @@ def create_charging_session(
     assignment: RFIDCardAssignment,
     start_time: datetime,
     import_hash: str,
+    invoiced: bool = False,
 ) -> ChargingSession:
     session = ChargingSession(
         hager_session_id=None,
@@ -162,6 +163,7 @@ def create_charging_session(
         energy_pv_kwh=4.0,
         import_hash=import_hash,
         source="xlsx",
+        invoiced=invoiced,
     )
 
     db.add(session)
@@ -1165,7 +1167,7 @@ def test_used_assignment_rejects_user_change(
     )
 
 
-def test_used_assignment_rejects_start_change(
+def test_billed_assignment_rejects_start_change(
     client: TestClient,
     database_session: Session,
 ) -> None:
@@ -1192,6 +1194,7 @@ def test_used_assignment_rejects_start_change(
         assignment=assignment,
         start_time=datetime(2026, 6, 15, 10, 0),
         import_hash="b" * 64,
+        invoiced=True,
     )
 
     response = client.patch(
@@ -1363,3 +1366,50 @@ def test_admin_lists_rfid_cards_sorted_by_description(
         "Wartung",
         None,
     ]
+
+
+
+def test_unbilled_assignment_allows_earlier_start(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="start-admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(database_session, user=admin, rfid_number="START1")
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 6, 1, 14, 18),
+    )
+    create_charging_session(
+        database_session,
+        card=card,
+        assignment=assignment,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        import_hash="s" * 64,
+    )
+
+    # Ladevorgang zugeordnet, aber nicht abgerechnet: Beginn auf 00:00
+    response = client.patch(
+        f"/api/rfid-card-assignments/{assignment.id}",
+        headers=authorization_header(admin),
+        json={"valid_from": "2026-06-01T00:00:00"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["valid_from"] == "2026-06-01T00:00:00"
+
+    # nach dem Ladevorgang beginnen ist weiterhin nicht erlaubt
+    response = client.patch(
+        f"/api/rfid-card-assignments/{assignment.id}",
+        headers=authorization_header(admin),
+        json={"valid_from": "2026-07-01T00:00:00"},
+    )
+
+    assert response.status_code == 409
+    assert "charging sessions" in response.json()["detail"]

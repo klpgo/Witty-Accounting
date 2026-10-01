@@ -246,7 +246,11 @@ def sync_db(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(hager_sync, "load_access", lambda db: ACCESS)
     monkeypatch.setattr(hager_sync, "fetch_all_sessions", fake_fetch_all_sessions)
     monkeypatch.setattr(hager_sync, "import_charging_rows_to_db", fake_import_rows)
-    monkeypatch.setattr(hager_sync, "wallbox_names", lambda db, access: {"WB-A": "WB2"})
+    monkeypatch.setattr(
+        hager_sync,
+        "wallbox_names",
+        lambda db, access, wallbox_ids=None: {"WB-A": "WB2"},
+    )
 
     with Session(engine) as db:
         db.add(
