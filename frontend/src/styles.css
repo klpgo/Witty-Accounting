@@ -225,20 +225,17 @@ h2 {
 }
 
 /* Beim Scrollen zu einem Element (Tabulatortaste, Suche auf der Seite)
-   bleibt es unterhalb der haftenden Kopfzeile sichtbar */
+   bleibt es unterhalb der haftenden Menüzeile sichtbar */
 html {
-  scroll-padding-top: 136px;
+  scroll-padding-top: 64px;
 }
 
-/* Kopfzeile und Menüzeile gemeinsam oben haftend */
-.app-topbar {
+/* Menüzeile: bleibt beim Scrollen oben stehen; Logo und Benutzerzeile
+   scrollen mit dem Inhalt weg */
+.app-navbar {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: #ffffff;
-}
-
-.app-navbar {
   border-bottom: 1px solid #dfe4ec;
   background: #ffffff;
 }
@@ -480,22 +477,6 @@ html {
 }
 
 @media (max-width: 760px) {
-  /* auf schmalen Bildschirmen haftet nur die Menüzeile: der gemeinsame
-     Bereich löst sich auf, damit die Menüzeile relativ zur Seite haftet */
-  .app-topbar {
-    display: contents;
-  }
-
-  html {
-    scroll-padding-top: 64px;
-  }
-
-  .app-navbar {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-  }
-
   /* auf schmalen Bildschirmen nur der Pfeil */
   .back-to-top-label {
     display: none;
