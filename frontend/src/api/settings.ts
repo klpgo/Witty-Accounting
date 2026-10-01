@@ -556,6 +556,83 @@ export async function updateCurrentEnergyPrice(
   ) as EnergyPrice
 }
 
+export interface EnergyPriceInput {
+  // Kalendertag JJJJ-MM-TT; der Tarif gilt ab 00:00 Uhr
+  valid_from: string
+  grid_price_net: string
+  pv_price_net: string
+  vat_rate: string
+}
+
+async function readEnergyResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as T
+}
+
+export async function listEnergyPrices(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<EnergyPrice[]> {
+  return readEnergyResponse<EnergyPrice[]>(
+    await fetch(`${API_BASE_URL}/energy-prices`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+}
+
+// Frühester Zeitpunkt, ab dem Tarife angelegt oder geändert werden dürfen
+// (Ende des spätesten abgerechneten Zeitraums); null ohne Rechnungen
+export async function getEnergyPriceEditableFrom(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const result = await readEnergyResponse<{ editable_from: string | null }>(
+    await fetch(`${API_BASE_URL}/energy-prices/editable-from`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+
+  return result.editable_from
+}
+
+export async function createEnergyPrice(
+  accessToken: string,
+  payload: EnergyPriceInput,
+): Promise<EnergyPrice> {
+  return readEnergyResponse<EnergyPrice>(
+    await fetch(`${API_BASE_URL}/energy-prices`, {
+      method: 'POST',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify({
+        ...payload,
+        valid_from: `${payload.valid_from}T00:00:00`,
+      }),
+    }),
+  )
+}
+
+export async function updateEnergyPrice(
+  accessToken: string,
+  priceId: number,
+  payload: EnergyPriceInput,
+): Promise<EnergyPrice> {
+  return readEnergyResponse<EnergyPrice>(
+    await fetch(`${API_BASE_URL}/energy-prices/${priceId}`, {
+      method: 'PUT',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    }),
+  )
+}
+
 export async function getHagerSettings(
   accessToken: string,
   signal?: AbortSignal,

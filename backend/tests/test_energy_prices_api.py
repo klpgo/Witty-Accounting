@@ -641,3 +641,184 @@ def test_second_change_today_updates_existing_tariff(
     ).all()
 
     assert len(stored_prices) == 2
+
+
+# --------------------------------------------------------------------------
+# Gültigkeit ab einem Datum, Ändern und Schutz abgerechneter Zeiträume
+# --------------------------------------------------------------------------
+def add_invoice(db: Session, service_period_end: datetime) -> None:
+    from app.models.invoice import Invoice
+
+    db.add(
+        Invoice(
+            user_id=1,
+            document_type="invoice",
+            status="finalized",
+            issuer_name="Wallbox GbR",
+            issuer_address="Am Wolfsberg 42",
+            recipient_name="Max Mustermann",
+            recipient_address="Musterweg 1",
+            service_period_start=datetime(2026, 8, 1),
+            service_period_end=service_period_end,
+            currency="EUR",
+            total_net=Decimal("0.00"),
+            vat_amount=Decimal("0.00"),
+            total_gross=Decimal("0.00"),
+        )
+    )
+    db.commit()
+
+
+def add_price(db: Session, valid_from: datetime, grid: str = "0.3000") -> EnergyPrice:
+    price = EnergyPrice(
+        valid_from=valid_from,
+        grid_price_net=Decimal(grid),
+        pv_price_net=Decimal("0.1000"),
+        vat_rate=Decimal("19.00"),
+    )
+    db.add(price)
+    db.commit()
+    return price
+
+
+def add_session(db: Session, start: datetime, suffix: str) -> ChargingSession:
+    session = ChargingSession(
+        hager_session_id=None,
+        station_id="WB2",
+        start_time=start,
+        end_time=start.replace(hour=start.hour + 1),
+        rfid_card_id=None,
+        energy_total_kwh=2.0,
+        energy_pv_kwh=0.5,
+        cost_grid_net=None,
+        cost_pv_net=None,
+        vat_rate=None,
+        invoiced=False,
+        invoice_id=None,
+        import_hash=suffix * 64,
+        source="xlsx",
+    )
+    db.add(session)
+    db.commit()
+    return session
+
+
+PRICE = {"grid_price_net": "0.4000", "pv_price_net": "0.2000", "vat_rate": "19.00"}
+
+
+def test_editable_from_follows_latest_invoice(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    assert client.get("/api/energy-prices/editable-from").json() == {
+        "editable_from": None
+    }
+
+    add_invoice(database_session, datetime(2026, 9, 1))
+
+    assert client.get("/api/energy-prices/editable-from").json() == {
+        "editable_from": "2026-09-01T00:00:00"
+    }
+
+
+def test_past_price_is_rejected_within_invoiced_period(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    add_invoice(database_session, datetime(2026, 9, 1))
+
+    rejected = client.post(
+        "/api/energy-prices",
+        json={"valid_from": "2026-08-15T00:00:00", **PRICE},
+    )
+    accepted = client.post(
+        "/api/energy-prices",
+        json={"valid_from": "2026-09-01T00:00:00", **PRICE},
+    )
+
+    assert rejected.status_code == 409
+    assert "2026-09-01" in rejected.json()["detail"]
+    assert accepted.status_code == 201
+
+
+def test_past_price_reprices_uninvoiced_sessions(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    add_price(database_session, datetime(2026, 1, 1), grid="0.3000")
+    before = add_session(database_session, datetime(2026, 8, 31, 10, 0), "a")
+    after = add_session(database_session, datetime(2026, 9, 2, 10, 0), "b")
+
+    response = client.post(
+        "/api/energy-prices",
+        json={"valid_from": "2026-09-01T00:00:00", **PRICE},
+    )
+
+    assert response.status_code == 201
+    database_session.refresh(before)
+    database_session.refresh(after)
+    # vor dem Stichtag unverändert (nicht bepreist), danach neuer Preis
+    assert before.cost_grid_net is None
+    assert after.cost_grid_net == Decimal("0.6000")
+
+
+def test_update_changes_date_and_prices_and_reprices(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    add_price(database_session, datetime(2026, 1, 1), grid="0.3000")
+    price = add_price(database_session, datetime(2026, 10, 1), grid="0.5000")
+    session = add_session(database_session, datetime(2026, 9, 15, 10, 0), "c")
+
+    response = client.put(
+        f"/api/energy-prices/{price.id}",
+        json={"valid_from": "2026-09-01", **PRICE},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["valid_from"] == "2026-09-01T00:00:00"
+    assert response.json()["grid_price_net"] == "0.4000"
+    database_session.refresh(session)
+    assert session.cost_grid_net == Decimal("0.6000")
+
+
+def test_update_is_rejected_for_invoiced_period(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    old = add_price(database_session, datetime(2026, 8, 1))
+    future = add_price(database_session, datetime(2026, 10, 1))
+    add_invoice(database_session, datetime(2026, 9, 1))
+
+    # alter Zeitpunkt liegt im abgerechneten Zeitraum
+    assert client.put(
+        f"/api/energy-prices/{old.id}",
+        json={"valid_from": "2026-09-15", **PRICE},
+    ).status_code == 409
+    # neuer Zeitpunkt läge im abgerechneten Zeitraum
+    assert client.put(
+        f"/api/energy-prices/{future.id}",
+        json={"valid_from": "2026-08-20", **PRICE},
+    ).status_code == 409
+    # innerhalb des offenen Zeitraums verschieben ist erlaubt
+    assert client.put(
+        f"/api/energy-prices/{future.id}",
+        json={"valid_from": "2026-09-01", **PRICE},
+    ).status_code == 200
+
+
+def test_update_rejects_duplicate_date_and_unknown_tariff(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    add_price(database_session, datetime(2026, 9, 1))
+    price = add_price(database_session, datetime(2026, 10, 1))
+
+    assert client.put(
+        f"/api/energy-prices/{price.id}",
+        json={"valid_from": "2026-09-01", **PRICE},
+    ).status_code == 409
+    assert client.put(
+        "/api/energy-prices/999999",
+        json={"valid_from": "2026-11-01", **PRICE},
+    ).status_code == 404

@@ -7,12 +7,9 @@ import {
 import { useNavigate } from 'react-router-dom'
 
 import {
-  getCurrentEnergyPrice,
   getGlobalSettings,
   SettingsApiError,
-  updateCurrentEnergyPrice,
   updateGlobalSettings,
-  type EnergyPrice,
 } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
@@ -21,29 +18,14 @@ import { useTranslation } from '../i18n/useTranslation'
 import AdminSmtpSettingsForm from './AdminSmtpSettingsForm'
 import AdminPasswordPolicyForm from './AdminPasswordPolicyForm'
 import AdminAccessSettingsForm from './AdminAccessSettingsForm'
+import AdminEnergyPricesForm from './AdminEnergyPricesForm'
 import AdminInvoiceExportSettingsForm from './AdminInvoiceExportSettingsForm'
 import AdminHagerSettingsForm from './AdminHagerSettingsForm'
-import { formatDate } from '../utils/dateFormat'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
 }
 
-function decimalValuesEqual(
-  first: string,
-  second: string,
-): boolean {
-  return (
-    Number(normalizeDecimal(first)) ===
-    Number(normalizeDecimal(second))
-  )
-}
-
-function formatValidFrom(
-  value: string,
-): string {
-  return formatDate(value.slice(0, 10))
-}
 
 function AdminSettingsPage() {
   const navigate = useNavigate()
@@ -133,40 +115,6 @@ function AdminSettingsPage() {
     setInvoiceGirocodeEnabled,
   ] = useState(false)
 
-  const [
-    currentEnergyPrice,
-    setCurrentEnergyPrice,
-  ] = useState<EnergyPrice | null>(null)
-
-  const [
-    gridPriceNet,
-    setGridPriceNet,
-  ] = useState('')
-
-  const [
-    pvPriceNet,
-    setPvPriceNet,
-  ] = useState('')
-
-  const [
-    energyVatRate,
-    setEnergyVatRate,
-  ] = useState('')
-
-  const [
-    isSavingEnergyPrice,
-    setIsSavingEnergyPrice,
-  ] = useState(false)
-
-  const [
-    energyErrorMessage,
-    setEnergyErrorMessage,
-  ] = useState<string | null>(null)
-
-  const [
-    energySuccessMessage,
-    setEnergySuccessMessage,
-  ] = useState<string | null>(null)
 
   const [isLoading, setIsLoading] =
     useState(true)
@@ -236,26 +184,6 @@ function AdminSettingsPage() {
             controller.signal,
           )
 
-        let loadedEnergyPrice:
-          EnergyPrice | null = null
-
-        try {
-          loadedEnergyPrice =
-            await getCurrentEnergyPrice(
-              accessToken,
-              controller.signal,
-            )
-        } catch (error) {
-          if (
-            !(
-              error instanceof SettingsApiError &&
-              error.status === 404
-            )
-          ) {
-            throw error
-          }
-        }
-
         setAppName(loadedSettings.app_name)
         setMonthlyBaseFeeNet(
           loadedSettings.monthly_base_fee_net,
@@ -312,20 +240,6 @@ function AdminSettingsPage() {
         setInvoiceGirocodeEnabled(
           loadedSettings.invoice_girocode_enabled,
         )
-        if (loadedEnergyPrice !== null) {
-          setCurrentEnergyPrice(
-            loadedEnergyPrice,
-          )
-          setGridPriceNet(
-            loadedEnergyPrice.grid_price_net,
-          )
-          setPvPriceNet(
-            loadedEnergyPrice.pv_price_net,
-          )
-          setEnergyVatRate(
-            loadedEnergyPrice.vat_rate,
-          )
-        }
       } catch (error) {
         if (
           error instanceof DOMException &&
@@ -666,155 +580,6 @@ function AdminSettingsPage() {
       )
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  async function handleEnergyPriceSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ): Promise<void> {
-    event.preventDefault()
-
-    const normalizedGridPrice =
-      normalizeDecimal(gridPriceNet)
-
-    const normalizedPvPrice =
-      normalizeDecimal(pvPriceNet)
-
-    const normalizedVatRate =
-      normalizeDecimal(energyVatRate)
-
-    const gridPriceValue = Number(
-      normalizedGridPrice,
-    )
-    const pvPriceValue = Number(
-      normalizedPvPrice,
-    )
-    const vatRateValue = Number(
-      normalizedVatRate,
-    )
-
-    setEnergyErrorMessage(null)
-    setEnergySuccessMessage(null)
-
-    if (
-      !Number.isFinite(gridPriceValue) ||
-      gridPriceValue < 0
-    ) {
-      setEnergyErrorMessage(
-        t('settings.energy.gridInvalid'),
-      )
-      return
-    }
-
-    if (
-      !Number.isFinite(pvPriceValue) ||
-      pvPriceValue < 0
-    ) {
-      setEnergyErrorMessage(
-        t('settings.energy.pvInvalid'),
-      )
-      return
-    }
-
-    if (
-      !Number.isFinite(vatRateValue) ||
-      vatRateValue < 0 ||
-      vatRateValue > 100
-    ) {
-      setEnergyErrorMessage(
-        t('settings.vatRange'),
-      )
-      return
-    }
-
-    if (
-      currentEnergyPrice !== null &&
-      decimalValuesEqual(
-        normalizedGridPrice,
-        currentEnergyPrice.grid_price_net,
-      ) &&
-      decimalValuesEqual(
-        normalizedPvPrice,
-        currentEnergyPrice.pv_price_net,
-      ) &&
-      decimalValuesEqual(
-        normalizedVatRate,
-        currentEnergyPrice.vat_rate,
-      )
-    ) {
-      setEnergySuccessMessage(
-        t('settings.energy.noChanges'),
-      )
-      return
-    }
-
-    const accessToken = getAccessToken()
-
-    if (accessToken === null) {
-      signOut()
-
-      navigate('/login', {
-        replace: true,
-      })
-
-      return
-    }
-
-    setIsSavingEnergyPrice(true)
-
-    try {
-      const updatedEnergyPrice =
-        await updateCurrentEnergyPrice(
-          accessToken,
-          {
-            grid_price_net:
-              normalizedGridPrice,
-            pv_price_net:
-              normalizedPvPrice,
-            vat_rate:
-              normalizedVatRate,
-          },
-        )
-
-      setCurrentEnergyPrice(
-        updatedEnergyPrice,
-      )
-      setGridPriceNet(
-        updatedEnergyPrice.grid_price_net,
-      )
-      setPvPriceNet(
-        updatedEnergyPrice.pv_price_net,
-      )
-      setEnergyVatRate(
-        updatedEnergyPrice.vat_rate,
-      )
-
-      setEnergySuccessMessage(
-        t('settings.energy.saved', {
-          date: formatValidFrom(updatedEnergyPrice.valid_from),
-        }),
-      )
-    } catch (error) {
-      if (
-        error instanceof SettingsApiError &&
-        error.status === 401
-      ) {
-        signOut()
-
-        navigate('/login', {
-          replace: true,
-        })
-
-        return
-      }
-
-      setEnergyErrorMessage(
-        error instanceof Error
-          ? error.message
-          : t('settings.energy.saveFailed'),
-      )
-    } finally {
-      setIsSavingEnergyPrice(false)
     }
   }
 
@@ -1293,121 +1058,7 @@ function AdminSettingsPage() {
         </form>
       )}
       {!isLoading && (
-        <form
-          className="card settings-form"
-          onSubmit={handleEnergyPriceSubmit}
-        >
-          <section className="settings-section">
-            <div>
-              <h2>{t('settings.energy.title')}</h2>
-
-              <p className="muted">
-                {t('settings.energy.intro')}
-              </p>
-            </div>
-
-            {currentEnergyPrice !== null ? (
-              <p className="muted">
-                {t('settings.energy.currentSince')}{' '}
-                <strong>
-                  {formatValidFrom(
-                    currentEnergyPrice.valid_from,
-                  )}
-                </strong>
-              </p>
-            ) : (
-              <p className="muted">
-                {t('settings.energy.none')}
-              </p>
-            )}
-
-            {energyErrorMessage && (
-              <div
-                className="form-error"
-                role="alert"
-              >
-                {energyErrorMessage}
-              </div>
-            )}
-
-            {energySuccessMessage && (
-              <div
-                className="form-success"
-                role="status"
-              >
-                {energySuccessMessage}
-              </div>
-            )}
-
-            <div className="form-grid settings-billing-grid">
-              <label className="form-field">
-                <span>
-                  {t('settings.energy.gridPrice')}
-                </span>
-
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={gridPriceNet}
-                  onChange={(event) => {
-                    setGridPriceNet(
-                      event.target.value,
-                    )
-                  }}
-                  required
-                />
-              </label>
-
-              <label className="form-field">
-                <span>
-                  {t('settings.energy.pvPrice')}
-                </span>
-
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={pvPriceNet}
-                  onChange={(event) => {
-                    setPvPriceNet(
-                      event.target.value,
-                    )
-                  }}
-                  required
-                />
-              </label>
-
-              <label className="form-field">
-                <span>
-                  {t('settings.energy.vat')}
-                </span>
-
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={energyVatRate}
-                  onChange={(event) => {
-                    setEnergyVatRate(
-                      event.target.value,
-                    )
-                  }}
-                  required
-                />
-              </label>
-            </div>
-          </section>
-
-          <div className="settings-actions">
-            <button
-              className="button button-primary"
-              type="submit"
-              disabled={isSavingEnergyPrice}
-            >
-              {isSavingEnergyPrice
-                ? t('settings.energy.saving')
-                : t('settings.energy.save')}
-            </button>
-          </div>
-        </form>
+        <AdminEnergyPricesForm />
       )}
       {!isLoading && (
         <AdminAccessSettingsForm />

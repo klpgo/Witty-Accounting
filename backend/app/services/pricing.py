@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
@@ -103,6 +104,7 @@ def price_charging_sessions(
     db: Session,
     overwrite: bool = False,
     import_hashes: set[str] | None = None,
+    start_from: datetime | None = None,
 ) -> dict[str, int]:
     """
     Berechnet die Nettokosten aller noch nicht vollständig
@@ -130,6 +132,11 @@ def price_charging_sessions(
             ChargingSession.import_hash.in_(
                 sorted(import_hashes)
             )
+        )
+
+    if start_from is not None:
+        statement = statement.where(
+            ChargingSession.start_time >= start_from
         )
 
     if not overwrite:
