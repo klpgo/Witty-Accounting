@@ -31,6 +31,7 @@ export const de = {
   'layout.nav.settings': 'Einstellungen',
   'layout.profileAria': 'Meine Daten öffnen',
   'layout.signOut': 'Abmelden',
+  'layout.backToTop': 'Nach oben',
   'layout.fallbackName': 'Administrator',
 
   // Anmeldung

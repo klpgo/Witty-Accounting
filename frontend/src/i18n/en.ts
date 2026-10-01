@@ -24,6 +24,7 @@ export const en: Record<MessageKey, string> = {
   'layout.nav.settings': 'Settings',
   'layout.profileAria': 'Open my account',
   'layout.signOut': 'Sign out',
+  'layout.backToTop': 'Back to top',
   'layout.fallbackName': 'Administrator',
 
   'login.title': 'Sign in',

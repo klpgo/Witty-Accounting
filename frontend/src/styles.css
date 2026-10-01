@@ -1,4 +1,7 @@
 :root {
+  /* einheitliche Breite für Kopfzeile, Menüleiste und alle Seiten */
+  --content-width: min(1400px, calc(100% - 32px));
+
   font-family:
     Inter,
     system-ui,
@@ -41,7 +44,7 @@ a {
 }
 
 .page {
-  width: min(1120px, calc(100% - 32px));
+  width: var(--content-width);
   margin: 0 auto;
   padding: 48px 0;
 }
@@ -206,20 +209,63 @@ h2 {
 }
 
 .app-header {
+  background: #ffffff;
+}
+
+/* Oben Logo/Name und Benutzer; die Menüleiste folgt als eigene Zeile
+   (.app-navbar), die beim Scrollen oben stehen bleibt */
+.app-header-content {
+  display: flex;
+  width: var(--content-width);
+  margin: 0 auto;
+  padding: 14px 0 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: 32px;
+}
+
+/* Beim Scrollen zu einem Element (Tabulatortaste, Suche auf der Seite)
+   bleibt es unterhalb der haftenden Kopfzeile sichtbar */
+html {
+  scroll-padding-top: 136px;
+}
+
+/* Kopfzeile und Menüzeile gemeinsam oben haftend */
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #ffffff;
+}
+
+.app-navbar {
   border-bottom: 1px solid #dfe4ec;
   background: #ffffff;
 }
 
-/* Zweizeilig: oben Logo/Name und Benutzer, darunter die Menüleiste über
-   die volle Breite – unabhängig von der Länge der Menütexte (de/en) */
-.app-header-content {
+.app-navbar-content {
   display: flex;
-  width: min(1120px, calc(100% - 32px));
+  width: var(--content-width);
   margin: 0 auto;
-  padding-top: 14px;
-  align-items: center;
-  flex-wrap: wrap;
-  column-gap: 32px;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.back-to-top {
+  align-self: center;
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  color: #3659d9;
+  font: inherit;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.back-to-top:hover,
+.back-to-top:focus-visible {
+  text-decoration: underline;
 }
 
 .app-brand {
@@ -255,10 +301,10 @@ h2 {
 
 .app-nav {
   display: flex;
-  order: 3;
-  width: calc(100% + 24px);
+  flex: 1;
+  min-width: 0;
   min-height: 48px;
-  margin: 10px -12px 0;
+  margin-left: -12px;
   gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -434,6 +480,32 @@ h2 {
 }
 
 @media (max-width: 760px) {
+  /* auf schmalen Bildschirmen haftet nur die Menüzeile: der gemeinsame
+     Bereich löst sich auf, damit die Menüzeile relativ zur Seite haftet */
+  .app-topbar {
+    display: contents;
+  }
+
+  html {
+    scroll-padding-top: 64px;
+  }
+
+  .app-navbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  /* auf schmalen Bildschirmen nur der Pfeil */
+  .back-to-top-label {
+    display: none;
+  }
+
+  .back-to-top {
+    padding: 6px 4px;
+    font-size: 1.15rem;
+  }
+
   .app-header-content {
     padding-top: 12px;
     align-items: flex-start;
@@ -758,7 +830,6 @@ h2 {
 }
 
 .admin-page {
-  width: min(1400px, calc(100% - 32px));
   padding-top: 40px;
 }
 
