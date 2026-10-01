@@ -6,8 +6,8 @@ how to run the monthly billing and how to back up and restore the data.
 
 Menu items and buttons are quoted as they appear in the English user
 interface. Switch your own interface language under **My account → Language**
-if needed. Multi-tenant operation is covered separately in
-[multi-tenancy.md](multi-tenancy.md).
+if needed. Running several independent tenants on one installation is
+described in [section 7](#7-multi-tenant-operation).
 
 **Contents**
 
@@ -17,8 +17,9 @@ if needed. Multi-tenant operation is covered separately in
 4. [XLSX upload](#4-xlsx-upload)
 5. [Monthly billing](#5-monthly-billing)
 6. [Backup and restore](#6-backup-and-restore)
-7. [Updates](#7-updates)
-8. [Troubleshooting](#8-troubleshooting)
+7. [Multi-tenant operation](#7-multi-tenant-operation)
+8. [Updates](#8-updates)
+9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
@@ -164,9 +165,21 @@ Click **Save settings**.
 
 ### 2.4 Energy prices
 
-Enter the net prices per kWh for grid and PV electricity and the VAT rate,
-then click **Save energy prices**. A price change takes effect from the day it
-is saved; the previous prices remain valid for earlier charging sessions.
+Energy prices are tariffs with a validity date. Each tariff applies from 00:00
+on its **Valid from** date until the next tariff starts. The list shows all
+tariffs; the one in effect today is marked as current.
+
+- **New tariff:** enter the **Valid from** date, the net prices per kWh for
+  grid and PV electricity and the VAT rate, then click **Save tariff**. A date
+  in the future is possible, e.g. for an announced price change.
+- **Change a tariff:** click **Edit** next to it.
+- **Past dates** are only accepted if no invoice exists from that date on
+  (drafts included). Tariffs within an invoiced period are marked as *billed*
+  and cannot be changed; the page shows the earliest possible date. To correct
+  a period covered by a draft, delete the draft first.
+
+After saving, all charging sessions from the tariff's date on that have not
+been billed yet are recalculated automatically.
 
 ### 2.5 Dashboard and access
 
@@ -210,6 +223,13 @@ tick **Enable SFTP invoice export** and use **Test connection**.
 
 ### 2.9 Hager Cloud
 
+> **Recommendation: use a separate user with read-only access.** Witty only
+> reads charging sessions and wallbox names, so read access is sufficient.
+> Invite an additional user to your installation in the Hager web interface,
+> give it read-only permissions and use its credentials in Witty instead of
+> your own account. Your own password is then not stored in Witty, and the
+> access can be revoked at any time without affecting your account.
+
 1. Enter **Username (email)** and **Password** of the Hager Cloud account.
 2. Enter **Installation ID** and **Serial number**. Both are part of the
    address in the Hager web interface:
@@ -242,14 +262,37 @@ description, then click **Create card**.
 Select the card and add a **New assignment** to a user:
 
 - **Valid from** must be on or before the first charging session that is to
-  be billed to this user.
+  be billed to this user. It is preset to today, 00:00; usually only the date
+  needs to be changed.
 - **Valid to** stays empty for an open-ended assignment. To hand a card over
   to another user, end the current assignment and create a new one.
 - The optional note (e.g. a licence plate) appears on the invoice.
 
+The monthly base fee is charged per day of the assignment. An assignment
+starting at 00:00 includes that whole day. A time of day is only needed when a
+card is handed over during the day: the day of the handover then counts for
+the previous assignment, the new one starts on the following day.
+
+The start of an assignment can be changed as long as nothing of it has been
+billed (no charging session or base fee in an invoice or draft).
+
 Charging sessions that were imported before a matching assignment existed are
 assigned automatically as soon as the assignment is created, as long as they
 have not been billed yet.
+
+### 2.12 Wallbox names
+
+Under **Settings → Wallboxes**, all wallboxes that appear in charging sessions
+are listed with their name from the Hager Cloud. The name printed on invoices
+is:
+
+1. the **custom name**, if one is entered,
+2. otherwise the **name in the Hager Cloud**,
+3. otherwise a short form of the technical ID, e.g. `ID: ..Uydb3`.
+
+A replaced wallbox often has no name in the Hager Cloud. Enter a custom name
+and click **Save**; it is applied to all charging sessions of this wallbox that
+have not been billed yet. Invoices already created keep their names.
 
 ---
 
@@ -458,7 +501,250 @@ Test the restore procedure on a separate system from time to time.
 
 ---
 
-## 7. Updates
+## 7. Multi-tenant operation
+
+### 7.1 Overview
+
+In multi-tenant operation, one Witty installation serves several independent
+tenants, for example several residential complexes. All tenants share the
+application and the MariaDB server, but each tenant has
+
+- its own database with its own users, settings, charging data and invoices,
+- its own invoice archive in `/srv/witty/invoices/<tenant code>/`,
+- its own domain, e.g. `wallbox42.example.org`.
+
+Witty determines the tenant from the host name of each request. The domains
+are registered in the central control database `witty_control`; requests for
+unknown host names get no access to any tenant.
+
+Tenants are managed with the control service `witty-control`, a separate
+container with its own web interface on port 8001. Docker publishes this port
+only on `127.0.0.1` of the Docker host. **Never make it reachable through a
+reverse proxy or a firewall rule.**
+
+The mode is set in `.env`:
+
+| `TENANCY_ENABLED` | Mode |
+|---|---|
+| `false` | Single installation with one database (sections 1 to 6) |
+| `true` | Multi-tenant operation |
+
+### 7.2 Set up a new multi-tenant installation
+
+1. **Prepare the installation** as described in sections
+   [1.2](#12-get-the-source) to [1.4](#14-create-the-host-directories): get the
+   source, configure `.env` and create the host directories. Skip sections 1.6
+   and 1.7 – the database schema and the first administrator are created for
+   each tenant by the control service.
+
+2. **Build the images and start the database:**
+   ```bash
+   docker compose build
+   docker compose --profile control build control
+   docker compose up -d db
+   ```
+
+3. **Create the control database:**
+   ```bash
+   docker compose run --rm --no-deps backend python -m scripts.create_control_database
+   ```
+   The tool asks for the MariaDB root password (`DB_ROOT_PASSWORD`) and for a
+   new password for the user `witty_control`. This user only receives rights
+   on the control database.
+
+4. **Complete `.env`:**
+   ```dotenv
+   TENANCY_ENABLED=true
+   CONTROL_DB_HOST=db
+   CONTROL_DB_PORT=3306
+   CONTROL_DB_NAME=witty_control
+   CONTROL_DB_USER=witty_control
+   CONTROL_DB_PASSWORD=<password from step 3>
+   TENANT_DB_ENCRYPTION_KEY=<Fernet key>
+   TENANT_REGISTRY_CACHE_SECONDS=30
+   TENANT_ENGINE_CACHE_SIZE=20
+   WITTY_CONTROL_PASSWORD=<password for the control interface>
+   WITTY_CONTROL_SESSION_SECRET=<at least 32 random characters>
+   ```
+   Generate `TENANT_DB_ENCRYPTION_KEY` with the same command as
+   `SMTP_SETTINGS_ENCRYPTION_KEY` (see [1.3](#13-configure-env)) and the session
+   secret with `openssl rand -hex 32`.
+
+   > `TENANT_DB_ENCRYPTION_KEY` encrypts the database passwords of all
+   > tenants. Keep it safe and include `.env` in your backups – without the key,
+   > Witty cannot access the tenant databases. `DB_NAME`, `DB_USER` and
+   > `DB_PASSWORD` remain required in `.env`, but are not used by the tenants.
+
+5. **Create the schema of the control database:**
+   ```bash
+   docker compose run --rm --no-deps backend python -m scripts.migrate_tenants
+   ```
+   As no tenant exists yet, the command ends with the message
+   *"Es sind keine aktiven Mandanten registriert."* (no active tenants
+   registered). This is expected at this point.
+
+6. **Start Witty and the control service:**
+   ```bash
+   docker compose up -d
+   docker compose --profile control up -d control
+   ```
+
+7. **Open the control interface.** On the Docker host, open
+   `http://127.0.0.1:8001`. From another computer, use an SSH tunnel:
+   ```bash
+   ssh -L 8001:127.0.0.1:8001 <user>@<docker-host>
+   ```
+   and open `http://localhost:8001`. Sign in with `WITTY_CONTROL_PASSWORD`.
+
+8. **Create the first tenant** with:
+   - **Code** – a short identifier such as `wb42`; it is used as the name of
+     the tenant database and of the archive directory,
+   - **Name** – e.g. the name of the residential complex,
+   - **Host name** – the domain under which the tenant reaches Witty,
+   - **First administrator** – email address, first and last name, password.
+
+   The control service creates the database with its own database user and a
+   random password (stored encrypted), creates the schema and the first
+   administrator, and registers the domain.
+
+9. **Route the domain** to Witty: the DNS entry points to the Docker host,
+   and the reverse proxy forwards HTTPS requests to port 8000. The reverse
+   proxy must pass on the original host name, e.g. with nginx
+   `proxy_set_header Host $host;` – otherwise Witty cannot determine the tenant.
+
+10. **Sign in** at `https://<domain>` with the tenant's administrator and
+    continue with [section 2](#2-initial-setup). Every tenant has its own
+    settings, Hager Cloud access, users and charging cards.
+
+Repeat steps 8 to 10 for each further tenant.
+
+### 7.3 Manage tenants
+
+In the control interface, tenants can be created, renamed, assigned to a
+different domain, locked and unlocked, and deleted.
+
+- **Locking** a tenant blocks all sign-ins for this tenant; its data remains
+  unchanged. Unlocking restores access.
+- **Deleting** a tenant removes its registration, database, database user and
+  invoice archive. **This cannot be undone.** Back up the tenant first (see
+  [section 6](#6-backup-and-restore)). If the deletion fails partway, the
+  tenant remains locked so that the deletion can be repeated once the cause
+  has been fixed.
+
+### 7.4 Convert an existing installation
+
+This section describes how an installation running as a single installation
+(`TENANCY_ENABLED=false`) becomes the first tenant of a multi-tenant
+installation. Database and invoice archive are taken over unchanged.
+
+`TENANCY_ENABLED` stays `false` throughout the preparation, so the running
+Witty keeps working as before. Multi-tenant operation is switched on only
+after the control database, the migration, the registration and the
+connection test have succeeded. **Create a backup before you start** (see
+[section 6.2](#62-create-a-backup)).
+
+1. **Build the images and start the database:**
+   ```bash
+   docker compose build
+   docker compose --profile control build control
+   docker compose up -d db
+   ```
+
+2. **Create the control database** as in [7.2](#72-set-up-a-new-multi-tenant-installation),
+   step 3.
+
+3. **Complete `.env`** as in 7.2, step 4, but keep `TENANCY_ENABLED=false`
+   for now.
+
+4. **Register the existing installation as the first tenant:**
+   ```bash
+   docker compose run --rm --no-deps backend python -m scripts.bootstrap_tenancy \
+     --slug <tenant code> \
+     --name "<tenant name>" \
+     --hostname <domain>
+   ```
+   The connection to the existing database is taken from `DB_HOST`,
+   `DB_PORT`, `DB_NAME` and `DB_USER` in `.env`; other values can be given
+   with `--db-host`, `--db-port`, `--db-name` and `--db-user`. The tool
+
+   1. updates the schema of the control database,
+   2. migrates the existing Witty database to the current version,
+   3. tests the connection to it,
+   4. registers the tenant and its domain (the database password is stored
+      encrypted),
+   5. checks the domain resolution and the database connection again.
+
+   If an error occurs before the registration, nothing changes and the
+   installation keeps running as a single installation. The tool never
+   displays database passwords.
+
+5. **Move the invoice archive** into the directory of the tenant. Stop the
+   backend first so that no invoice is created or downloaded meanwhile:
+   ```bash
+   docker compose stop backend
+   sudo mkdir -p /srv/witty/invoices/<tenant code>
+   sudo find /srv/witty/invoices -mindepth 1 -maxdepth 1 ! -name <tenant code> \
+     -exec mv -t /srv/witty/invoices/<tenant code>/ {} +
+   sudo chown -R <WITTY_UID>:<WITTY_GID> /srv/witty/invoices
+   ```
+   The PDF paths stored in the database are relative and remain valid.
+
+6. **Switch on multi-tenant operation:** set `TENANCY_ENABLED=true` in `.env`
+   and recreate the backend:
+   ```bash
+   docker compose up -d --force-recreate backend
+   docker compose logs --tail=100 backend
+   ```
+   From now on, Witty can only be reached under the registered domain.
+
+7. To manage further tenants, start the control service as in 7.2, steps 6
+   and 7.
+
+### 7.5 Register an existing database manually
+
+The control service creates new tenants including their database. If a
+tenant database already exists and is migrated to the current version, it can
+also be registered directly:
+
+```bash
+docker compose run --rm --no-deps backend python -m scripts.register_tenant \
+  --slug <tenant code> \
+  --name "<tenant name>" \
+  --hostname <domain> \
+  --db-host db \
+  --db-port 3306 \
+  --db-name <tenant database> \
+  --db-user <tenant database user>
+```
+
+The archive directory is always derived from the tenant code.
+
+### 7.6 Updates and backup
+
+After installing a new version, migrate the control database and all active
+tenant databases with one command:
+
+```bash
+docker compose run --rm --no-deps backend python -m scripts.migrate_tenants
+```
+
+An error in one tenant does not stop the migration of the others; the command
+then ends with an error status and lists the affected tenants. Use
+`--tenant <tenant code>` to migrate a single tenant. Rebuild and restart the
+control service as well:
+
+```bash
+docker compose --profile control up -d --build control
+```
+
+The backup in [section 6](#6-backup-and-restore) already covers multi-tenant
+operation: the database dump includes the control database and all tenant
+databases, the archive includes all tenant directories, and `.env` contains
+`TENANT_DB_ENCRYPTION_KEY`.
+
+---
+
+## 8. Updates
 
 ```bash
 # create a backup first (section 6.2)
@@ -470,11 +756,12 @@ docker compose run --rm --no-deps backend alembic upgrade head
 
 In multi-tenant operation, use
 `docker compose run --rm --no-deps backend python -m scripts.migrate_tenants`
-instead of the last command.
+instead of the last command and update the control service as well (see
+[section 7.6](#76-updates-and-backup)).
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 Server messages are always in English. Logs are available with
 `docker compose logs -f backend` and in `/srv/witty/logs`.

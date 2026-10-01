@@ -19,8 +19,8 @@ interim versions on the `develop` branch up to 1.5.0.
 - **Regional settings** – number, date and currency format are configurable;
   the time zone is taken from `TZ`.
 - **New documentation** – a concise README and an administrator guide
-  covering installation, setup, synchronization, XLSX upload, billing and
-  backup.
+  covering installation, setup, synchronization, XLSX upload, billing,
+  backup and multi-tenant operation.
 
 ### New features
 
@@ -59,6 +59,14 @@ interim versions on the `develop` branch up to 1.5.0.
   invoice. Regenerated PDFs are identical to the original.
 - Locale and currency are stored with each invoice; table headers in the PDF
   use the invoice currency.
+- Energy prices are tariffs with a validity date and can be created in
+  advance or changed afterwards, as long as no invoice exists from that date
+  on; unbilled charging sessions are recalculated automatically.
+- Invoice line items are listed chronologically: each month's base fee
+  followed by that month's charging sessions.
+- Wallbox names: custom names per wallbox, otherwise the name from the Hager
+  Cloud, otherwise a short form of the ID ("ID: ..XXXXX"); long station names
+  wrap within their column in the PDF.
 - Button to generate a missing PDF for a finalized invoice.
 - The service period on invoices shows the last day of service (inclusive).
 
@@ -79,6 +87,12 @@ interim versions on the `develop` branch up to 1.5.0.
 - Hager Cloud settings: credentials (password stored encrypted), installation
   ID, serial number, connection test, import rules and schedule.
 - Natural sort order for charging cards; invoices sorted with drafts first.
+- New card assignments start at 00:00 by default. The first day of an
+  assignment is only excluded from the base fee when the card is handed over
+  from another assignment during that day.
+- The start of a card assignment can be changed as long as nothing of it has
+  been billed.
+- Two-line header: the navigation no longer wraps in either language.
 
 ### Changes
 
@@ -101,6 +115,10 @@ interim versions on the `develop` branch up to 1.5.0.
 - Hard-coded German date and number formats in several places now follow the
   configured format.
 - Tests can no longer write into a real invoice archive.
+- A base fee from a deleted draft or a cancelled invoice kept its old amount
+  in the next draft; unbilled base fees are now recalculated.
+- Station names on invoices are determined when the draft is created, so
+  renamed wallboxes also apply to sessions from cancelled invoices.
 
 ### Upgrade notes
 

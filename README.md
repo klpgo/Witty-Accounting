@@ -41,7 +41,7 @@ Licensed under the MIT License.
 - One container (FastAPI backend and React frontend) plus MariaDB
 - Optional multi-tenancy with a separate database and archive per tenant,
   managed with the local `witty-control` service
-  (see [docs/multi-tenancy.md](docs/multi-tenancy.md))
+  (see the [administrator guide](docs/admin-guide.md#7-multi-tenant-operation))
 
 ## Requirements
 
@@ -49,6 +49,10 @@ A Linux host with Docker including the compose plugin, git and internet
 access for the build.
 
 ## Installation
+
+The steps below cover a single installation. For the initial setup,
+synchronization, XLSX upload, billing, backup and multi-tenant operation, see
+the [administrator guide](docs/admin-guide.md).
 
 ### 1. Get the source
 
