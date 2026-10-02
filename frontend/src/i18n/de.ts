@@ -262,6 +262,7 @@ export const de = {
   'invoiceFinalize.intro': 'Nach der Finalisierung sind die Rechnungsdaten unveränderlich. Das PDF wird automatisch erstellt und archiviert.',
   'invoiceFinalize.issueDate': 'Rechnungsdatum',
   'invoiceFinalize.dueDate': 'Fälligkeitsdatum',
+  'invoiceFinalize.paymentTermHint': 'Zahlungsziel aus den Einstellungen: {count} Tag|Zahlungsziel aus den Einstellungen: {count} Tage',
   'invoiceFinalize.dueBeforeIssue': 'Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen.',
   'invoiceFinalize.failed': 'Die Rechnung konnte nicht finalisiert werden.',
   'invoiceFinalize.submit': 'Rechnung verbindlich finalisieren',

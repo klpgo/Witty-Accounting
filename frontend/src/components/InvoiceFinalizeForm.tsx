@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useEffect,
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -10,6 +11,7 @@ import {
   InvoiceApiError,
   type Invoice,
 } from '../api/invoices'
+import { getGlobalSettings } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { useTranslation } from '../i18n/useTranslation'
@@ -40,14 +42,11 @@ function getDefaultIssueDate(): string {
   return formatDateInput(new Date())
 }
 
-function getDefaultDueDate(): string {
-  const dueDate = new Date()
+// Kalendertag JJJJ-MM-TT plus Anzahl Tage
+function addDays(day: string, days: number): string {
+  const [year, month, date] = day.split('-').map(Number)
 
-  dueDate.setDate(
-    dueDate.getDate() + 14,
-  )
-
-  return formatDateInput(dueDate)
+  return formatDateInput(new Date(year, month - 1, date + days))
 }
 
 function InvoiceFinalizeForm({
@@ -61,8 +60,41 @@ function InvoiceFinalizeForm({
   const [issueDate, setIssueDate] =
     useState(getDefaultIssueDate)
 
-  const [dueDate, setDueDate] =
-    useState(getDefaultDueDate)
+  // Zahlungsziel aus den Einstellungen (null, solange nicht geladen)
+  const [paymentTermDays, setPaymentTermDays] =
+    useState<number | null>(null)
+
+  const [dueDate, setDueDate] = useState('')
+
+  // true, sobald das Fälligkeitsdatum von Hand geändert wurde
+  const [dueDateChanged, setDueDateChanged] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const accessToken = getAccessToken()
+
+    if (accessToken !== null) {
+      getGlobalSettings(accessToken, controller.signal)
+        .then((settings) => {
+          setPaymentTermDays(settings.invoice_payment_term_days)
+        })
+        .catch(() => {
+          // ohne Einstellungen berechnet das Backend das Datum
+        })
+    }
+
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
+  // Fälligkeitsdatum folgt dem Rechnungsdatum, solange es nicht von Hand
+  // geändert wurde
+  useEffect(() => {
+    if (!dueDateChanged && paymentTermDays !== null && issueDate) {
+      setDueDate(addDays(issueDate, paymentTermDays))
+    }
+  }, [dueDateChanged, issueDate, paymentTermDays])
 
   const [isSubmitting, setIsSubmitting] =
     useState(false)
@@ -77,7 +109,7 @@ function InvoiceFinalizeForm({
   ): Promise<void> {
     event.preventDefault()
 
-    if (dueDate < issueDate) {
+    if (dueDate && dueDate < issueDate) {
       setErrorMessage(
         t('invoiceFinalize.dueBeforeIssue'),
       )
@@ -106,7 +138,7 @@ function InvoiceFinalizeForm({
           invoiceId,
           {
             issue_date: issueDate,
-            due_date: dueDate,
+            ...(dueDateChanged && dueDate ? { due_date: dueDate } : {}),
           },
         )
 
@@ -202,10 +234,17 @@ function InvoiceFinalizeForm({
                 setDueDate(
                   event.target.value,
                 )
+                setDueDateChanged(true)
               }}
               disabled={isSubmitting}
-              required
             />
+            {paymentTermDays !== null && (
+              <small className="muted">
+                {t('invoiceFinalize.paymentTermHint', {
+                  count: paymentTermDays,
+                })}
+              </small>
+            )}
           </label>
         </div>
 

@@ -249,6 +249,7 @@ export const en: Record<MessageKey, string> = {
   'invoiceFinalize.intro': 'After finalization, the invoice data can no longer be changed. The PDF is generated and archived automatically.',
   'invoiceFinalize.issueDate': 'Invoice date',
   'invoiceFinalize.dueDate': 'Due date',
+  'invoiceFinalize.paymentTermHint': 'Payment term from the settings: {count} day|Payment term from the settings: {count} days',
   'invoiceFinalize.dueBeforeIssue': 'The due date must not be before the invoice date.',
   'invoiceFinalize.failed': 'The invoice could not be finalized.',
   'invoiceFinalize.submit': 'Finalize invoice bindingly',

@@ -289,7 +289,9 @@ export async function createInvoiceDraft(
 
 export interface InvoiceFinalizeRequest {
   issue_date: string
-  due_date: string
+  // nur bei abweichendem Fälligkeitsdatum; sonst berechnet das Backend es
+  // aus dem Zahlungsziel der Einstellungen
+  due_date?: string
 }
 
 export async function finalizeInvoice(
