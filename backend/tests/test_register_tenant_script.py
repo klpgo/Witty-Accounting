@@ -98,7 +98,7 @@ def test_rejects_duplicate_domain(
 
     with pytest.raises(
         TenantRegistrationError,
-        match="Domain ist bereits",
+        match="domain is already registered",
     ):
         register_tenant(
             control_db,

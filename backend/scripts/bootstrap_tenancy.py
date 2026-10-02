@@ -115,8 +115,7 @@ def bootstrap_existing_tenant(
 
     if resolved.id != tenant_id:
         raise TenancyBootstrapError(
-            "Die registrierte Domain wurde einem "
-            "unerwarteten Mandanten zugeordnet."
+            "The registered domain resolves to an unexpected tenant."
         )
 
     verify_tenant(resolved)
@@ -126,9 +125,8 @@ def bootstrap_existing_tenant(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Bereitet die Kontroll-Datenbank vor, "
-            "migriert die vorhandene Witty-Datenbank "
-            "und registriert sie als ersten Mandanten."
+            "Prepares the control database, migrates the existing Witty "
+            "database and registers it as the first tenant."
         )
     )
     parser.add_argument("--slug", required=True)
@@ -137,23 +135,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--db-host",
         default=settings.db_host,
-        help="Standard: DB_HOST aus .env",
+        help="Default: DB_HOST from .env",
     )
     parser.add_argument(
         "--db-port",
         type=int,
         default=settings.db_port,
-        help="Standard: DB_PORT aus .env",
+        help="Default: DB_PORT from .env",
     )
     parser.add_argument(
         "--db-name",
         default=settings.db_name,
-        help="Standard: DB_NAME aus .env",
+        help="Default: DB_NAME from .env",
     )
     parser.add_argument(
         "--db-user",
         default=settings.db_user,
-        help="Standard: DB_USER aus .env",
+        help="Default: DB_USER from .env",
     )
     return parser.parse_args()
 
@@ -166,12 +164,11 @@ def main() -> None:
 
     if encryption_key is None:
         raise SystemExit(
-            "TENANT_DB_ENCRYPTION_KEY fehlt."
+            "TENANT_DB_ENCRYPTION_KEY is missing."
         )
 
     db_password = getpass(
-        "Passwort des bestehenden "
-        "Mandanten-DB-Benutzers: "
+        "Password of the existing tenant database user: "
     )
     control_engine = create_engine(
         build_control_database_url(settings),
@@ -202,14 +199,13 @@ def main() -> None:
         control_engine.dispose()
 
     print()
-    print("Erster Mandant wurde vorbereitet:")
+    print("First tenant has been prepared:")
     print(f"  ID:     {tenant.id}")
     print(f"  Slug:   {tenant.slug}")
     print(f"  Domain: {args.hostname}")
     print()
     print(
-        "Nächster Schritt: TENANCY_ENABLED=true "
-        "setzen und das Backend neu starten."
+        "Next step: set TENANCY_ENABLED=true and restart the backend."
     )
 
 

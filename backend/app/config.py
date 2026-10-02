@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     witty_control_password: SecretStr | None = None
     witty_control_session_secret: SecretStr | None = None
     witty_control_session_minutes: int = 30
+    # Sprache der Control-Oberfläche: "en" (Standard) oder "de"
+    witty_control_language: str = "en"
 
     tenant_provision_db_host: str | None = None
     tenant_provision_db_port: int | None = None

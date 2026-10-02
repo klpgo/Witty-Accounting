@@ -565,10 +565,22 @@ The mode is set in `.env`:
    TENANT_ENGINE_CACHE_SIZE=20
    WITTY_CONTROL_PASSWORD=<password for the control interface>
    WITTY_CONTROL_SESSION_SECRET=<at least 32 random characters>
+   WITTY_CONTROL_LANGUAGE=en
    ```
    Generate `TENANT_DB_ENCRYPTION_KEY` with the same command as
    `SMTP_SETTINGS_ENCRYPTION_KEY` (see [1.3](#13-configure-env)) and the session
    secret with `openssl rand -hex 32`.
+
+   | Variable | Purpose |
+   |---|---|
+   | `WITTY_CONTROL_PASSWORD` | Password for signing in to the control interface |
+   | `WITTY_CONTROL_SESSION_SECRET` | Signing key for control sessions, at least 32 characters |
+   | `WITTY_CONTROL_LANGUAGE` | Language of the control interface and its messages: `en` (default) or `de` |
+   | `WITTY_CONTROL_SESSION_MINUTES` | Optional: session duration in minutes (default 30) |
+   | `WITTY_CONTROL_PORT` | Optional: local port of the control interface (default 8001) |
+
+   After changing one of these values, recreate the control service with
+   `docker compose --profile control up -d --force-recreate control`.
 
    > `TENANT_DB_ENCRYPTION_KEY` encrypts the database passwords of all
    > tenants. Keep it safe and include `.env` in your backups – without the key,
@@ -580,8 +592,7 @@ The mode is set in `.env`:
    docker compose run --rm --no-deps backend python -m scripts.migrate_tenants
    ```
    As no tenant exists yet, the command ends with the message
-   *"Es sind keine aktiven Mandanten registriert."* (no active tenants
-   registered). This is expected at this point.
+   *"No active tenants are registered."* This is expected at this point.
 
 6. **Start Witty and the control service:**
    ```bash

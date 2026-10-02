@@ -9,7 +9,6 @@ services:
     restart: unless-stopped
 
     environment:
-      TZ: "${TZ:-Europe/Berlin}"
       MARIADB_DATABASE: "${DB_NAME:?DB_NAME muss in .env gesetzt sein}"
       MARIADB_USER: "${DB_USER:?DB_USER muss in .env gesetzt sein}"
       MARIADB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD muss in .env gesetzt sein}"
@@ -72,6 +71,7 @@ services:
     environment:
       WITTY_CONTROL_PASSWORD: "${WITTY_CONTROL_PASSWORD:-}"
       WITTY_CONTROL_SESSION_SECRET: "${WITTY_CONTROL_SESSION_SECRET:-}"
+      WITTY_CONTROL_LANGUAGE: "${WITTY_CONTROL_LANGUAGE:-en}"
       TENANT_PROVISION_DB_PASSWORD: "${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD muss in .env gesetzt sein}"
     depends_on:
       - db

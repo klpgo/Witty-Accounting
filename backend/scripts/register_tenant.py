@@ -35,9 +35,8 @@ def validate_slug(
 
     if not SAFE_TENANT_SLUG.fullmatch(normalized):
         raise TenantRegistrationError(
-            f"{field_name} darf nur Kleinbuchstaben, "
-            "Ziffern, Unterstriche und Bindestriche "
-            "enthalten."
+            f"{field_name} may only contain lowercase letters, digits, "
+            "underscores and hyphens."
         )
 
     return normalized
@@ -67,18 +66,18 @@ def register_tenant(
 
     if not normalized_name:
         raise TenantRegistrationError(
-            "Der Mandantenname darf nicht leer sein."
+            "The tenant name must not be empty."
         )
 
     if db_port < 1 or db_port > 65535:
         raise TenantRegistrationError(
-            "Der Datenbank-Port ist ungültig."
+            "The database port is invalid."
         )
 
     database_values = {
         "DB-Host": db_host.strip(),
         "DB-Name": db_name.strip(),
-        "DB-Benutzer": db_user.strip(),
+        "Database user": db_user.strip(),
     }
 
     for field_name, field_value in (
@@ -86,7 +85,7 @@ def register_tenant(
     ):
         if not field_value:
             raise TenantRegistrationError(
-                f"{field_name} darf nicht leer sein."
+                f"{field_name} must not be empty."
             )
 
     existing_tenant = db.scalar(
@@ -103,13 +102,12 @@ def register_tenant(
 
     if existing_tenant is not None:
         raise TenantRegistrationError(
-            "Dieser Mandanten-Slug ist bereits "
-            "registriert."
+            "This tenant code is already registered."
         )
 
     if existing_domain is not None:
         raise TenantRegistrationError(
-            "Diese Domain ist bereits registriert."
+            "This domain is already registered."
         )
 
     tenant = Tenant(
@@ -119,7 +117,7 @@ def register_tenant(
         db_host=database_values["DB-Host"],
         db_port=db_port,
         db_name=database_values["DB-Name"],
-        db_user=database_values["DB-Benutzer"],
+        db_user=database_values["Database user"],
         db_password_encrypted=(
             encrypt_tenant_db_password(
                 db_password,
@@ -150,8 +148,7 @@ def register_tenant(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Registriert eine vorhandene "
-            "Mandantendatenbank in witty_control."
+            "Registers an existing tenant database in witty_control."
         )
     )
     parser.add_argument("--slug", required=True)
@@ -171,7 +168,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     db_password = getpass(
-        "Passwort des Mandanten-DB-Benutzers: "
+        "Password of the tenant database user: "
     )
     control_engine = create_engine(
         build_control_database_url(settings),
@@ -201,8 +198,7 @@ def main() -> None:
         control_engine.dispose()
 
     print(
-        "Mandant registriert: "
-        f"{tenant.id} ({tenant.slug})"
+        f"Tenant registered: {tenant.id} ({tenant.slug})"
     )
 
 
