@@ -93,25 +93,23 @@ def get_sftp_configuration(
 
     if global_settings is None:
         raise InvoiceExportConfigurationError(
-            "Die globalen Einstellungen wurden "
-            "nicht gefunden."
+            "The global settings were not found."
         )
 
     if not global_settings.invoice_export_sftp_enabled:
         raise InvoiceExportConfigurationError(
-            "Der SFTP-Rechnungsexport ist nicht "
-            "aktiviert."
+            "The SFTP invoice export is not enabled."
         )
 
     required_values = {
-        "SFTP-Host": (
+        "SFTP host": (
             global_settings.invoice_export_sftp_host
         ),
-        "SFTP-Benutzer": (
+        "SFTP user": (
             global_settings
             .invoice_export_sftp_username
         ),
-        "SFTP-Zielverzeichnis": (
+        "SFTP target directory": (
             global_settings
             .invoice_export_sftp_directory
         ),
@@ -124,8 +122,7 @@ def get_sftp_configuration(
 
     if missing:
         raise InvoiceExportConfigurationError(
-            "Die SFTP-Einstellungen sind "
-            "unvollständig: "
+            "The SFTP settings are incomplete: "
             + ", ".join(missing)
         )
 
@@ -144,27 +141,25 @@ def get_sftp_configuration(
 
     if not private_key_path.is_file():
         raise InvoiceExportConfigurationError(
-            "Der private Schlüssel für den "
-            "SFTP-Export ist nicht eingerichtet."
+            "The private key for the SFTP export is not set up."
         )
 
     if not known_hosts_path.is_file():
         raise InvoiceExportConfigurationError(
-            "Die known_hosts-Datei für den "
-            "SFTP-Export ist nicht eingerichtet."
+            "The known_hosts file for the SFTP export is not set up."
         )
 
     return SftpInvoiceExportConfiguration(
-        host=str(required_values["SFTP-Host"]),
+        host=str(required_values["SFTP host"]),
         port=(
             global_settings.invoice_export_sftp_port
         ),
         username=str(
-            required_values["SFTP-Benutzer"]
+            required_values["SFTP user"]
         ),
         directory=str(
             required_values[
-                "SFTP-Zielverzeichnis"
+                "SFTP target directory"
             ]
         ),
         private_key_path=private_key_path,
@@ -209,9 +204,8 @@ def open_sftp_connection(
     except Exception as exc:
         ssh_client.close()
         raise InvoiceExportConnectionError(
-            "Die SFTP-Verbindung konnte nicht "
-            "hergestellt werden. Host, Schlüssel "
-            "und known_hosts bitte prüfen."
+            "The SFTP connection could not be established. Please check "
+            "host, key and known_hosts."
         ) from exc
 
 
@@ -237,16 +231,13 @@ def _require_remote_directory(
     except OSError as exc:
         if exc.errno == errno.ENOENT:
             raise InvoiceExportConfigurationError(
-                "Das konfigurierte "
-                "SFTP-Zielverzeichnis existiert "
-                "nicht."
+                "The configured SFTP target directory does not exist."
             ) from exc
         raise
 
     if not stat.S_ISDIR(attributes.st_mode or 0):
         raise InvoiceExportConfigurationError(
-            "Der konfigurierte SFTP-Zielpfad ist "
-            "kein Verzeichnis."
+            "The configured SFTP target path is not a directory."
         )
 
 
@@ -262,8 +253,7 @@ def _ensure_year_directory(
         sftp.mkdir(path)
     except OSError as exc:
         raise InvoiceExportConnectionError(
-            "Das Jahresverzeichnis konnte auf dem "
-            "SFTP-Server nicht angelegt werden."
+            "The year directory could not be created on the SFTP server."
         ) from exc
 
 
@@ -287,8 +277,7 @@ def test_sftp_connection(
         raise
     except Exception as exc:
         raise InvoiceExportConnectionError(
-            "Das SFTP-Zielverzeichnis konnte nicht "
-            "gelesen werden."
+            "The SFTP target directory could not be read."
         ) from exc
     finally:
         if sftp is not None:
@@ -311,14 +300,12 @@ def export_invoice_pdf(
 
     if invoice is None:
         raise InvoiceExportNotFoundError(
-            f"Rechnung {invoice_id} wurde nicht "
-            "gefunden."
+            f"Invoice {invoice_id} was not found."
         )
 
     if invoice.status != "finalized":
         raise InvoiceExportStateError(
-            "Nur finalisierte Rechnungen können "
-            "exportiert werden."
+            "Only finalized invoices can be exported."
         )
 
     if (
@@ -326,8 +313,7 @@ def export_invoice_pdf(
         or invoice.issue_date is None
     ):
         raise InvoiceExportStateError(
-            "Rechnungsnummer oder Rechnungsdatum "
-            "fehlt."
+            "Invoice number or invoice date is missing."
         )
 
     try:
@@ -370,10 +356,8 @@ def export_invoice_pdf(
 
         if _remote_path_exists(sftp, remote_path):
             raise InvoiceExportAlreadyExistsError(
-                "Die Rechnung ist im "
-                "SFTP-Zielverzeichnis bereits "
-                "vorhanden und wurde nicht "
-                "überschrieben."
+                "The invoice already exists in the SFTP target directory and "
+                "was not overwritten."
             )
 
         with archived_pdf.absolute_path.open(
@@ -388,8 +372,8 @@ def export_invoice_pdf(
 
         if attributes.st_size != archived_pdf.size_bytes:
             raise InvoiceExportConnectionError(
-                "Die übertragene PDF hat auf dem "
-                "SFTP-Server eine unerwartete Größe."
+                "The transferred PDF has an unexpected size on the SFTP "
+                "server."
             )
 
         sftp.rename(temporary_path, remote_path)
@@ -423,8 +407,7 @@ def export_invoice_pdf(
         raise
     except Exception as exc:
         raise InvoiceExportConnectionError(
-            "Die PDF-Rechnung konnte nicht per "
-            "SFTP exportiert werden."
+            "The PDF invoice could not be exported via SFTP."
         ) from exc
     finally:
         if sftp is not None:

@@ -22,12 +22,12 @@ def get_tenant_context(
     except TenantInactiveError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Dieser Mandant ist gesperrt.",
+            detail="This tenant is locked.",
         ) from exc
     except TenantNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Unbekannter Mandant.",
+            detail="Unknown tenant.",
         ) from exc
 
     request.state.tenant = tenant

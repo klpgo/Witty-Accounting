@@ -14,6 +14,8 @@ export interface AuthenticatedUser {
   last_name: string
   is_admin: boolean
   active: boolean
+  // null = Standardsprache des Mandanten
+  language?: string | null
 }
 
 interface PasswordResetRequestResponse {
@@ -38,7 +40,7 @@ async function getErrorMessage(
     // Response did not contain JSON.
   }
 
-  return `Anfrage fehlgeschlagen (${response.status}).`
+  return `Request failed (${response.status}).`
 }
 
 export async function login(

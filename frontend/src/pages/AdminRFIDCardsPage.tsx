@@ -25,14 +25,28 @@ import {
 } from '../api/users'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { getDisplayLocale } from '../utils/dateFormat'
+import { useTranslation } from '../i18n/useTranslation'
 
+// Nach Beschreibung ("Karte 2" vor "Karte 10"), Karten ohne
+// Beschreibung zuletzt, bei Gleichstand nach RFID-Nummer
 function sortCards(cards: RFIDCard[]): RFIDCard[] {
-  return [...cards].sort((first, second) =>
-    first.rfid_number.localeCompare(
-      second.rfid_number,
-      'de',
-    ),
-  )
+  return [...cards].sort((first, second) => {
+    const firstDescription = (first.description ?? '').trim()
+    const secondDescription = (second.description ?? '').trim()
+
+    if (!firstDescription !== !secondDescription) {
+      return firstDescription ? -1 : 1
+    }
+
+    return (
+      firstDescription.localeCompare(secondDescription, 'de', {
+        numeric: true,
+        sensitivity: 'base',
+      }) ||
+      first.rfid_number.localeCompare(second.rfid_number, 'de')
+    )
+  })
 }
 
 function sortAssignments(
@@ -62,7 +76,7 @@ function formatDateTime(value: string): string {
   }
 
   return new Intl.DateTimeFormat(
-    'de-DE',
+    getDisplayLocale(),
     {
       dateStyle: 'medium',
       timeStyle: 'short',
@@ -80,19 +94,19 @@ function toDateTimeInputValue(
   return value.slice(0, 19)
 }
 
-function currentDateTimeInputValue(): string {
+// Vorbelegung für neue Zuordnungen: heute, 00:00 Uhr. Eine Zuordnung, die
+// um Mitternacht beginnt, umfasst den ganzen Tag; eine Uhrzeit ist nur bei
+// einer Übergabe der Karte mitten am Tag nötig.
+function todayStartInputValue(): string {
   const now = new Date()
-  const timezoneOffset =
-    now.getTimezoneOffset() * 60_000
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
 
-  return new Date(
-    now.getTime() - timezoneOffset,
-  )
-    .toISOString()
-    .slice(0, 19)
+  return `${now.getFullYear()}-${month}-${day}T00:00:00`
 }
 
 function AdminRFIDCardsPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -203,7 +217,7 @@ function AdminRFIDCardsPage() {
   function resetAssignmentForm(): void {
     setEditingAssignmentId(null)
     setAssignmentUserId('')
-    setValidFrom(currentDateTimeInputValue())
+    setValidFrom(todayStartInputValue())
     setValidTo('')
     setAssignmentNote('')
   }
@@ -259,7 +273,7 @@ function AdminRFIDCardsPage() {
 
         handleRequestError(
           error,
-          'Die RFID-Verwaltung konnte nicht geladen werden.',
+          t('rfid.loadFailed'),
         )
       } finally {
         setIsLoading(false)
@@ -346,7 +360,7 @@ function AdminRFIDCardsPage() {
 
         handleRequestError(
           error,
-          'Die Zuordnungen konnten nicht geladen werden.',
+          t('rfid.assignments.loadFailed'),
         )
       } finally {
         setIsLoadingAssignments(false)
@@ -428,7 +442,7 @@ function AdminRFIDCardsPage() {
         setSelectedCardId(createdCard.id)
 
         setSuccessMessage(
-          `RFID-Karte ${createdCard.rfid_number} wurde angelegt.`,
+          t('rfid.created', { number: createdCard.rfid_number }),
         )
       } else if (selectedCard !== null) {
         const updatedCard = await updateRFIDCard(
@@ -453,13 +467,13 @@ function AdminRFIDCardsPage() {
         )
 
         setSuccessMessage(
-          `RFID-Karte ${updatedCard.rfid_number} wurde gespeichert.`,
+          t('rfid.saved', { number: updatedCard.rfid_number }),
         )
       }
     } catch (error) {
       handleRequestError(
         error,
-        'Die RFID-Karte konnte nicht gespeichert werden.',
+        t('rfid.saveFailed'),
       )
     } finally {
       setIsSavingCard(false)
@@ -505,7 +519,7 @@ function AdminRFIDCardsPage() {
 
     if (!Number.isInteger(userId) || userId <= 0) {
       setErrorMessage(
-        'Bitte einen Benutzer auswählen.',
+        t('rfid.assignments.userMissing'),
       )
 
       return
@@ -513,7 +527,7 @@ function AdminRFIDCardsPage() {
 
     if (!validFrom) {
       setErrorMessage(
-        'Bitte den Beginn der Zuordnung angeben.',
+        t('rfid.assignments.startMissing'),
       )
 
       return
@@ -525,7 +539,7 @@ function AdminRFIDCardsPage() {
         new Date(validFrom).getTime()
     ) {
       setErrorMessage(
-        'Das Ende der Zuordnung muss nach ihrem Beginn liegen.',
+        t('rfid.assignments.endBeforeStart'),
       )
 
       return
@@ -575,7 +589,7 @@ function AdminRFIDCardsPage() {
         )
 
         setSuccessMessage(
-          'Die RFID-Zuordnung wurde gespeichert.',
+          t('rfid.assignments.saved'),
         )
       } else {
         savedAssignment =
@@ -598,7 +612,7 @@ function AdminRFIDCardsPage() {
         )
 
         setSuccessMessage(
-          'Die RFID-Zuordnung wurde angelegt.',
+          t('rfid.assignments.created'),
         )
       }
 
@@ -606,7 +620,7 @@ function AdminRFIDCardsPage() {
     } catch (error) {
       handleRequestError(
         error,
-        'Die RFID-Zuordnung konnte nicht gespeichert werden.',
+        t('rfid.assignments.saveFailed'),
       )
     } finally {
       setIsSavingAssignment(false)
@@ -618,14 +632,13 @@ function AdminRFIDCardsPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Administration
+            {t('common.administration')}
           </p>
 
-          <h1>RFID-Karten</h1>
+          <h1>{t('rfid.title')}</h1>
 
           <p className="muted">
-            Karten verwalten und zeitlich gültigen
-            Benutzern zuordnen.
+            {t('rfid.intro')}
           </p>
         </div>
 
@@ -634,14 +647,14 @@ function AdminRFIDCardsPage() {
           type="button"
           onClick={beginCreateCard}
         >
-          Neue RFID-Karte
+          {t('rfid.new')}
         </button>
       </header>
 
       {isLoading && (
         <section className="card">
           <p className="muted">
-            RFID-Karten werden geladen …
+            {t('rfid.loading')}
           </p>
         </section>
       )}
@@ -669,10 +682,10 @@ function AdminRFIDCardsPage() {
           <section className="card table-card">
             {cards.length === 0 ? (
               <div className="empty-card-content">
-                <h2>Keine RFID-Karten</h2>
+                <h2>{t('rfid.empty.title')}</h2>
 
                 <p className="muted">
-                  Legen Sie die erste RFID-Karte an.
+                  {t('rfid.empty.text')}
                 </p>
               </div>
             ) : (
@@ -680,9 +693,9 @@ function AdminRFIDCardsPage() {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>RFID-Nummer</th>
-                      <th>Beschreibung</th>
-                      <th>Status</th>
+                      <th>{t('rfid.col.number')}</th>
+                      <th>{t('rfid.col.description')}</th>
+                      <th>{t('rfid.col.status')}</th>
                       <th />
                     </tr>
                   </thead>
@@ -717,8 +730,8 @@ function AdminRFIDCardsPage() {
                             }
                           >
                             {card.active
-                              ? 'Aktiv'
-                              : 'Inaktiv'}
+                              ? t('common.active')
+                              : t('common.inactive')}
                           </span>
                         </td>
 
@@ -730,7 +743,7 @@ function AdminRFIDCardsPage() {
                               selectCard(card.id)
                             }
                           >
-                            Bearbeiten
+                            {t('common.edit')}
                           </button>
                         </td>
                       </tr>
@@ -746,17 +759,17 @@ function AdminRFIDCardsPage() {
               <div>
                 <p className="eyebrow">
                   {isCreatingCard
-                    ? 'Neue Karte'
+                    ? t('rfid.form.newCard')
                     : selectedCard === null
-                      ? 'Keine Karte ausgewählt'
-                      : `RFID-Karte #${selectedCard.id}`}
+                      ? t('rfid.form.noneSelected')
+                      : t('rfid.form.cardNumber', { id: selectedCard.id })}
                 </p>
 
                 <h2>
                   {isCreatingCard
-                    ? 'RFID-Karte anlegen'
+                    ? t('rfid.form.createTitle')
                     : selectedCard?.rfid_number ??
-                      'RFID-Karte'}
+                      t('rfid.form.card')}
                 </h2>
               </div>
 
@@ -767,7 +780,7 @@ function AdminRFIDCardsPage() {
                   onSubmit={handleSaveCard}
                 >
                   <label className="form-field">
-                    RFID-Nummer
+                    {t('rfid.form.number')}
                     <input
                       type="text"
                       value={rfidNumber}
@@ -782,7 +795,7 @@ function AdminRFIDCardsPage() {
                   </label>
 
                   <label className="form-field">
-                    Beschreibung
+                    {t('rfid.form.description')}
                     <input
                       type="text"
                       value={description}
@@ -806,13 +819,11 @@ function AdminRFIDCardsPage() {
                       }
                     />
 
-                    RFID-Karte ist aktiv
+                    {t('rfid.form.active')}
                   </label>
 
                   <p className="form-hint">
-                    Karten werden nicht gelöscht.
-                    Nicht mehr verwendete Karten
-                    können deaktiviert werden.
+                    {t('rfid.form.noDeleteHint')}
                   </p>
 
                   <div className="form-actions">
@@ -822,7 +833,7 @@ function AdminRFIDCardsPage() {
                         type="button"
                         onClick={cancelCreateCard}
                       >
-                        Abbrechen
+                        {t('common.cancel')}
                       </button>
                     )}
 
@@ -832,10 +843,10 @@ function AdminRFIDCardsPage() {
                       disabled={isSavingCard}
                     >
                       {isSavingCard
-                        ? 'Wird gespeichert …'
+                        ? t('common.saving')
                         : isCreatingCard
-                          ? 'Karte anlegen'
-                          : 'Karte speichern'}
+                          ? t('rfid.form.create')
+                          : t('rfid.form.save')}
                     </button>
                   </div>
                 </form>
@@ -848,10 +859,10 @@ function AdminRFIDCardsPage() {
                   <div className="admin-section-header">
                     <div>
                       <p className="eyebrow">
-                        Historie
+                        {t('rfid.assignments.eyebrow')}
                       </p>
 
-                      <h2>Benutzerzuordnungen</h2>
+                      <h2>{t('rfid.assignments.title')}</h2>
                     </div>
 
                     <button
@@ -859,21 +870,20 @@ function AdminRFIDCardsPage() {
                       type="button"
                       onClick={beginCreateAssignment}
                     >
-                      Neue Zuordnung
+                      {t('rfid.assignments.new')}
                     </button>
                   </div>
 
                   {isLoadingAssignments && (
                     <p className="muted">
-                      Zuordnungen werden geladen …
+                      {t('rfid.assignments.loading')}
                     </p>
                   )}
 
                   {!isLoadingAssignments &&
                     assignments.length === 0 && (
                       <p className="muted">
-                        Für diese Karte gibt es noch
-                        keine Benutzerzuordnung.
+                        {t('rfid.assignments.empty')}
                       </p>
                     )}
 
@@ -883,10 +893,10 @@ function AdminRFIDCardsPage() {
                         <table className="data-table compact-table">
                           <thead>
                             <tr>
-                              <th>Benutzer</th>
-                              <th>Von</th>
-                              <th>Bis</th>
-                              <th>Hinweis</th>
+                              <th>{t('rfid.assignments.col.user')}</th>
+                              <th>{t('rfid.assignments.col.from')}</th>
+                              <th>{t('rfid.assignments.col.to')}</th>
+                              <th>{t('rfid.assignments.col.note')}</th>
                               <th />
                             </tr>
                           </thead>
@@ -912,7 +922,7 @@ function AdminRFIDCardsPage() {
                                     <td>
                                       {assignedUser
                                         ? `${assignedUser.first_name} ${assignedUser.last_name}`
-                                        : `Benutzer #${assignment.user_id}`}
+                                        : t('rfid.assignments.userNumber', { id: assignment.user_id })}
                                     </td>
 
                                     <td>
@@ -926,7 +936,7 @@ function AdminRFIDCardsPage() {
                                         ? formatDateTime(
                                             assignment.valid_to,
                                           )
-                                        : 'Offen'}
+                                        : t('rfid.assignments.open')}
                                     </td>
 
                                     <td>
@@ -944,7 +954,7 @@ function AdminRFIDCardsPage() {
                                           )
                                         }
                                       >
-                                        Bearbeiten
+                                        {t('common.edit')}
                                       </button>
                                     </td>
                                   </tr>
@@ -961,15 +971,12 @@ function AdminRFIDCardsPage() {
                   <div>
                     <h2>
                       {editingAssignment === null
-                        ? 'Neue Zuordnung'
-                        : `Zuordnung #${editingAssignment.id} bearbeiten`}
+                        ? t('rfid.assignments.new')
+                        : t('rfid.assignments.editTitle', { id: editingAssignment.id })}
                     </h2>
 
                     <p className="muted">
-                      Bereits verwendete Zuordnungen
-                      sind zum Schutz der
-                      Abrechnungshistorie nur
-                      eingeschränkt änderbar.
+                      {t('rfid.assignments.restrictedHint')}
                     </p>
                   </div>
 
@@ -978,7 +985,7 @@ function AdminRFIDCardsPage() {
                     onSubmit={handleSaveAssignment}
                   >
                     <label className="form-field">
-                      Benutzer
+                      {t('rfid.assignments.user')}
                       <select
                         value={assignmentUserId}
                         required
@@ -989,7 +996,7 @@ function AdminRFIDCardsPage() {
                         }
                       >
                         <option value="">
-                          Bitte auswählen
+                          {t('common.pleaseSelect')}
                         </option>
 
                         {users.map((user) => (
@@ -1000,7 +1007,7 @@ function AdminRFIDCardsPage() {
                             {user.first_name}{' '}
                             {user.last_name}
                             {!user.active
-                              ? ' (inaktiv)'
+                              ? t('common.inactiveSuffix')
                               : ''}
                           </option>
                         ))}
@@ -1009,7 +1016,7 @@ function AdminRFIDCardsPage() {
 
                     <div className="form-grid">
                       <label className="form-field">
-                        Gültig von
+                        {t('rfid.assignments.validFrom')}
                         <input
                           type="datetime-local"
                           step="1"
@@ -1024,7 +1031,7 @@ function AdminRFIDCardsPage() {
                       </label>
 
                       <label className="form-field">
-                        Gültig bis
+                        {t('rfid.assignments.validTo')}
                         <input
                           type="datetime-local"
                           step="1"
@@ -1039,18 +1046,16 @@ function AdminRFIDCardsPage() {
                     </div>
 
                     <p className="form-hint">
-                      Ein leeres Enddatum bedeutet,
-                      dass die Zuordnung zeitlich
-                      offen bleibt.
+                      {t('rfid.assignments.openEndHint')}
                     </p>
 
                     <label className="form-field">
-                      Hinweis
+                      {t('rfid.assignments.note')}
                       <input
                         type="text"
                         value={assignmentNote}
                         maxLength={255}
-                        placeholder="z. B. Kfz-Kennzeichen"
+                        placeholder={t('rfid.assignments.notePlaceholder')}
                         onChange={(event) =>
                           setAssignmentNote(
                             event.target.value,
@@ -1060,9 +1065,7 @@ function AdminRFIDCardsPage() {
                     </label>
 
                     <p className="form-hint">
-                      Optional. Erscheint auf der
-                      Rechnung unterhalb der
-                      Rechnungsnummer, wenn gesetzt.
+                      {t('rfid.assignments.noteHint')}
                     </p>
 
                     <div className="form-actions">
@@ -1074,7 +1077,7 @@ function AdminRFIDCardsPage() {
                             beginCreateAssignment
                           }
                         >
-                          Abbrechen
+                          {t('common.cancel')}
                         </button>
                       )}
 
@@ -1086,10 +1089,10 @@ function AdminRFIDCardsPage() {
                         }
                       >
                         {isSavingAssignment
-                          ? 'Wird gespeichert …'
+                          ? t('common.saving')
                           : editingAssignment === null
-                            ? 'Zuordnung anlegen'
-                            : 'Zuordnung speichern'}
+                            ? t('rfid.assignments.create')
+                            : t('rfid.assignments.save')}
                       </button>
                     </div>
                   </form>

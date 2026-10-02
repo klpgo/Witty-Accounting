@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   NavLink,
   Outlet,
@@ -6,15 +7,40 @@ import {
 
 import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
+import { useTranslation } from '../i18n/useTranslation'
 
 function AppLayout() {
+  const { t } = useTranslation()
   const { tenantName } = useAppSettings()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
+  const [showBackToTop, setShowBackToTop] = useState(false)
+
+  // "Nach oben" erst anzeigen, wenn ein Stück gescrollt wurde
+  useEffect(() => {
+    function handleScroll(): void {
+      setShowBackToTop(window.scrollY > 300)
+    }
+
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
+
+  function scrollToTop(): void {
+    const reduceMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
+  }
 
   const displayName = user
     ? `${user.first_name} ${user.last_name}`.trim()
-    : 'Administrator'
+    : t('layout.fallbackName')
 
   const brandMark =
     tenantName
@@ -42,7 +68,7 @@ function AppLayout() {
             to="/"
             end
             className="app-brand"
-            aria-label="Zum Dashboard"
+            aria-label={t('layout.brandAria')}
           >
             <span className="app-brand-mark">
               {brandMark}
@@ -52,81 +78,10 @@ function AppLayout() {
               <strong>{tenantName}</strong>
 
               <span>
-                Verwaltungsoberfläche
+                {t('layout.subtitle')}
               </span>
             </div>
           </NavLink>
-
-          <nav
-            className="app-nav"
-            aria-label="Hauptnavigation"
-          >
-            <NavLink
-              to="/charging-sessions"
-              className={({ isActive }) =>
-                isActive
-                  ? 'nav-link nav-link-active'
-                  : 'nav-link'
-              }
-            >
-              Ladevorgänge
-            </NavLink>
-            <NavLink
-              to="/invoices"
-              className={({ isActive }) =>
-                  isActive
-                  ? 'nav-link nav-link-active'
-                  : 'nav-link'
-              }
-            >
-              Rechnungen
-            </NavLink>
-
-            {user?.is_admin && (
-              <>
-              <NavLink
-                to="/admin/users"
-                className={({ isActive }) =>
-                  isActive
-                    ? 'nav-link nav-link-active'
-                    : 'nav-link'
-                }
-              >
-                Benutzer
-              </NavLink>
-              <NavLink
-                to="/admin/rfid-cards"
-                className={({ isActive }) =>
-                  isActive
-                    ? 'nav-link nav-link-active'
-                    : 'nav-link'
-                }
-              >
-                Ladekarten
-              </NavLink>
-              <NavLink
-                to="/admin/import"
-                className={({ isActive }) =>
-                  isActive
-                    ? 'nav-link nav-link-active'
-                    : 'nav-link'
-                }
-              >
-                Datenimport
-              </NavLink>
-              <NavLink
-                to="/admin/settings"
-                className={({ isActive }) =>
-                  isActive
-                    ? 'nav-link nav-link-active'
-                    : 'nav-link'
-                }
-              >
-                Einstellungen
-              </NavLink>
-              </>
-            )}
-          </nav>
 
           <div className="user-menu">
             <NavLink
@@ -136,7 +91,7 @@ function AppLayout() {
                   ? 'user-menu-trigger user-menu-trigger-active'
                   : 'user-menu-trigger'
               }
-              aria-label="Meine Daten öffnen"
+              aria-label={t('layout.profileAria')}
             >
               <span className="user-details">
                 <strong>{displayName}</strong>
@@ -150,11 +105,103 @@ function AppLayout() {
               type="button"
               onClick={handleSignOut}
             >
-              Abmelden
+              {t('layout.signOut')}
             </button>
           </div>
         </div>
       </header>
+
+      {/* Menüzeile: bleibt beim Scrollen oben stehen */}
+      <div className="app-navbar">
+        <div className="app-navbar-content">
+          <nav
+            className="app-nav"
+            aria-label={t('layout.navAria')}
+          >
+            <NavLink
+              to="/charging-sessions"
+              className={({ isActive }) =>
+                isActive
+                  ? 'nav-link nav-link-active'
+                  : 'nav-link'
+              }
+            >
+              {t('layout.nav.chargingSessions')}
+            </NavLink>
+            <NavLink
+              to="/invoices"
+              className={({ isActive }) =>
+                  isActive
+                  ? 'nav-link nav-link-active'
+                  : 'nav-link'
+              }
+            >
+              {t('layout.nav.invoices')}
+            </NavLink>
+
+            {user?.is_admin && (
+              <>
+              <NavLink
+                to="/admin/users"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                {t('layout.nav.users')}
+              </NavLink>
+              <NavLink
+                to="/admin/rfid-cards"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                {t('layout.nav.rfidCards')}
+              </NavLink>
+              <NavLink
+                to="/admin/import"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                {t('layout.nav.import')}
+              </NavLink>
+              <NavLink
+                to="/admin/settings"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                {t('layout.nav.settings')}
+              </NavLink>
+              </>
+            )}
+          </nav>
+
+          {showBackToTop && (
+            <button
+              className="back-to-top"
+              type="button"
+              title={t('layout.backToTop')}
+              aria-label={t('layout.backToTop')}
+              onClick={scrollToTop}
+            >
+              <span aria-hidden="true">↑</span>
+              <span className="back-to-top-label" aria-hidden="true">
+                {' '}
+                {t('layout.backToTop')}
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
 
       <main className="app-main">
         <Outlet />

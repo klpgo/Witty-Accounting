@@ -58,8 +58,7 @@ class InvoiceExportSettingsUpdate(BaseModel):
     ) -> object:
         if value is None:
             raise ValueError(
-                "Der SFTP-Einstellungswert darf "
-                "nicht null sein."
+                "The SFTP setting value must not be null."
             )
 
         return value
@@ -90,8 +89,8 @@ class InvoiceExportSettingsUpdate(BaseModel):
             for character in "/@"
         ):
             raise ValueError(
-                "Der SFTP-Host muss ein Hostname "
-                "oder eine IP-Adresse ohne Schema sein."
+                "The SFTP host must be a host name or an IP address without "
+                "a scheme."
             )
 
         return value
@@ -129,8 +128,8 @@ class InvoiceExportSettingsUpdate(BaseModel):
             or ".." in parts
         ):
             raise ValueError(
-                "Das SFTP-Zielverzeichnis muss ein "
-                "absoluter Pfad ohne '..' sein."
+                "The SFTP target directory must be an absolute path without "
+                "'..'."
             )
 
         return value

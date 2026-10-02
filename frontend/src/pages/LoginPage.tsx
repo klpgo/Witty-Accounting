@@ -11,8 +11,10 @@ import {
 
 import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
+import { useTranslation } from '../i18n/useTranslation'
 
 function LoginPage() {
+  const { t } = useTranslation()
   const { tenantName } = useAppSettings()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -52,10 +54,10 @@ function LoginPage() {
             {tenantName}
           </p>
 
-          <h1>Sitzung wird geprüft</h1>
+          <h1>{t('common.sessionCheck.title')}</h1>
 
           <p className="muted">
-            Bitte einen Augenblick …
+            {t('common.sessionCheck.text')}
           </p>
         </section>
       </main>
@@ -83,7 +85,7 @@ function LoginPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Anmeldung ist fehlgeschlagen.',
+          : t('login.failed'),
       )
     } finally {
       setIsSubmitting(false)
@@ -97,18 +99,16 @@ function LoginPage() {
           {tenantName}
         </p>
 
-        <h1>Anmeldung</h1>
+        <h1>{t('login.title')}</h1>
 
         <p className="login-intro">
-          Bitte melde dich mit deiner E-Mail-Adresse
-          und deinem Passwort an.
+          {t('login.intro')}
         </p>
 
         {searchParams.get('passwordReset') ===
           'success' && (
           <p className="form-success" role="status">
-            Dein Passwort wurde gespeichert. Du kannst
-            dich jetzt anmelden.
+            {t('login.passwordResetSuccess')}
           </p>
         )}
 
@@ -117,7 +117,7 @@ function LoginPage() {
           onSubmit={handleSubmit}
         >
           <label className="form-field">
-            <span>E-Mail-Adresse</span>
+            <span>{t('common.email')}</span>
 
             <input
               type="email"
@@ -131,7 +131,7 @@ function LoginPage() {
           </label>
 
           <label className="form-field">
-            <span>Passwort</span>
+            <span>{t('common.password')}</span>
 
             <input
               type="password"
@@ -146,7 +146,7 @@ function LoginPage() {
 
           <p className="login-link-row">
             <Link to="/forgot-password">
-              Passwort vergessen?
+              {t('login.forgotPassword')}
             </Link>
           </p>
 
@@ -165,8 +165,8 @@ function LoginPage() {
             disabled={isSubmitting}
           >
             {isSubmitting
-              ? 'Anmeldung läuft …'
-              : 'Anmelden'}
+              ? t('login.submitting')
+              : t('login.submit')}
           </button>
         </form>
       </section>

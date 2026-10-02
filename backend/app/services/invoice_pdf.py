@@ -1,4 +1,5 @@
-from datetime import date
+from contextvars import ContextVar
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from html import escape
 from io import BytesIO
@@ -28,6 +29,8 @@ from reportlab.platypus import (
 from reportlab.pdfgen import canvas as pdf_canvas
 
 from app.models.invoice import Invoice
+from app.i18n import DEFAULT_LANGUAGE, normalize_language, translate
+from app.utils import locale_format
 from app.services.invoice_girocode import (
     GirocodeError,
     build_girocode_payload,
@@ -46,25 +49,43 @@ class IncompleteInvoicePdfDataError(
 
 CONTENT_WIDTH = A4[0] - 36 * mm
 
+# Gebietsschema und Währung des gerade erzeugten PDFs (je Thread/Kontext)
+_pdf_locale: ContextVar[str] = ContextVar(
+    "pdf_locale",
+    default=locale_format.DEFAULT_LOCALE,
+)
+_pdf_currency: ContextVar[str] = ContextVar(
+    "pdf_currency",
+    default=locale_format.DEFAULT_CURRENCY,
+)
+_pdf_language: ContextVar[str] = ContextVar(
+    "pdf_language",
+    default=DEFAULT_LANGUAGE,
+)
+
+
+def _t(key: str, **params: object) -> str:
+    """Text in der Sprache des gerade erzeugten PDFs."""
+    return translate(_pdf_language.get(), key, **params)
+
+
 def format_decimal(
     value: Decimal,
     decimal_places: int,
 ) -> str:
-    quantizer = Decimal("1").scaleb(
-        -decimal_places
-    )
-    formatted = f"{value.quantize(quantizer):,.{decimal_places}f}"
-
-    return (
-        formatted
-        .replace(",", "#")
-        .replace(".", ",")
-        .replace("#", ".")
+    return locale_format.format_decimal(
+        value,
+        decimal_places,
+        _pdf_locale.get(),
     )
 
 
 def format_money(value: Decimal) -> str:
-    return f"{format_decimal(value, 2)} EUR"
+    return locale_format.format_money(
+        value,
+        _pdf_currency.get(),
+        _pdf_locale.get(),
+    )
 
 
 def format_energy(value: Decimal) -> str:
@@ -72,7 +93,24 @@ def format_energy(value: Decimal) -> str:
 
 
 def format_date(value: date) -> str:
-    return value.strftime("%d.%m.%Y")
+    return locale_format.format_date(value, _pdf_locale.get())
+
+
+def format_service_period(
+    start: datetime,
+    end: datetime,
+) -> str:
+    """
+    Leistungszeitraum für die Rechnung. Das gespeicherte Ende ist
+    exklusiv (z. B. 01.08. 00:00 für den Monat Juli); angezeigt wird
+    der letzte Tag der Leistung: "01.07.2026 – 31.07.2026".
+    """
+    last_day = end.date()
+
+    if end.time() == time(0, 0) and end > start:
+        last_day = (end - timedelta(days=1)).date()
+
+    return f"{format_date(start.date())} – {format_date(last_day)}"
 
 
 def format_unit_price(value: Decimal) -> str:
@@ -102,18 +140,17 @@ def format_iban_display(value: str) -> str:
 def validate_invoice(invoice: Invoice) -> None:
     if invoice.status != "finalized":
         raise InvoiceNotFinalizedError(
-            "Nur finalisierte Rechnungen können "
-            "als PDF erzeugt werden."
+            "Only finalized invoices can be generated as PDF."
         )
 
     if not invoice.invoice_number:
         raise IncompleteInvoicePdfDataError(
-            "Die Rechnungsnummer fehlt."
+            "The invoice number is missing."
         )
 
     if invoice.issue_date is None:
         raise IncompleteInvoicePdfDataError(
-            "Das Rechnungsdatum fehlt."
+            "The invoice date is missing."
         )
 
     if (
@@ -121,32 +158,32 @@ def validate_invoice(invoice: Invoice) -> None:
         and invoice.due_date is None
     ):
         raise InvoicePdfError(
-            "Das Zahlungsziel fehlt."
+            "The payment due date is missing."
         )
 
     if not invoice.issuer_name:
         raise IncompleteInvoicePdfDataError(
-            "Der Rechnungsaussteller fehlt."
+            "The invoice issuer is missing."
         )
 
     if not invoice.issuer_address:
         raise IncompleteInvoicePdfDataError(
-            "Die Anschrift des Ausstellers fehlt."
+            "The issuer's address is missing."
         )
 
     if not invoice.recipient_name:
         raise IncompleteInvoicePdfDataError(
-            "Der Rechnungsempfänger fehlt."
+            "The invoice recipient is missing."
         )
 
     if not invoice.recipient_address:
         raise IncompleteInvoicePdfDataError(
-            "Die Anschrift des Empfängers fehlt."
+            "The recipient's address is missing."
         )
 
     if not invoice.items:
         raise IncompleteInvoicePdfDataError(
-            "Die Rechnung enthält keine Positionen."
+            "The invoice has no line items."
         )
 
 
@@ -192,10 +229,10 @@ class InvoiceCanvas(pdf_canvas.Canvas):
             colors.HexColor("#666666")
         )
     
-        footer_document_label = (
-            "Elektronisch erstellter Stornobeleg"
+        footer_document_label = _t(
+            "pdf.footer.cancellation"
             if self.is_cancellation
-            else "Elektronisch erstellte Rechnung"
+            else "pdf.footer.invoice"
         )
         self.drawString(
             18 * mm,
@@ -207,9 +244,10 @@ class InvoiceCanvas(pdf_canvas.Canvas):
             self.drawRightString(
                 A4[0] - 18 * mm,
                 10 * mm,
-                (
-                    f"Seite {self._pageNumber} "
-                    f"von {page_count}"
+                _t(
+                    "pdf.page",
+                    page=self._pageNumber,
+                    pages=page_count,
                 ),
             )
 
@@ -222,6 +260,40 @@ def build_invoice_pdf(
     girocode_enabled: bool = False,
     issuer_email: str | None = None,
 ) -> bytes:
+    """
+    Erzeugt das PDF in Sprache, Gebietsschema und Währung der Rechnung.
+    Beides wird beim Anlegen der Rechnung festgehalten, damit ein später
+    erneut erzeugtes PDF der ursprünglichen Rechnung entspricht. Ältere
+    Rechnungen ohne Gebietsschema erscheinen wie bisher in de-DE.
+    """
+    locale_token = _pdf_locale.set(
+        getattr(invoice, "locale", None) or locale_format.DEFAULT_LOCALE
+    )
+    currency_token = _pdf_currency.set(
+        invoice.currency or locale_format.DEFAULT_CURRENCY
+    )
+    language_token = _pdf_language.set(
+        normalize_language(getattr(invoice, "language", None))
+    )
+
+    try:
+        return _build_invoice_pdf(
+            invoice,
+            girocode_enabled=girocode_enabled,
+            issuer_email=issuer_email,
+        )
+    finally:
+        _pdf_language.reset(language_token)
+        _pdf_currency.reset(currency_token)
+        _pdf_locale.reset(locale_token)
+
+
+def _build_invoice_pdf(
+    invoice: Invoice,
+    *,
+    girocode_enabled: bool,
+    issuer_email: str | None,
+) -> bytes:
     validate_invoice(invoice)
 
     girocode = None
@@ -230,6 +302,8 @@ def build_invoice_pdf(
         girocode_enabled
         and invoice.document_type != "cancellation"
         and invoice.total_gross > 0
+        # der Girocode (EPC-QR) ist nur für Euro definiert
+        and (invoice.currency or "EUR") == "EUR"
     ):
         try:
             payload = build_girocode_payload(
@@ -340,6 +414,18 @@ def build_invoice_pdf(
         parent=right_style,
     )
 
+    # Stationsname in der Positionstabelle: gleiche Schrift wie die Tabelle,
+    # bricht innerhalb der Spalte um – auch mitten in langen Kennungen
+    station_cell_style = ParagraphStyle(
+        "InvoiceStationCell",
+        parent=body_style,
+        fontSize=7,
+        leading=8.5,
+        spaceAfter=0,
+        alignment=TA_CENTER,
+        splitLongWords=True,
+    )
+
     table_header_style = ParagraphStyle(
         "InvoiceTableHeader",
         parent=small_style,
@@ -356,34 +442,34 @@ def build_invoice_pdf(
         invoice.document_type == "cancellation"
     )
 
-    header_title_text = (
-        "Ladestromrechnung – Storno"
+    header_title_text = _t(
+        "pdf.title.cancellation"
         if is_cancellation
-        else "Ladestromrechnung"
+        else "pdf.title.invoice"
     )
 
-    issue_date_label = (
-        "Stornodatum"
+    issue_date_label = _t(
+        "pdf.cancellationDate"
         if is_cancellation
-        else "Rechnungsdatum"
+        else "pdf.invoiceDate"
     )
 
-    document_number_label = (
-        "Stornonummer"
+    document_number_label = _t(
+        "pdf.cancellationNumber"
         if is_cancellation
-        else "Rechnungsnummer"
+        else "pdf.invoiceNumber"
     )
 
-    total_label = (
-        "Stornobetrag"
+    total_label = _t(
+        "pdf.cancellationAmount"
         if is_cancellation
-        else "Rechnungsbetrag"
+        else "pdf.invoiceAmount"
     )
 
-    payment_heading = (
-        "Hinweis"
+    payment_heading = _t(
+        "pdf.note"
         if is_cancellation
-        else "Zahlungsbedingung"
+        else "pdf.paymentTerms"
     )
 
     issuer_identifiers: list[str] = []
@@ -414,7 +500,7 @@ def build_invoice_pdf(
 
         if bank_details:
             issuer_identifiers.append(
-                "<b>Bankverbindung:</b> "
+                "<b>" + _t("pdf.bankDetails") + ":</b> "
                 + " | ".join(bank_details)
             )
 
@@ -435,7 +521,7 @@ def build_invoice_pdf(
                 f"<b>{escape(invoice.issuer_name)}</b><br/>"
                 f"{multiline_text(invoice.issuer_address)}"
                 + (
-                    "<br/>Tel.: "
+                    "<br/>" + _t("pdf.phone") + ": "
                     + escape(invoice.issuer_phone)
                     if invoice.issuer_phone
                     else ""
@@ -455,13 +541,13 @@ def build_invoice_pdf(
 
     if invoice.issuer_tax_number:
         tax_lines.append(
-            "Steuernummer: "
+            _t("pdf.taxNumber")
             + escape(invoice.issuer_tax_number)
         )
 
     if invoice.issuer_vat_id:
         tax_lines.append(
-            "USt-IdNr.: "
+            _t("pdf.vatId")
             + escape(invoice.issuer_vat_id)
         )
 
@@ -589,14 +675,9 @@ def build_invoice_pdf(
     # --- Full-width metadata row -------------------------------------
     # Kein Kasten/Grid mehr: pro Feld eine kleine, rechtsbündige
     # Überschrift, darunter fett der Feldinhalt.
-    service_period_text = (
-        format_date(
-            invoice.service_period_start.date()
-        )
-        + " – "
-        + format_date(
-            invoice.service_period_end.date()
-        )
+    service_period_text = format_service_period(
+        invoice.service_period_start,
+        invoice.service_period_end,
     )
 
     meta_label_style = ParagraphStyle(
@@ -669,7 +750,7 @@ def build_invoice_pdf(
                 invoice.invoice_number,
             ),
             meta_field(
-                "Leistungszeitraum",
+                _t("pdf.servicePeriod"),
                 service_period_text,
             ),
             meta_field(
@@ -723,11 +804,11 @@ def build_invoice_pdf(
         metadata.append(
             [
                 meta_field(
-                    "Originalrechnung",
+                    _t("pdf.originalInvoice"),
                     original_number or "-",
                 ),
                 meta_field(
-                    "Stornierungsgrund",
+                    _t("pdf.cancellationReason"),
                     invoice.cancellation_reason or "-",
                 ),
                 "",
@@ -800,7 +881,7 @@ def build_invoice_pdf(
         story.append(
             Paragraph(
                 (
-                    "<b>Hinweis:</b> "
+                    "<b>" + _t("pdf.note") + ":</b> "
                     + "<br/>".join(
                         escape(note)
                         for note in assignment_notes
@@ -815,47 +896,47 @@ def build_invoice_pdf(
     item_rows: list[list[object]] = [
         [
             Paragraph(
-                "Pos.",
+                _t("pdf.col.position"),
                 table_header_style,
             ),
             Paragraph(
-                "Datum",
+                _t("pdf.col.date"),
                 table_header_style,
             ),
             Paragraph(
-                "WB",
+                _t("pdf.col.station"),
                 table_header_style,
             ),
             Paragraph(
-                "Gesamt<br/>kWh",
+                _t("pdf.col.energyTotal"),
                 table_header_style,
             ),
             Paragraph(
-                "Netz<br/>kWh",
+                _t("pdf.col.energyGrid"),
                 table_header_style,
             ),
             Paragraph(
-                "PV<br/>kWh",
+                _t("pdf.col.energyPv"),
                 table_header_style,
             ),
             Paragraph(
-                "Netzpreis<br/>EUR/kWh",
+                _t("pdf.col.gridPrice", currency=_pdf_currency.get()),
                 table_header_style,
             ),
             Paragraph(
-                "PV-Preis<br/>EUR/kWh",
+                _t("pdf.col.pvPrice", currency=_pdf_currency.get()),
                 table_header_style,
             ),
             Paragraph(
-                "Netto<br/>EUR",
+                _t("pdf.col.net", currency=_pdf_currency.get()),
                 table_header_style,
             ),
             Paragraph(
-                "USt.<br/>%",
+                _t("pdf.col.vat"),
                 table_header_style,
             ),
             Paragraph(
-                "Brutto<br/>EUR",
+                _t("pdf.col.gross", currency=_pdf_currency.get()),
                 table_header_style,
             ),
         ]
@@ -905,10 +986,8 @@ def build_invoice_pdf(
 
         if item.item_type != "charging_session":
             raise IncompleteInvoicePdfDataError(
-                "Die Rechnungsposition "
-                f"{item.id} besitzt den "
-                f"unbekannten Typ "
-                f"{item.item_type!r}."
+                f"Invoice line item {item.id} has the unknown type {item.item_type!r}"
+                "."
             )
 
         if any(
@@ -924,18 +1003,20 @@ def build_invoice_pdf(
             )
         ):
             raise IncompleteInvoicePdfDataError(
-                "Für die Ladeposition "
-                f"{item.id} fehlen "
-                "abrechnungsrelevante Daten."
+                f"Billing-relevant data is missing for charging line item {item.id}"
+                "."
             )
 
         item_rows.append(
             [
                 str(item.position_number),
-                item.session_start.strftime(
-                    "%d.%m.%Y"
+                format_date(
+                    item.session_start.date()
                 ),
-                item.station_id,
+                Paragraph(
+                    escape(item.station_id),
+                    station_cell_style,
+                ),
                 format_energy(
                     item.energy_total_kwh
                 ),
@@ -1111,11 +1192,11 @@ def build_invoice_pdf(
     totals_table = Table(
         [
             [
-                "Nettobetrag",
+                _t("pdf.totals.net"),
                 format_money(invoice.total_net),
             ],
             [
-                "Umsatzsteuer",
+                _t("pdf.totals.vat"),
                 format_money(invoice.vat_amount),
             ],
             [
@@ -1181,16 +1262,11 @@ def build_invoice_pdf(
     )
 
     if invoice.document_type == "cancellation":
-        payment_text = (
-            "Dieser Stornobeleg hebt die "
-            "zugehörige Rechnung vollständig auf. "
-            "Für den Stornobeleg besteht kein "
-            "Zahlungsziel."
-        )
+        payment_text = _t("pdf.payment.cancellation")
     else:
         if invoice.due_date is None:
             raise InvoicePdfError(
-                "Das Zahlungsziel fehlt."
+                "The payment due date is missing."
             )
 
         payment_term_days = (
@@ -1198,19 +1274,15 @@ def build_invoice_pdf(
         ).days
 
         if payment_term_days == 0:
-            payment_text = (
-                "Der Rechnungsbetrag ist sofort "
-                "(bis "
-                f"{format_date(invoice.due_date)}"
-                ") ohne Abzug fällig."
+            payment_text = _t(
+                "pdf.payment.immediately",
+                date=format_date(invoice.due_date),
             )
         else:
-            payment_text = (
-                "Der Rechnungsbetrag ist innerhalb "
-                f"von {payment_term_days} Tagen "
-                "(bis "
-                f"{format_date(invoice.due_date)}"
-                ") ohne Abzug fällig."
+            payment_text = _t(
+                "pdf.payment.inDays",
+                days=payment_term_days,
+                date=format_date(invoice.due_date),
             )
 
     payment_details: list[object] = [
@@ -1250,7 +1322,7 @@ def build_invoice_pdf(
                 [
                     "",
                     Paragraph(
-                        "Für Ihre Banking-App",
+                        _t("pdf.girocodeCaption"),
                         caption_style,
                     ),
                 ],
@@ -1294,16 +1366,10 @@ def build_invoice_pdf(
         story.append(Spacer(1, 7 * mm))
         story.extend(payment_details)
 
-    footer_text = (
-        (
-            "Bitte bewahren Sie diesen Stornobeleg "
-            "zusammen mit der Originalrechnung auf."
-        )
+    footer_text = _t(
+        "pdf.closing.cancellation"
         if is_cancellation
-        else (
-            "Vielen Dank. Bitte bewahren Sie diese "
-            "Rechnung für Ihre Unterlagen auf."
-        )
+        else "pdf.closing.invoice"
     )
 
     story.append(

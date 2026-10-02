@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.i18n import translate
 from app.models.invoice import Invoice, InvoiceItem
 from app.utils.utc import utc_now
 
@@ -39,7 +40,7 @@ def create_cancellation_draft(
 
     if not normalized_reason:
         raise InvoiceCancellationError(
-            "Ein Stornierungsgrund ist erforderlich."
+            "A reason for the cancellation is required."
         )
 
     original_invoice = db.scalar(
@@ -55,20 +56,17 @@ def create_cancellation_draft(
 
     if original_invoice is None:
         raise InvoiceCancellationNotFoundError(
-            f"Rechnung {original_invoice_id} "
-            "wurde nicht gefunden."
+            f"Invoice {original_invoice_id} was not found."
         )
 
     if original_invoice.document_type != "invoice":
         raise InvoiceCancellationStateError(
-            "Nur eine normale Rechnung kann "
-            "storniert werden."
+            "Only a regular invoice can be cancelled."
         )
 
     if original_invoice.status != "finalized":
         raise InvoiceCancellationStateError(
-            "Nur eine finalisierte Rechnung kann "
-            "storniert werden."
+            "Only a finalized invoice can be cancelled."
         )
 
     existing_cancellation = db.scalar(
@@ -80,8 +78,7 @@ def create_cancellation_draft(
 
     if existing_cancellation is not None:
         raise InvoiceAlreadyCancelledError(
-            "Für diese Rechnung existiert bereits "
-            "ein Storno."
+            "A cancellation already exists for this invoice."
         )
 
     cancellation = Invoice(
@@ -122,6 +119,9 @@ def create_cancellation_draft(
             original_invoice.service_period_end
         ),
         currency=original_invoice.currency,
+        # Storno in Format und Sprache der ursprünglichen Rechnung
+        locale=original_invoice.locale,
+        language=original_invoice.language,
         total_net=-original_invoice.total_net,
         vat_amount=-original_invoice.vat_amount,
         total_gross=-original_invoice.total_gross,
@@ -143,9 +143,10 @@ def create_cancellation_draft(
                 reversed_invoice_item_id=original_item.id,
                 rebills_invoice_item_id=None,
                 position_number=original_item.position_number,
-                description=(
-                    "Storno zu "
-                    f"{original_item.description}"
+                description=translate(
+                    original_invoice.language,
+                    "item.cancellation",
+                    description=original_item.description,
                 ),
                 session_start=original_item.session_start,
                 session_end=original_item.session_end,
@@ -213,8 +214,7 @@ def create_cancellation_draft(
 
         if cancellation is None:
             raise InvoiceCancellationError(
-                "Der Storno-Entwurf konnte nicht "
-                "geladen werden."
+                "The cancellation draft could not be loaded."
             )
 
         return cancellation
@@ -256,8 +256,7 @@ def create_cancellation_number(
             )
         except (IndexError, ValueError) as exc:
             raise InvoiceCancellationError(
-                "Die letzte Stornonummer besitzt "
-                "ein ungültiges Format."
+                "The last cancellation number has an invalid format."
             ) from exc
 
     return f"{prefix}{sequence_number:06d}"
@@ -298,34 +297,30 @@ def finalize_cancellation(
 
     if cancellation is None:
         raise InvoiceCancellationNotFoundError(
-            f"Storno {cancellation_id} "
-            "wurde nicht gefunden."
+            f"Cancellation {cancellation_id} was not found."
         )
 
     if cancellation.document_type != "cancellation":
         raise InvoiceCancellationStateError(
-            "Nur ein Stornodokument kann über "
-            "diese Funktion finalisiert werden."
+            "Only a cancellation document can be finalized with this "
+            "function."
         )
 
     if cancellation.status != "draft":
         raise InvoiceCancellationStateError(
-            "Nur ein Storno-Entwurf kann "
-            "finalisiert werden."
+            "Only a cancellation draft can be finalized."
         )
 
     original_invoice = cancellation.original_invoice
 
     if original_invoice is None:
         raise InvoiceCancellationStateError(
-            "Dem Storno ist keine "
-            "Originalrechnung zugeordnet."
+            "No original invoice is assigned to the cancellation."
         )
 
     if original_invoice.status != "finalized":
         raise InvoiceCancellationStateError(
-            "Die Originalrechnung ist nicht "
-            "finalisiert."
+            "The original invoice is not finalized."
         )
 
     if (
@@ -333,14 +328,12 @@ def finalize_cancellation(
         and issue_date < original_invoice.issue_date
     ):
         raise InvoiceCancellationStateError(
-            "Das Stornodatum darf nicht vor "
-            "dem Rechnungsdatum liegen."
+            "The cancellation date must not be before the invoice date."
         )
 
     if not cancellation.items:
         raise InvoiceCancellationStateError(
-            "Ein Storno ohne Positionen kann "
-            "nicht finalisiert werden."
+            "A cancellation without line items cannot be finalized."
         )
 
     charging_sessions = []
@@ -353,8 +346,7 @@ def finalize_cancellation(
 
         if original_item is None:
             raise InvoiceCancellationStateError(
-                "Eine Stornoposition besitzt keine "
-                "zugehörige Originalposition."
+                "A cancellation line item has no related original line item."
             )
 
         if (
@@ -362,8 +354,8 @@ def finalize_cancellation(
             != original_invoice.id
         ):
             raise InvoiceCancellationStateError(
-                "Eine Stornoposition verweist nicht "
-                "auf die Originalrechnung."
+                "A cancellation line item does not refer to the original "
+                "invoice."
             )
 
         if (
@@ -371,9 +363,8 @@ def finalize_cancellation(
             != original_item.item_type
         ):
             raise InvoiceCancellationStateError(
-                "Der Typ der Stornoposition stimmt "
-                "nicht mit der Originalposition "
-                "überein."
+                "The type of the cancellation line item does not match the "
+                "original line item."
             )
 
         if original_item.item_type == "charging_session":
@@ -383,8 +374,7 @@ def finalize_cancellation(
 
             if charging_session is None:
                 raise InvoiceCancellationStateError(
-                    "Der Originalposition ist kein "
-                    "Ladevorgang zugeordnet."
+                    "No charging session is assigned to the original line item."
                 )
 
             if (
@@ -393,8 +383,8 @@ def finalize_cancellation(
                 != original_invoice.id
             ):
                 raise InvoiceCancellationStateError(
-                    "Der Ladevorgang ist nicht mehr "
-                    "der Originalrechnung zugeordnet."
+                    "The charging session is no longer assigned to the original "
+                    "invoice."
                 )
 
             charging_sessions.append(
@@ -409,8 +399,7 @@ def finalize_cancellation(
 
             if base_fee_charge is None:
                 raise InvoiceCancellationStateError(
-                    "Der Originalposition ist keine "
-                    "Grundgebühr zugeordnet."
+                    "No base fee is assigned to the original line item."
                 )
 
             if (
@@ -419,9 +408,8 @@ def finalize_cancellation(
                 != base_fee_charge.id
             ):
                 raise InvoiceCancellationStateError(
-                    "Die Stornoposition verweist nicht "
-                    "auf die Grundgebühr der "
-                    "Originalposition."
+                    "The cancellation line item does not refer to the base fee "
+                    "of the original line item."
                 )
 
             if (
@@ -430,8 +418,7 @@ def finalize_cancellation(
                 != original_invoice.id
             ):
                 raise InvoiceCancellationStateError(
-                    "Die Grundgebühr ist nicht mehr "
-                    "der Originalrechnung zugeordnet."
+                    "The base fee is no longer assigned to the original invoice."
                 )
 
             monthly_base_fee_charges.append(
@@ -443,10 +430,8 @@ def finalize_cancellation(
             continue
 
         raise InvoiceCancellationStateError(
-            "Die Originalposition "
-            f"{original_item.id} besitzt den "
-            f"unbekannten Typ "
-            f"{original_item.item_type!r}."
+            f"The original line item {original_item.id} has the unknown "
+            f"type {original_item.item_type!r}."
         )
 
     timestamp = utc_now()
@@ -491,8 +476,7 @@ def finalize_cancellation(
 
         if finalized_cancellation is None:
             raise InvoiceCancellationError(
-                "Das finalisierte Storno konnte "
-                "nicht geladen werden."
+                "The finalized cancellation could not be loaded."
             )
 
         return finalized_cancellation

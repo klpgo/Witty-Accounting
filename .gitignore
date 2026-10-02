@@ -5,12 +5,16 @@ __pycache__/
 *.pyd
 *.swp
 *.md
+!README.md
+!docs/*.md
 
 # Virtual Environments
 .venv/
 
 # Environment
 .env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -43,5 +47,6 @@ backups/
 
 /secrets/
 
-# Test data delete scripts
+# Helper Scripts
 sql/
+bin/

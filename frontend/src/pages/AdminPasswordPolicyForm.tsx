@@ -13,8 +13,10 @@ import {
 } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { useTranslation } from '../i18n/useTranslation'
 
 function AdminPasswordPolicyForm() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -138,7 +140,7 @@ function AdminPasswordPolicyForm() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Passwortregeln konnten nicht geladen werden.',
+            : t('settings.password.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -177,7 +179,7 @@ function AdminPasswordPolicyForm() {
       minLength > 128
     ) {
       setErrorMessage(
-        'Die Passwort-Mindestlänge muss zwischen 8 und 128 Zeichen liegen.',
+        t('settings.password.minLengthRange'),
       )
       return
     }
@@ -190,7 +192,7 @@ function AdminPasswordPolicyForm() {
       )
     } catch {
       setErrorMessage(
-        'Die öffentliche Frontend-Adresse muss eine vollständige HTTP- oder HTTPS-URL sein.',
+        t('settings.password.urlInvalid'),
       )
       return
     }
@@ -205,7 +207,7 @@ function AdminPasswordPolicyForm() {
       parsedFrontendBaseUrl.hash !== ''
     ) {
       setErrorMessage(
-        'Die öffentliche Frontend-Adresse muss eine vollständige HTTP- oder HTTPS-URL ohne Zugangsdaten, Parameter oder Fragment sein.',
+        t('settings.password.urlInvalidDetail'),
       )
       return
     }
@@ -216,7 +218,7 @@ function AdminPasswordPolicyForm() {
       resetTokenExpireMinutes > 10080
     ) {
       setErrorMessage(
-        'Die Gültigkeitsdauer muss zwischen 1 und 10.080 Minuten liegen.',
+        t('settings.password.expiryRange'),
       )
       return
     }
@@ -282,7 +284,7 @@ function AdminPasswordPolicyForm() {
       )
 
       setSuccessMessage(
-        'Die Passworteinstellungen wurden gespeichert.',
+        t('settings.password.saved'),
       )
     } catch (error) {
       if (
@@ -296,7 +298,7 @@ function AdminPasswordPolicyForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Passworteinstellungen konnten nicht gespeichert werden.',
+          : t('settings.password.saveFailed'),
       )
     } finally {
       setIsSaving(false)
@@ -307,7 +309,7 @@ function AdminPasswordPolicyForm() {
     return (
       <section className="card">
         <p className="muted">
-          Passwortregeln werden geladen …
+          {t('settings.password.loading')}
         </p>
       </section>
     )
@@ -320,12 +322,10 @@ function AdminPasswordPolicyForm() {
     >
       <section className="settings-section">
         <div>
-          <h2>Passwortregeln</h2>
+          <h2>{t('settings.password.title')}</h2>
 
           <p className="muted">
-            Diese Regeln gelten beim neuen Setzen
-            oder Ändern eines Passworts. Bestehende
-            Passwörter bleiben gültig.
+            {t('settings.password.intro')}
           </p>
         </div>
 
@@ -349,7 +349,7 @@ function AdminPasswordPolicyForm() {
 
         <div className="form-grid settings-business-grid">
           <label className="form-field">
-            <span>Mindestlänge</span>
+            <span>{t('settings.password.minLength')}</span>
 
             <input
               type="number"
@@ -366,12 +366,12 @@ function AdminPasswordPolicyForm() {
             />
 
             <small className="muted">
-              Mindestens 8, höchstens 128 Zeichen.
+              {t('settings.password.minLengthHint')}
             </small>
           </label>
 
           <label className="form-field settings-checkbox-field">
-            <span>Großbuchstaben</span>
+            <span>{t('settings.password.uppercase')}</span>
 
             <span className="settings-checkbox-control">
               <input
@@ -384,12 +384,12 @@ function AdminPasswordPolicyForm() {
                 }}
               />
 
-              Mindestens einen Großbuchstaben verlangen
+              {t('settings.password.uppercaseHint')}
             </span>
           </label>
 
           <label className="form-field settings-checkbox-field">
-            <span>Kleinbuchstaben</span>
+            <span>{t('settings.password.lowercase')}</span>
 
             <span className="settings-checkbox-control">
               <input
@@ -402,12 +402,12 @@ function AdminPasswordPolicyForm() {
                 }}
               />
 
-              Mindestens einen Kleinbuchstaben verlangen
+              {t('settings.password.lowercaseHint')}
             </span>
           </label>
 
           <label className="form-field settings-checkbox-field">
-            <span>Zahlen</span>
+            <span>{t('settings.password.digits')}</span>
 
             <span className="settings-checkbox-control">
               <input
@@ -420,12 +420,12 @@ function AdminPasswordPolicyForm() {
                 }}
               />
 
-              Mindestens eine Zahl verlangen
+              {t('settings.password.digitsHint')}
             </span>
           </label>
 
           <label className="form-field settings-checkbox-field">
-            <span>Sonderzeichen</span>
+            <span>{t('settings.password.special')}</span>
 
             <span className="settings-checkbox-control">
               <input
@@ -438,7 +438,7 @@ function AdminPasswordPolicyForm() {
                 }}
               />
 
-              Mindestens ein Sonderzeichen verlangen
+              {t('settings.password.specialHint')}
             </span>
           </label>
         </div>
@@ -446,24 +446,22 @@ function AdminPasswordPolicyForm() {
 
       <section className="settings-section">
         <div>
-          <h2>Passwort-Zurücksetzung</h2>
+          <h2>{t('settings.password.reset.title')}</h2>
 
           <p className="muted">
-            Diese Angaben bestimmen den Link und die
-            Gültigkeitsdauer in Passwort- und
-            Einladungs-E-Mails.
+            {t('settings.password.reset.intro')}
           </p>
         </div>
 
         <div className="form-grid settings-business-grid">
           <label className="form-field settings-wide-field">
-            <span>Öffentliche Frontend-Adresse</span>
+            <span>{t('settings.password.reset.url')}</span>
 
             <input
               type="url"
               value={frontendBaseUrl}
               maxLength={2048}
-              placeholder="https://deine-öffentliche-adresse"
+              placeholder={t('settings.password.reset.urlPlaceholder')}
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -476,13 +474,12 @@ function AdminPasswordPolicyForm() {
             />
 
             <small className="muted">
-              Basisadresse ohne /reset-password. Ein
-              abschließender Schrägstrich wird entfernt.
+              {t('settings.password.reset.urlHint')}
             </small>
           </label>
 
           <label className="form-field">
-            <span>Gültigkeitsdauer des Links</span>
+            <span>{t('settings.password.reset.expiry')}</span>
 
             <input
               type="number"
@@ -499,7 +496,7 @@ function AdminPasswordPolicyForm() {
             />
 
             <small className="muted">
-              Dauer in Minuten; Standardwert: 60.
+              {t('settings.password.reset.expiryHint')}
             </small>
           </label>
         </div>
@@ -512,8 +509,8 @@ function AdminPasswordPolicyForm() {
           disabled={isSaving}
         >
           {isSaving
-            ? 'Passworteinstellungen werden gespeichert …'
-            : 'Passworteinstellungen speichern'}
+            ? t('settings.password.saving')
+            : t('settings.password.save')}
         </button>
       </div>
     </form>

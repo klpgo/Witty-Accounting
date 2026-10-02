@@ -147,6 +147,20 @@ class Invoice(Base):
         server_default="EUR",
     )
 
+    # Sprache der Rechnung (PDF, E-Mail, Positionstexte), beim Anlegen
+    # festgehalten; ältere Rechnungen ohne Angabe sind deutsch
+    language: Mapped[str | None] = mapped_column(
+        String(5),
+        nullable=True,
+    )
+
+    # Gebietsschema beim Anlegen der Rechnung (Format im PDF); ältere
+    # Rechnungen ohne Angabe erscheinen in de-DE
+    locale: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True,
+    )
+
     total_net: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,

@@ -36,7 +36,7 @@ def normalize_hostname(hostname: str) -> str:
 
     if not value:
         raise TenantNotFoundError(
-            "Der Mandanten-Hostname fehlt."
+            "The tenant host name is missing."
         )
 
     try:
@@ -45,7 +45,7 @@ def normalize_hostname(hostname: str) -> str:
         )
     except UnicodeError as exc:
         raise TenantNotFoundError(
-            "Der Mandanten-Hostname ist ungültig."
+            "The tenant host name is invalid."
         ) from exc
 
     normalized = normalized.lower()
@@ -56,7 +56,7 @@ def normalize_hostname(hostname: str) -> str:
         for label in normalized.split(".")
     ):
         raise TenantNotFoundError(
-            "Der Mandanten-Hostname ist ungültig."
+            "The tenant host name is invalid."
         )
 
     return normalized
@@ -96,7 +96,7 @@ class LegacyTenantRegistry:
     ) -> TenantContext:
         if tenant_id != self._tenant.id:
             raise TenantNotFoundError(
-                "Der Mandant ist unbekannt."
+                "The tenant is unknown."
             )
 
         return self._tenant
@@ -123,7 +123,7 @@ class DatabaseTenantRegistry:
     ) -> None:
         if cache_seconds < 0:
             raise ValueError(
-                "cache_seconds darf nicht negativ sein."
+                "cache_seconds must not be negative."
             )
 
         self.engine = engine
@@ -164,15 +164,14 @@ class DatabaseTenantRegistry:
 
             if row is None:
                 raise TenantNotFoundError(
-                    "Für diesen Host ist kein Mandant "
-                    "registriert."
+                    "No tenant is registered for this host."
                 )
 
             tenant_model, domain_model = row
 
             if not tenant_model.active:
                 raise TenantInactiveError(
-                    "Der Mandant ist gesperrt."
+                    "The tenant is locked."
                 )
 
             tenant = self._build_context(
@@ -207,8 +206,7 @@ class DatabaseTenantRegistry:
 
             if tenant_model is None:
                 raise TenantNotFoundError(
-                    "Der Mandant ist unbekannt oder "
-                    "inaktiv."
+                    "The tenant is unknown or inactive."
                 )
 
             return self._build_context(
@@ -253,14 +251,12 @@ class DatabaseTenantRegistry:
 
         if canonical_hostname is None:
             raise TenantRegistryError(
-                f"Mandant {tenant_model.id} hat keine "
-                "kanonische Domain."
+                f"Tenant {tenant_model.id} has no canonical domain."
             )
 
         if tenant_model.archive_namespace is None:
             raise TenantRegistryError(
-                f"Mandant {tenant_model.id} hat keinen "
-                "Archiv-Namespace."
+                f"Tenant {tenant_model.id} has no archive namespace."
             )
 
         return TenantContext(
@@ -319,8 +315,8 @@ def build_control_database_url(
 
     if missing:
         raise TenantRegistryError(
-            "Mandantenfähigkeit ist aktiviert, aber "
-            "folgende Einstellungen fehlen: "
+            "Multi-tenancy is enabled, but the following settings are "
+            "missing: "
             + ", ".join(missing)
         )
 
@@ -349,8 +345,8 @@ def build_tenant_registry(
 
     if encryption_key is None:
         raise TenantRegistryError(
-            "Mandantenfähigkeit ist aktiviert, aber "
-            "TENANT_DB_ENCRYPTION_KEY fehlt."
+            "Multi-tenancy is enabled, but TENANT_DB_ENCRYPTION_KEY is "
+            "missing."
         )
 
     control_engine = create_engine(

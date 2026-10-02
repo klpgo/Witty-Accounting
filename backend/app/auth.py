@@ -33,7 +33,7 @@ def get_jwt_secret() -> str:
 
     if len(secret.encode("utf-8")) < 32:
         raise RuntimeError(
-            "JWT_SECRET_KEY ist kürzer als 32 Byte."
+            "JWT_SECRET_KEY is shorter than 32 bytes."
         )
 
     return secret
@@ -72,8 +72,7 @@ def create_access_token(
     if tenant_id is None:
         if settings.tenancy_enabled:
             raise RuntimeError(
-                "Beim Erzeugen eines Tokens fehlt "
-                "der Mandantenkontext."
+                "The tenant context is missing when creating a token."
             )
 
         tenant_id = DEFAULT_TENANT.id
@@ -100,7 +99,7 @@ def create_access_token(
 def credentials_exception() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Anmeldedaten konnten nicht validiert werden.",
+        detail="Credentials could not be validated.",
         headers={
             "WWW-Authenticate": "Bearer",
         },
@@ -174,7 +173,7 @@ def require_admin(
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administratorrechte erforderlich.",
+            detail="Administrator rights required.",
         )
 
     return current_user

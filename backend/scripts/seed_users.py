@@ -155,9 +155,9 @@ def main() -> None:
             db.rollback()
             raise
 
-    print(f"Benutzer angelegt:       {result['created_users']}")
-    print(f"RFID-Karten angelegt:    {result['created_cards']}")
-    print(f"RFID-Karten aktualisiert:{result['updated_cards']}")
+    print(f"Users created:           {result['created_users']}")
+    print(f"RFID cards created:      {result['created_cards']}")
+    print(f"RFID cards updated:      {result['updated_cards']}")
 
 
 if __name__ == "__main__":

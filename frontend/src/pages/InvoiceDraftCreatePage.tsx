@@ -23,6 +23,8 @@ import {
 } from '../api/users'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { formatDate } from '../utils/dateFormat'
+import { useTranslation } from '../i18n/useTranslation'
 
 function padNumber(value: number): string {
   return String(value).padStart(2, '0')
@@ -83,13 +85,9 @@ function getUserLabel(user: User): string {
   return `${fullName} – ${user.email}`
 }
 
-function formatGermanDate(value: string): string {
-  const [year, month, day] = value.split('-')
-
-  return `${day}.${month}.${year}`
-}
 
 function InvoiceDraftCreatePage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -193,7 +191,7 @@ function InvoiceDraftCreatePage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Benutzer konnten nicht geladen werden.',
+            : t('draft.usersLoadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -235,7 +233,7 @@ function InvoiceDraftCreatePage() {
       userId <= 0
     ) {
       setErrorMessage(
-        'Bitte wähle einen Benutzer aus.',
+        t('draft.userMissing'),
       )
       return
     }
@@ -244,14 +242,14 @@ function InvoiceDraftCreatePage() {
       servicePeriodStart >= servicePeriodEnd
     ) {
       setErrorMessage(
-        'Das Ende des Leistungszeitraums muss nach dem Beginn liegen.',
+        t('draft.endBeforeStart'),
       )
       return
     }
 
     if (periodIsBeforeBillingStart) {
       setErrorMessage(
-        'Der gewählte Leistungszeitraum liegt vollständig vor dem Abrechnungs-Startdatum.',
+        t('draft.beforeBillingStart'),
       )
       return
     }
@@ -306,7 +304,7 @@ function InvoiceDraftCreatePage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Der Rechnungsentwurf konnte nicht erstellt werden.',
+          : t('draft.failed'),
       )
     } finally {
       setIsSubmitting(false)
@@ -319,21 +317,19 @@ function InvoiceDraftCreatePage() {
         className="back-link"
         to="/invoices"
       >
-        ← Zurück zu den Rechnungen
+        {t('invoiceDetail.back')}
       </Link>
 
       <header className="page-header create-page-header">
         <div>
           <p className="eyebrow">
-            Abrechnung
+            {t('invoices.eyebrow')}
           </p>
 
-          <h1>Rechnungsentwurf erstellen</h1>
+          <h1>{t('draft.title')}</h1>
 
           <p className="muted">
-            Alle abrechenbaren Ladevorgänge des
-            gewählten Benutzers im angegebenen
-            Zeitraum werden übernommen.
+            {t('draft.intro')}
           </p>
         </div>
       </header>
@@ -341,7 +337,7 @@ function InvoiceDraftCreatePage() {
       <section className="card create-form-card">
         {isLoadingUsers ? (
           <p className="muted">
-            Benutzer werden geladen …
+            {t('draft.loadingUsers')}
           </p>
         ) : (
           <form
@@ -349,7 +345,7 @@ function InvoiceDraftCreatePage() {
             onSubmit={handleSubmit}
           >
             <label className="form-field">
-              <span>Benutzer</span>
+              <span>{t('draft.user')}</span>
 
               <select
                 value={selectedUserId}
@@ -366,7 +362,7 @@ function InvoiceDraftCreatePage() {
               >
                 {users.length === 0 && (
                   <option value="">
-                    Keine aktiven Benutzer vorhanden
+                    {t('draft.noActiveUsers')}
                   </option>
                 )}
 
@@ -384,7 +380,7 @@ function InvoiceDraftCreatePage() {
             <div className="form-grid">
               <label className="form-field">
                 <span>
-                  Leistungszeitraum von
+                  {t('draft.periodFrom')}
                 </span>
 
                 <input
@@ -402,7 +398,7 @@ function InvoiceDraftCreatePage() {
 
               <label className="form-field">
                 <span>
-                  Leistungszeitraum bis
+                  {t('draft.periodTo')}
                 </span>
 
                 <input
@@ -437,23 +433,23 @@ function InvoiceDraftCreatePage() {
                 }
               >
                 <strong>
-                  Abrechnungs-Startdatum:{' '}
-                  {formatGermanDate(
-                    billingStartDate,
-                  )}
+                  {t('draft.billingStart', {
+                    date: formatDate(billingStartDate),
+                  })}
                 </strong>
 
                 <span>
+                  {' '}
                   {periodIsBeforeBillingStart
-                    ? ' Der gewählte Leistungszeitraum liegt vollständig davor. Es können keine Ladevorgänge oder Grundgebühren übernommen werden.'
+                    ? t('draft.billingStart.before')
                     : periodStartsBeforeBillingStart
-                      ? ' Der gewählte Zeitraum beginnt davor. Frühere Ladevorgänge und Grundgebühren werden nicht übernommen.'
-                      : ' Ladevorgänge und Grundgebühren vor diesem Datum werden nicht abgerechnet.'}
+                      ? t('draft.billingStart.startsBefore')
+                      : t('draft.billingStart.info')}
                 </span>
 
                 {periodIsBeforeBillingStart && (
                   <Link to="/admin/settings">
-                    Startdatum in den Einstellungen ändern
+                    {t('draft.billingStart.change')}
                   </Link>
                 )}
               </div>
@@ -486,8 +482,8 @@ function InvoiceDraftCreatePage() {
                 }
               >
                 {isSubmitting
-                  ? 'Entwurf wird erstellt …'
-                  : 'Entwurf erstellen'}
+                  ? t('draft.submitting')
+                  : t('draft.submit')}
               </button>
             </div>
           </form>

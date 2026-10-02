@@ -10,6 +10,7 @@ from sqlalchemy import (
     String,
     Boolean,
     Text,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -364,6 +365,137 @@ class GlobalSettings(Base):
     )
 
     mail_smime_pkcs12_password_encrypted: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # Zugang zur Hager Cloud (Abruf der Ladevorgänge)
+    hager_username: Mapped[
+        str | None
+    ] = mapped_column(
+        String(320),
+        nullable=True,
+    )
+
+    hager_password_encrypted: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    hager_installation_id: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    # Standardsprache der Oberfläche für Benutzer ohne eigene Wahl
+    # und für die Seiten vor der Anmeldung
+    default_language: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="de",
+        server_default="de",
+    )
+
+    # Gebietsschema für Zahlen-, Datums- und Betragsformat (z. B. de-DE)
+    locale: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default="de-DE",
+        server_default="de-DE",
+    )
+
+    # Währung der Abrechnung (ISO 4217); nach der ersten Rechnung fest
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        nullable=False,
+        default="EUR",
+        server_default="EUR",
+    )
+
+    # Zeitzone, in der die Ortszeiten dieses Mandanten gespeichert sind
+    # (beim ersten Import festgehalten, danach unveränderlich)
+    data_timezone: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    # Import: Ladevorgänge ohne Energie (0 kWh) nicht übernehmen
+    import_skip_empty_sessions: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    # Seriennummer des Systems (zweite Zahl in der Adresse der
+    # Hager-Weboberfläche); Grundlage des E-Mobility-Abrufs
+    hager_serial_number: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    # Automatischer Abruf: alle N Stunden ab HH:MM (Europe/Berlin)
+    hager_auto_import_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    hager_auto_import_interval_hours: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=24,
+        server_default="24",
+    )
+
+    hager_auto_import_start_time: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="03:00",
+        server_default="03:00",
+    )
+
+    # Start des letzten erfolgreichen Abrufs bis "jetzt" (manuell oder
+    # automatisch, UTC ohne tzinfo); Basis für den Cut-off
+    hager_last_successful_fetch_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    # Letzter automatischer Lauf (UTC ohne tzinfo)
+    hager_auto_import_last_started_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    hager_auto_import_last_finished_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    hager_auto_import_last_status: Mapped[
+        str | None
+    ] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    hager_auto_import_last_message: Mapped[
         str | None
     ] = mapped_column(
         Text,

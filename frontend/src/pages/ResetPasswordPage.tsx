@@ -11,9 +11,11 @@ import {
 import { confirmPasswordReset } from '../api/auth'
 import PasswordFields from '../components/PasswordFields'
 import { useAppSettings } from '../settings/useAppSettings'
+import { useTranslation } from '../i18n/useTranslation'
 
 
 function ResetPasswordPage() {
+  const { t } = useTranslation()
   const { tenantName } = useAppSettings()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -35,7 +37,7 @@ function ResetPasswordPage() {
 
     if (newPassword !== confirmPassword) {
       setErrorMessage(
-        'Die beiden Passwörter stimmen nicht überein.',
+        t('resetPassword.mismatch'),
       )
 
       return
@@ -57,7 +59,7 @@ function ResetPasswordPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Das Passwort konnte nicht gespeichert werden.',
+          : t('resetPassword.failed'),
       )
     } finally {
       setIsSubmitting(false)
@@ -69,13 +71,12 @@ function ResetPasswordPage() {
       <section className="card login-card">
         <p className="eyebrow">{tenantName}</p>
 
-        <h1>Neues Passwort</h1>
+        <h1>{t('resetPassword.title')}</h1>
 
         {token ? (
           <>
             <p className="login-intro">
-              Lege jetzt dein neues persönliches
-              Passwort fest.
+              {t('resetPassword.intro')}
             </p>
 
             <form
@@ -103,20 +104,20 @@ function ResetPasswordPage() {
                 disabled={isSubmitting}
               >
                 {isSubmitting
-                  ? 'Passwort wird gespeichert …'
-                  : 'Passwort speichern'}
+                  ? t('resetPassword.submitting')
+                  : t('resetPassword.submit')}
               </button>
             </form>
           </>
         ) : (
           <>
             <p className="form-error" role="alert">
-              Der Reset-Link enthält kein gültiges Token.
+              {t('resetPassword.invalidToken')}
             </p>
 
             <p className="login-link-row">
               <Link to="/forgot-password">
-                Neuen Reset-Link anfordern
+                {t('resetPassword.requestNewLink')}
               </Link>
             </p>
           </>

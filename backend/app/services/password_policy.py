@@ -59,7 +59,7 @@ def validate_password(
 
     if len(password) < policy.min_length:
         missing_requirements.append(
-            f"mindestens {policy.min_length} Zeichen"
+            f"at least {policy.min_length} characters"
         )
 
     if (
@@ -70,7 +70,7 @@ def validate_password(
         )
     ):
         missing_requirements.append(
-            "einen Großbuchstaben"
+            "an uppercase letter"
         )
 
     if (
@@ -81,7 +81,7 @@ def validate_password(
         )
     ):
         missing_requirements.append(
-            "einen Kleinbuchstaben"
+            "a lowercase letter"
         )
 
     if (
@@ -92,7 +92,7 @@ def validate_password(
         )
     ):
         missing_requirements.append(
-            "eine Zahl"
+            "a digit"
         )
 
     if (
@@ -104,7 +104,7 @@ def validate_password(
         )
     ):
         missing_requirements.append(
-            "ein Sonderzeichen"
+            "a special character"
         )
 
     if not missing_requirements:
@@ -117,11 +117,10 @@ def validate_password(
     else:
         requirements_text = (
             ", ".join(missing_requirements[:-1])
-            + " und "
+            + " and "
             + missing_requirements[-1]
         )
 
     raise PasswordPolicyError(
-        "Das Passwort muss "
-        f"{requirements_text} enthalten."
+        f"The password must contain {requirements_text}."
     )

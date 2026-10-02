@@ -19,23 +19,23 @@ def test_accepts_password_matching_policy() -> None:
     [
         (
             "Kurz1!",
-            "mindestens 8 Zeichen",
+            "at least 8 characters",
         ),
         (
             "sicheres1!",
-            "einen Großbuchstaben",
+            "an uppercase letter",
         ),
         (
             "SICHERES1!",
-            "einen Kleinbuchstaben",
+            "a lowercase letter",
         ),
         (
             "Sicheres!",
-            "eine Zahl",
+            "a digit",
         ),
         (
             "Sicheres1",
-            "ein Sonderzeichen",
+            "a special character",
         ),
     ],
 )
@@ -67,7 +67,7 @@ def test_respects_disabled_requirements() -> None:
 def test_whitespace_is_not_special_character() -> None:
     with pytest.raises(
         PasswordPolicyError,
-        match="Sonderzeichen",
+        match="special character",
     ):
         validate_password(
             "Sicheres1 ",

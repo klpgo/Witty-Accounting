@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import (
@@ -102,6 +103,8 @@ from app.services.invoice_export import (
     export_invoice_pdf,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/invoices",
     tags=["invoices"],
@@ -136,8 +139,7 @@ def get_readable_invoice_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Rechnung {invoice_id} "
-                "wurde nicht gefunden."
+                f"Invoice {invoice_id} was not found."
             ),
         )
 
@@ -163,7 +165,12 @@ def list_invoices(
         .options(
             selectinload(Invoice.items)
         )
+        # Neueste oben: Entwürfe (noch ohne Rechnungsdatum) zuerst,
+        # dann nach Rechnungsdatum absteigend. "IS NULL DESC" statt
+        # NULLS FIRST, weil MariaDB das nicht unterstützt.
         .order_by(
+            Invoice.issue_date.is_(None).desc(),
+            Invoice.issue_date.desc(),
             Invoice.created_at.desc(),
             Invoice.id.desc(),
         )
@@ -290,14 +297,18 @@ def finalize_draft(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "Invoice %s finalized, PDF archiving failed (%s): %s",
+            invoice_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             ),
             detail=(
-                "Die Rechnung wurde finalisiert, "
-                "aber die PDF-Archivierung ist "
-                f"fehlgeschlagen: {exc}"
+                f"The invoice was finalized, but PDF archiving failed: {exc}"
             ),
         ) from exc
 
@@ -337,6 +348,12 @@ def archive_invoice(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "PDF archiving for invoice %s failed (%s): %s",
+            invoice_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -356,8 +373,7 @@ def archive_invoice(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Rechnung {invoice_id} "
-                "wurde nicht gefunden."
+                f"Invoice {invoice_id} was not found."
             ),
         )
 
@@ -385,8 +401,7 @@ def delete_invoice_draft(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Rechnung {invoice_id} "
-                "wurde nicht gefunden."
+                f"Invoice {invoice_id} was not found."
             ),
         )
 
@@ -394,8 +409,7 @@ def delete_invoice_draft(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Nur ein Entwurf kann gelöscht "
-                "werden."
+                "Only a draft can be deleted."
             ),
         )
 
@@ -466,8 +480,7 @@ def download_invoice_pdf(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Für diese Rechnung wurde noch "
-                "keine PDF archiviert."
+                "No PDF has been archived for this invoice yet."
             ),
         ) from exc
 
@@ -574,14 +587,18 @@ def finalize_invoice_cancellation(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "Cancellation %s finalized, PDF archiving failed (%s): %s",
+            cancellation_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             ),
             detail=(
-                "Das Storno wurde finalisiert, "
-                "aber die PDF-Archivierung ist "
-                f"fehlgeschlagen: {exc}"
+                f"The cancellation was finalized, but PDF archiving failed: {exc}"
             ),
         ) from exc
 

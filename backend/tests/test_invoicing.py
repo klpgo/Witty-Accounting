@@ -304,8 +304,7 @@ def test_rejects_incomplete_draft_when_tariff_is_missing(
     with pytest.raises(
         MissingEnergyPriceError,
         match=(
-            "Kein gültiger Tarif für "
-            "Ladevorgang .* vom 17.06.2026"
+            "No valid tariff for charging session .* on 17.06.2026"
         ),
     ):
         create_invoice_draft(
@@ -385,8 +384,8 @@ def test_explains_period_before_billing_start_date(
     with pytest.raises(
         NoBillableSessionsError,
         match=(
-            "Leistungszeitraum liegt vollständig vor "
-            "dem Abrechnungs-Startdatum 01.10.2026"
+            "service period lies entirely before the billing start date "
+            "01.10.2026"
         ),
     ):
         create_invoice_draft(
@@ -1467,7 +1466,7 @@ def test_rejects_second_cancellation_draft(
 
     with pytest.raises(
         InvoiceAlreadyCancelledError,
-        match="existiert bereits",
+        match="already exists",
     ):
         create_cancellation_draft(
             database_session,
@@ -1500,7 +1499,7 @@ def test_rejects_cancellation_of_draft_invoice(
 
     with pytest.raises(
         InvoiceCancellationStateError,
-        match="Nur eine finalisierte Rechnung",
+        match="Only a finalized invoice",
     ):
         create_cancellation_draft(
             database_session,
@@ -1541,7 +1540,7 @@ def test_rejects_empty_cancellation_reason(
 
     with pytest.raises(
         InvoiceCancellationError,
-        match="Stornierungsgrund ist erforderlich",
+        match="reason for the cancellation is required",
     ):
         create_cancellation_draft(
             database_session,
@@ -1555,7 +1554,7 @@ def test_rejects_cancellation_for_missing_invoice(
 ) -> None:
     with pytest.raises(
         InvoiceCancellationNotFoundError,
-        match="wurde nicht gefunden",
+        match="was not found",
     ):
         create_cancellation_draft(
             database_session,
@@ -1602,7 +1601,7 @@ def test_rejects_cancellation_of_cancellation_document(
 
     with pytest.raises(
         InvoiceCancellationStateError,
-        match="Nur eine normale Rechnung",
+        match="Only a regular invoice",
     ):
         create_cancellation_draft(
             database_session,
@@ -1862,7 +1861,7 @@ def test_rejects_second_cancellation_finalization(
 
     with pytest.raises(
         InvoiceCancellationStateError,
-        match="Nur ein Storno-Entwurf",
+        match="Only a cancellation draft",
     ):
         finalize_cancellation(
             database_session,
@@ -1914,8 +1913,7 @@ def test_rejects_cancellation_date_before_invoice_date(
     with pytest.raises(
         InvoiceCancellationStateError,
         match=(
-            "Stornodatum darf nicht vor "
-            "dem Rechnungsdatum liegen"
+            "cancellation date must not be before the invoice date"
         ),
     ):
         finalize_cancellation(
@@ -2599,3 +2597,154 @@ def test_cancels_and_rebills_monthly_base_fee(
 
     assert len(charges) == 1
     assert charges[0].id == charge_id
+
+
+def test_positions_are_chronological_by_month() -> None:
+    from types import SimpleNamespace
+
+    from app.services.invoicing import chronological_positions
+
+    fees = [
+        SimpleNamespace(fee_month=date(2026, 6, 1)),
+        SimpleNamespace(fee_month=date(2026, 7, 1)),
+        SimpleNamespace(fee_month=date(2026, 8, 1)),
+    ]
+    sessions = [
+        (SimpleNamespace(start_time=datetime(2026, 8, 12, 14, 0)), None),
+        (SimpleNamespace(start_time=datetime(2026, 6, 20, 9, 0)), None),
+        (SimpleNamespace(start_time=datetime(2026, 8, 12, 12, 0)), None),
+    ]
+
+    fee_positions, session_positions = chronological_positions(fees, sessions)
+
+    # Juni: Gebühr, Ladevorgang; Juli: Gebühr; August: Gebühr, 2 Ladevorgänge
+    assert fee_positions == [1, 3, 4]
+    assert session_positions == [6, 2, 5]
+
+
+def _billed_days_june(database_session: Session, user_id: int) -> dict[int, Decimal]:
+    return {
+        period.assignment.id: period.billed_days
+        for period in find_monthly_base_fee_assignments(
+            database_session,
+            user_id=user_id,
+            service_period_start=datetime(2026, 6, 1),
+            service_period_end=datetime(2026, 7, 1),
+        )
+    }
+
+
+def test_first_assignment_starting_mid_day_counts_full_day(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+    assignment = database_session.scalar(
+        select(RFIDCardAssignment).where(RFIDCardAssignment.user_id == user.id)
+    )
+    assert assignment is not None
+    # erste Zuordnung der Karte, Beginn mitten am Tag: keine Übergabe,
+    # der 01.06. zählt voll – Juni komplett
+    assignment.valid_from = datetime(2026, 6, 1, 14, 18)
+    assignment.valid_to = None
+    database_session.flush()
+
+    assert _billed_days_june(database_session, user.id)[assignment.id] == Decimal("30")
+
+
+def test_change_after_midnight_end_counts_day_for_new_assignment(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+    old_assignment = database_session.scalar(
+        select(RFIDCardAssignment).where(RFIDCardAssignment.user_id == user.id)
+    )
+    assert old_assignment is not None
+    # alte Zuordnung endet um 00:00 (der 15.06. gehört ihr nicht mehr),
+    # neue beginnt erst am Nachmittag: der 15.06. gehört der neuen
+    old_assignment.valid_from = datetime(2026, 6, 1)
+    old_assignment.valid_to = datetime(2026, 6, 15)
+    new_assignment = RFIDCardAssignment(
+        rfid_card_id=old_assignment.rfid_card_id,
+        user_id=user.id,
+        valid_from=datetime(2026, 6, 15, 14, 0),
+        valid_to=None,
+    )
+    database_session.add(new_assignment)
+    database_session.flush()
+
+    days = _billed_days_june(database_session, user.id)
+
+    assert days[old_assignment.id] == Decimal("14")
+    assert days[new_assignment.id] == Decimal("16")
+
+
+def test_unbilled_stored_base_fee_is_recalculated(
+    database_session: Session,
+) -> None:
+    from app.models.monthly_base_fee_charge import MonthlyBaseFeeCharge
+
+    user = create_test_data(database_session)
+    assignment = database_session.scalar(
+        select(RFIDCardAssignment).where(RFIDCardAssignment.user_id == user.id)
+    )
+    assert assignment is not None
+    assignment.valid_from = datetime(2026, 6, 1)
+    assignment.valid_to = None
+    database_session.add(
+        GlobalSettings(
+            id=1,
+            monthly_base_fee_net=Decimal("8.0000"),
+            monthly_base_fee_vat_rate=Decimal("19.00"),
+        )
+    )
+    # Eintrag aus einem früheren, gelöschten Entwurf mit damals 29/30 Tagen
+    stale_charge = MonthlyBaseFeeCharge(
+        rfid_card_id=assignment.rfid_card_id,
+        rfid_assignment_id=assignment.id,
+        user_id=user.id,
+        fee_month=date(2026, 6, 1),
+        net_amount=Decimal("7.7333"),
+        vat_rate=Decimal("19.00"),
+        invoiced=False,
+        invoice_id=None,
+    )
+    database_session.add(stale_charge)
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(2026, 6, 1),
+        service_period_end=datetime(2026, 7, 1),
+    )
+
+    fee_items = [item for item in invoice.items if item.item_type == "monthly_base_fee"]
+    assert len(fee_items) == 1
+    assert fee_items[0].net_amount == Decimal("8.0000")
+    assert "anteilig" not in fee_items[0].description
+
+    database_session.refresh(stale_charge)
+    assert stale_charge.net_amount == Decimal("8.0000")
+    assert stale_charge.invoice_id == invoice.id
+
+
+
+def test_draft_uses_current_wallbox_name(database_session: Session) -> None:
+    user = create_test_data(database_session)
+    session = database_session.scalar(select(ChargingSession))
+    assert session is not None
+    # Name aus einem früheren Stand mit vollständiger ID
+    session.station_id = "ID: C7Hkmi9cQsCdmZ4K4Uydb3"
+    session.wallbox_id = "C7Hkmi9cQsCdmZ4K4Uydb3"
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(2026, 6, 1),
+        service_period_end=datetime(2026, 7, 1),
+    )
+
+    item = next(i for i in invoice.items if i.item_type == "charging_session")
+    assert item.station_id == "ID: ..Uydb3"
+    assert item.description.endswith("an ID: ..Uydb3")

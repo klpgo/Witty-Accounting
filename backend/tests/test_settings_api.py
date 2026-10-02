@@ -1,6 +1,6 @@
 from collections.abc import Generator
 import base64
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -221,6 +221,10 @@ def test_reads_public_application_name(
     assert response.json() == {
         "app_name": "Meine Wallbox-Abrechnung",
         "tenant_name": "Witty Testmandant",
+        "timezone": "Europe/Berlin",
+        "locale": "de-DE",
+        "currency": "EUR",
+        "default_language": "de",
     }
 
 
@@ -308,7 +312,7 @@ def test_cannot_enable_invoice_export_without_secret_files(
     )
 
     assert response.status_code == 422
-    assert "private Schlüssel" in response.json()[
+    assert "private key" in response.json()[
         "detail"
     ]
 
@@ -350,6 +354,10 @@ def test_public_settings_uses_configuration_fallback(
     assert response.json() == {
         "app_name": settings.app_name,
         "tenant_name": "Witty Testmandant",
+        "timezone": "Europe/Berlin",
+        "locale": "de-DE",
+        "currency": "EUR",
+        "default_language": "de",
     }
 
 
@@ -399,6 +407,9 @@ def test_reads_admin_settings(
             "http://localhost:5173"
         ),
         "password_reset_token_expire_minutes": 60,
+        "locale": "de-DE",
+        "currency": "EUR",
+        "default_language": "de",
     }
 
 
@@ -457,6 +468,9 @@ def test_updates_admin_settings(
             "https://witty.example.test/app"
         ),
         "password_reset_token_expire_minutes": 90,
+        "locale": "de-DE",
+        "currency": "EUR",
+        "default_language": "de",
     }
 
     database_session.refresh(global_settings)
@@ -539,6 +553,15 @@ def test_rejects_invalid_admin_settings(
         },
         {
             "password_reset_token_expire_minutes": 10081,
+        },
+        {
+            "locale": "fr-XX",
+        },
+        {
+            "currency": "JPY",
+        },
+        {
+            "default_language": "fr",
         },
     ]
 
@@ -1202,7 +1225,7 @@ def test_rejects_smime_upload_without_password(
     )
 
     assert response.status_code == 422
-    assert "Passwort" in response.json()["detail"]
+    assert "password" in response.json()["detail"]
 
 
 def test_sends_smime_test_email_to_admin(
@@ -1302,7 +1325,7 @@ def test_smtp_test_reports_configuration_error(
         recipient_email: str,
     ) -> SmtpTestEmailResult:
         raise InvoiceEmailConfigurationError(
-            "Der E-Mail-Versand ist deaktiviert."
+            "Email delivery is disabled."
         )
 
     monkeypatch.setattr(
@@ -1318,7 +1341,7 @@ def test_smtp_test_reports_configuration_error(
     assert response.status_code == 422
     assert response.json() == {
         "detail": (
-            "Der E-Mail-Versand ist deaktiviert."
+            "Email delivery is disabled."
         ),
     }
 
@@ -1333,8 +1356,7 @@ def test_smtp_test_reports_delivery_error(
         recipient_email: str,
     ) -> SmtpTestEmailResult:
         raise InvoiceEmailDeliveryError(
-            "Die SMTP-Testnachricht konnte "
-            "nicht versendet werden."
+            "The SMTP test message could not be sent."
         )
 
     monkeypatch.setattr(
@@ -1350,8 +1372,7 @@ def test_smtp_test_reports_delivery_error(
     assert response.status_code == 502
     assert response.json() == {
         "detail": (
-            "Die SMTP-Testnachricht konnte "
-            "nicht versendet werden."
+            "The SMTP test message could not be sent."
         ),
     }
 
@@ -1379,3 +1400,119 @@ def test_updates_maintenance_mode(
     database_session.refresh(global_settings)
 
     assert global_settings.maintenance_mode is True
+
+
+
+# --------------------------------------------------------------------------
+# Gebietsschema und Währung
+# --------------------------------------------------------------------------
+def test_locale_and_currency_are_updated_and_public(
+    admin_client: TestClient,
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={"locale": "de-CH", "currency": "CHF"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["locale"] == "de-CH"
+    assert response.json()["currency"] == "CHF"
+
+    public = client.get("/api/settings/public").json()
+    assert public["locale"] == "de-CH"
+    assert public["currency"] == "CHF"
+
+
+def test_currency_other_than_eur_requires_girocode_disabled(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    global_settings = add_global_settings(
+        database_session,
+        invoice_issuer_name="Wallbox GbR",
+        invoice_iban="DE89370400440532013000",
+        invoice_bic="COBADEFFXXX",
+    )
+    global_settings.invoice_girocode_enabled = True
+    database_session.commit()
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={"currency": "CHF"},
+    )
+
+    assert response.status_code == 422
+    assert "Girocode" in response.json()["detail"]
+
+
+def test_currency_is_fixed_once_invoices_exist(
+    admin_client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.models.invoice import Invoice
+
+    add_global_settings(database_session)
+    recipient = User(
+        email="empfaenger@example.test",
+        password_hash="not-used",
+        first_name="Max",
+        last_name="Mustermann",
+        is_admin=False,
+        active=True,
+    )
+    database_session.add(recipient)
+    database_session.flush()
+    database_session.add(
+        Invoice(
+            user_id=recipient.id,
+            document_type="invoice",
+            status="draft",
+            issuer_name="Wallbox GbR",
+            issuer_address="Am Wolfsberg 42",
+            recipient_name="Max Mustermann",
+            recipient_address="Musterweg 1",
+            service_period_start=datetime(2026, 6, 1),
+            service_period_end=datetime(2026, 7, 1),
+            currency="EUR",
+            total_net=Decimal("0.00"),
+            vat_amount=Decimal("0.00"),
+            total_gross=Decimal("0.00"),
+        )
+    )
+    database_session.commit()
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={"currency": "CHF"},
+    )
+
+    assert response.status_code == 409
+    assert "invoices already exist" in response.json()["detail"]
+
+    # das Gebietsschema bleibt änderbar
+    assert admin_client.patch(
+        "/api/settings",
+        json={"locale": "de-AT"},
+    ).status_code == 200
+
+
+
+def test_default_language_is_updated_and_public(
+    admin_client: TestClient,
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    add_global_settings(database_session)
+
+    response = admin_client.patch(
+        "/api/settings",
+        json={"default_language": "en"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["default_language"] == "en"
+    assert client.get("/api/settings/public").json()["default_language"] == "en"

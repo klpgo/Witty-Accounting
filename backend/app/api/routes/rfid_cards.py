@@ -1,3 +1,4 @@
+import re
 from typing import Annotated
 
 from fastapi import (
@@ -6,13 +7,15 @@ from fastapi import (
     HTTPException,
     status,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
 from app.auth import require_admin
 from app.models.charging_session import ChargingSession
+from app.models.invoice import Invoice, InvoiceItem
+from app.models.monthly_base_fee_charge import MonthlyBaseFeeCharge
 from app.models.rfid_card import RFIDCard
 from app.models.rfid_card_assignment import (
     RFIDCardAssignment,
@@ -30,6 +33,45 @@ from app.services.rfid_assignments import (
     RFIDAssignmentOverlapError,
     ensure_rfid_assignment_period_available,
 )
+from app.services.rfid_reassignment import (
+    reassign_after_change,
+)
+
+
+def assignment_has_billing(db: Session, assignment_id: int) -> bool:
+    """
+    True, wenn ein Ladevorgang oder eine Monatsgebühr der Zuordnung
+    abgerechnet ist oder in einer Rechnung bzw. einem Entwurf steht.
+    Ladevorgänge aus stornierten Rechnungen sind wieder offen.
+    """
+    in_draft = (
+        select(InvoiceItem.charging_session_id)
+        .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+        .where(
+            Invoice.status == "draft",
+            InvoiceItem.charging_session_id.is_not(None),
+        )
+    )
+    billed_sessions = db.scalar(
+        select(func.count(ChargingSession.id)).where(
+            ChargingSession.rfid_assignment_id == assignment_id,
+            or_(
+                ChargingSession.invoiced.is_(True),
+                ChargingSession.id.in_(in_draft),
+            ),
+        )
+    )
+    billed_fees = db.scalar(
+        select(func.count(MonthlyBaseFeeCharge.id)).where(
+            MonthlyBaseFeeCharge.rfid_assignment_id == assignment_id,
+            or_(
+                MonthlyBaseFeeCharge.invoiced.is_(True),
+                MonthlyBaseFeeCharge.invoice_id.is_not(None),
+            ),
+        )
+    )
+
+    return bool(billed_sessions or billed_fees)
 
 
 router = APIRouter(
@@ -57,8 +99,7 @@ def get_rfid_card_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"RFID-Karte {card_id} wurde "
-                "nicht gefunden."
+                f"RFID card {card_id} was not found."
             ),
         )
 
@@ -78,8 +119,7 @@ def get_rfid_assignment_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"RFID-Zuordnung {assignment_id} "
-                "wurde nicht gefunden."
+                f"RFID assignment {assignment_id} was not found."
             ),
         )
 
@@ -108,11 +148,31 @@ def ensure_rfid_number_available(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese RFID-Nummer wird "
-                "bereits verwendet."
+                "This RFID number is already in use."
             ),
         )
 
+
+
+def natural_sort_key(value: str) -> tuple:
+    """"Karte 2" vor "Karte 10": Zahlen als Zahlen vergleichen."""
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in re.split(r"(\d+)", value.casefold())
+        if part
+    )
+
+
+def rfid_card_sort_key(card: RFIDCard) -> tuple:
+    """Nach Beschreibung; Karten ohne Beschreibung zuletzt."""
+    description = (card.description or "").strip()
+
+    return (
+        description == "",
+        natural_sort_key(description),
+        card.rfid_number,
+        card.id,
+    )
 
 @router.get(
     "",
@@ -125,13 +185,9 @@ def list_rfid_cards(
         Depends(get_db),
     ],
 ) -> list[RFIDCard]:
-    return list(
-        db.scalars(
-            select(RFIDCard).order_by(
-                RFIDCard.rfid_number,
-                RFIDCard.id,
-            )
-        ).all()
+    return sorted(
+        db.scalars(select(RFIDCard)).all(),
+        key=rfid_card_sort_key,
     )
 
 
@@ -169,8 +225,7 @@ def create_rfid_card(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese RFID-Nummer wird "
-                "bereits verwendet."
+                "This RFID number is already in use."
             ),
         ) from exc
 
@@ -229,11 +284,11 @@ def update_rfid_card(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese RFID-Nummer wird "
-                "bereits verwendet."
+                "This RFID number is already in use."
             ),
         ) from exc
 
+    reassign_after_change(db)
     db.refresh(card)
 
     return card
@@ -267,8 +322,7 @@ def create_rfid_card_assignment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Benutzer {payload.user_id} "
-                "wurde nicht gefunden."
+                f"User {payload.user_id} was not found."
             ),
         )
 
@@ -295,6 +349,7 @@ def create_rfid_card_assignment(
 
     db.add(assignment)
     db.commit()
+    reassign_after_change(db)
     db.refresh(assignment)
 
     return assignment
@@ -370,8 +425,7 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=(
-                    f"Benutzer {payload.user_id} "
-                    "wurde nicht gefunden."
+                    f"User {payload.user_id} was not found."
                 ),
             )
 
@@ -394,8 +448,7 @@ def update_rfid_card_assignment(
                 status.HTTP_422_UNPROCESSABLE_CONTENT
             ),
             detail=(
-                "Das Ende der Zuordnung muss "
-                "nach ihrem Beginn liegen."
+                "The end of the assignment must be after its start."
             ),
         )
 
@@ -424,22 +477,23 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Der Benutzer einer bereits "
-                    "verwendeten RFID-Zuordnung "
-                    "darf nicht geändert werden."
+                    "The user of an RFID assignment that is already in use "
+                    "cannot be changed."
                 ),
             )
 
+        # Der Beginn bleibt änderbar, solange nichts dieser Zuordnung
+        # abgerechnet ist oder in einem Entwurf steht; die Prüfungen unten
+        # stellen sicher, dass alle Ladevorgänge im Zeitraum bleiben
         if (
-            candidate_valid_from
-            != assignment.valid_from
+            candidate_valid_from != assignment.valid_from
+            and assignment_has_billing(db, assignment.id)
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Der Beginn einer bereits "
-                    "verwendeten RFID-Zuordnung "
-                    "darf nicht geändert werden."
+                    "The start of an RFID assignment that has already been "
+                    "billed cannot be changed."
                 ),
             )
 
@@ -451,9 +505,8 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Der neue Zeitraum enthält "
-                    "nicht mehr alle zugehörigen "
-                    "Ladevorgänge."
+                    "The new period no longer contains all related charging "
+                    "sessions."
                 ),
             )
 
@@ -466,9 +519,8 @@ def update_rfid_card_assignment(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Der neue Zeitraum enthält "
-                    "nicht mehr alle zugehörigen "
-                    "Ladevorgänge."
+                    "The new period no longer contains all related charging "
+                    "sessions."
                 ),
             )
 
@@ -501,12 +553,12 @@ def update_rfid_card_assignment(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Die RFID-Zuordnung konnte wegen "
-                "eines Datenkonflikts nicht "
-                "geändert werden."
+                "The RFID assignment could not be changed because of a data "
+                "conflict."
             ),
         ) from exc
 
+    reassign_after_change(db)
     db.refresh(assignment)
 
     return assignment

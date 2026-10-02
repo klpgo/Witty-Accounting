@@ -29,8 +29,8 @@ def validate_text(
         or not normalized.isprintable()
     ):
         raise GirocodeError(
-            f"Girocode: {label} muss einzeilig sein und "
-            f"1 bis {max_length} Zeichen enthalten."
+            f"Girocode: {label} must be a single line with 1 to {max_length}"
+            " characters."
         )
     return normalized
 
@@ -43,7 +43,7 @@ def validate_girocode_bank_details(
 ) -> tuple[str, str, str]:
     name = validate_text(
         beneficiary,
-        label="Der Name des Rechnungsausstellers",
+        label="The name of the invoice issuer",
         max_length=70,
     )
     normalized_iban = "".join((iban or "").split()).upper()
@@ -52,7 +52,7 @@ def validate_girocode_bank_details(
         normalized_iban,
     ):
         raise GirocodeError(
-            "Girocode: Eine gültige IBAN ist erforderlich."
+            "Girocode: A valid IBAN is required."
         )
 
     rearranged_iban = normalized_iban[4:] + normalized_iban[:4]
@@ -64,7 +64,7 @@ def validate_girocode_bank_details(
     )
     if int(checksum_digits) % 97 != 1:
         raise GirocodeError(
-            "Girocode: Die Prüfziffer der IBAN ist ungültig."
+            "Girocode: The IBAN check digits are invalid."
         )
 
     normalized_bic = (bic or "").strip().upper()
@@ -73,16 +73,15 @@ def validate_girocode_bank_details(
         normalized_bic,
     ):
         raise GirocodeError(
-            "Girocode: Die BIC muss aus 8 oder 11 "
-            "gültigen Zeichen bestehen."
+            "Girocode: The BIC must consist of 8 or 11 valid characters."
         )
     if (
         not normalized_bic
         and normalized_iban[:2] not in EEA_COUNTRY_CODES
     ):
         raise GirocodeError(
-            "Girocode: Für Bankverbindungen außerhalb "
-            "des EWR ist eine BIC erforderlich."
+            "Girocode: A BIC is required for bank accounts outside the "
+            "EEA."
         )
 
     return name, normalized_iban, normalized_bic
@@ -106,7 +105,7 @@ def build_girocode_payload(
     )
     if currency != "EUR":
         raise GirocodeError(
-            "Girocode: Es werden nur Zahlungen in EUR unterstützt."
+            "Girocode: Only payments in EUR are supported."
         )
     if (
         not amount.is_finite()
@@ -114,13 +113,12 @@ def build_girocode_payload(
         or amount != amount.quantize(Decimal("0.01"))
     ):
         raise GirocodeError(
-            "Girocode: Der Betrag muss zwischen 0,01 und "
-            "999.999.999,99 EUR liegen und darf höchstens "
-            "zwei Nachkommastellen haben."
+            "Girocode: The amount must be between 0.01 and "
+            "999,999,999.99 EUR and may have at most two decimal places."
         )
     remittance = validate_text(
         reference,
-        label="Die Rechnungsnummer",
+        label="The invoice number",
         max_length=140,
     )
     # UTF-8, EPC version 002, unstructured remittance information.
@@ -142,7 +140,7 @@ def build_girocode_payload(
     )
     if len(payload.encode("utf-8")) > MAX_PAYLOAD_BYTES:
         raise GirocodeError(
-            "Girocode: Die Zahlungsdaten überschreiten "
-            "die zulässigen 331 UTF-8-Bytes."
+            "Girocode: The payment data exceeds the permitted 331 UTF-8 "
+            "bytes."
         )
     return payload

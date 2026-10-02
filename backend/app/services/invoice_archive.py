@@ -98,9 +98,8 @@ def get_archive_root(
     if tenant is None:
         if settings.tenancy_enabled:
             raise InvoiceArchiveMetadataError(
-                "Beim Zugriff auf das "
-                "Rechnungsarchiv fehlt der "
-                "Mandantenkontext."
+                "The tenant context is missing when accessing the invoice "
+                "archive."
             )
 
         return resolved_root
@@ -110,9 +109,8 @@ def get_archive_root(
     if namespace is None:
         if settings.tenancy_enabled:
             raise InvoiceArchiveMetadataError(
-                "Beim Zugriff auf das "
-                "Rechnungsarchiv fehlt der "
-                "Archiv-Namespace des Mandanten."
+                "The tenant's archive namespace is missing when accessing "
+                "the invoice archive."
             )
 
         return resolved_root
@@ -121,8 +119,8 @@ def get_archive_root(
         namespace
     ):
         raise InvoiceArchiveMetadataError(
-            "Der konfigurierte Mandanten-Pfad für "
-            "das Rechnungsarchiv ist ungültig."
+            "The configured tenant path for the invoice archive is "
+            "invalid."
         )
 
     return (resolved_root / namespace).resolve()
@@ -136,7 +134,7 @@ def resolve_archive_path(
 
     if relative.is_absolute() or ".." in relative.parts:
         raise InvoiceArchiveMetadataError(
-            "Der gespeicherte PDF-Pfad ist ungültig."
+            "The stored PDF path is invalid."
         )
 
     absolute_path = (
@@ -147,8 +145,7 @@ def resolve_archive_path(
         archive_root
     ):
         raise InvoiceArchiveMetadataError(
-            "Der gespeicherte PDF-Pfad liegt "
-            "außerhalb des Archivs."
+            "The stored PDF path is outside the archive."
         )
 
     return absolute_path
@@ -159,20 +156,19 @@ def create_relative_path(
 ) -> str:
     if invoice.issue_date is None:
         raise InvoiceArchiveMetadataError(
-            "Das Rechnungsdatum fehlt."
+            "The invoice date is missing."
         )
 
     if not invoice.invoice_number:
         raise InvoiceArchiveMetadataError(
-            "Die Rechnungsnummer fehlt."
+            "The invoice number is missing."
         )
 
     if not SAFE_INVOICE_NUMBER.fullmatch(
         invoice.invoice_number
     ):
         raise UnsafeInvoiceNumberError(
-            "Die Rechnungsnummer enthält "
-            "unzulässige Zeichen."
+            "The invoice number contains invalid characters."
         )
 
     return (
@@ -234,21 +230,20 @@ def verify_archived_file(
 ) -> None:
     if not absolute_path.is_file():
         raise InvoicePdfIntegrityError(
-            "Die archivierte PDF-Datei fehlt."
+            "The archived PDF file is missing."
         )
 
     data = absolute_path.read_bytes()
 
     if len(data) != expected_size_bytes:
         raise InvoicePdfIntegrityError(
-            "Die Größe der archivierten "
-            "PDF-Datei stimmt nicht."
+            "The size of the archived PDF file does not match."
         )
 
     if calculate_sha256(data) != expected_sha256:
         raise InvoicePdfIntegrityError(
-            "Die SHA-256-Prüfsumme der "
-            "archivierten PDF-Datei stimmt nicht."
+            "The SHA-256 checksum of the archived PDF file does not "
+            "match."
         )
 
 
@@ -263,8 +258,7 @@ def archived_result(
         or invoice.pdf_created_at is None
     ):
         raise InvoiceArchiveMetadataError(
-            "Die PDF-Archivmetadaten sind "
-            "unvollständig."
+            "The PDF archive metadata is incomplete."
         )
 
     absolute_path = resolve_archive_path(
@@ -315,8 +309,7 @@ def archive_invoice_pdf(
 
     if invoice is None:
         raise InvoiceArchiveNotFoundError(
-            f"Rechnung {invoice_id} "
-            "wurde nicht gefunden."
+            f"Invoice {invoice_id} was not found."
         )
 
     resolved_root = get_archive_root(
@@ -343,8 +336,7 @@ def archive_invoice_pdf(
 
     if has_any_metadata and not has_all_metadata:
         raise InvoiceArchiveMetadataError(
-            "Die PDF-Archivmetadaten sind "
-            "nur teilweise gesetzt."
+            "The PDF archive metadata is only partially set."
         )
 
     if has_all_metadata:
@@ -365,8 +357,7 @@ def archive_invoice_pdf(
 
     if pdf_format not in SUPPORTED_PDF_FORMATS:
         raise InvoiceArchiveMetadataError(
-            "Das konfigurierte Rechnungsformat ist "
-            "ungültig."
+            "The configured invoice format is invalid."
         )
 
     if (
@@ -428,8 +419,8 @@ def archive_invoice_pdf(
             != pdf_sha256
         ):
             raise InvoicePdfIntegrityError(
-                "Am vorgesehenen Archivpfad "
-                "existiert bereits eine andere Datei."
+                "A different file already exists at the intended archive "
+                "path."
             )
     else:
         write_atomically(
@@ -482,8 +473,7 @@ def get_archived_invoice_pdf(
 
     if invoice is None:
         raise InvoiceArchiveNotFoundError(
-            f"Rechnung {invoice_id} "
-            "wurde nicht gefunden."
+            f"Invoice {invoice_id} was not found."
         )
 
     return archived_result(

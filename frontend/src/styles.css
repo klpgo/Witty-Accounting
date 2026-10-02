@@ -1,4 +1,7 @@
 :root {
+  /* einheitliche Breite für Kopfzeile, Menüleiste und alle Seiten */
+  --content-width: min(1400px, calc(100% - 32px));
+
   font-family:
     Inter,
     system-ui,
@@ -41,7 +44,7 @@ a {
 }
 
 .page {
-  width: min(1120px, calc(100% - 32px));
+  width: var(--content-width);
   margin: 0 auto;
   padding: 48px 0;
 }
@@ -206,17 +209,60 @@ h2 {
 }
 
 .app-header {
+  background: #ffffff;
+}
+
+/* Oben Logo/Name und Benutzer; die Menüleiste folgt als eigene Zeile
+   (.app-navbar), die beim Scrollen oben stehen bleibt */
+.app-header-content {
+  display: flex;
+  width: var(--content-width);
+  margin: 0 auto;
+  padding: 14px 0 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: 32px;
+}
+
+/* Beim Scrollen zu einem Element (Tabulatortaste, Suche auf der Seite)
+   bleibt es unterhalb der haftenden Menüzeile sichtbar */
+html {
+  scroll-padding-top: 64px;
+}
+
+/* Menüzeile: bleibt beim Scrollen oben stehen; Logo und Benutzerzeile
+   scrollen mit dem Inhalt weg */
+.app-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   border-bottom: 1px solid #dfe4ec;
   background: #ffffff;
 }
 
-.app-header-content {
+.app-navbar-content {
   display: flex;
-  width: min(1120px, calc(100% - 32px));
-  min-height: 76px;
+  width: var(--content-width);
   margin: 0 auto;
-  align-items: center;
-  gap: 32px;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.back-to-top {
+  align-self: center;
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  color: #3659d9;
+  font: inherit;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.back-to-top:hover,
+.back-to-top:focus-visible {
+  text-decoration: underline;
 }
 
 .app-brand {
@@ -244,24 +290,36 @@ h2 {
   gap: 2px;
 }
 
-.app-brand span {
+/* nur der Untertitel – nicht die Initialen im Logo */
+.app-brand div > span {
   color: #667085;
   font-size: 0.78rem;
 }
 
 .app-nav {
   display: flex;
-  align-self: stretch;
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  margin-left: -12px;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.app-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-link {
   display: flex;
   align-items: center;
   border-bottom: 3px solid transparent;
-  padding: 0 8px;
+  padding: 0 12px;
   color: #667085;
   font-weight: 650;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .nav-link:hover {
@@ -278,6 +336,10 @@ h2 {
   margin-left: auto;
   align-items: center;
   gap: 16px;
+}
+
+.user-menu .button {
+  white-space: nowrap;
 }
 
 .user-menu-trigger {
@@ -315,7 +377,7 @@ h2 {
 }
 
 .app-main {
-  min-height: calc(100vh - 77px);
+  min-height: calc(100vh - 140px);
 }
 
 .dashboard-page {
@@ -415,16 +477,22 @@ h2 {
 }
 
 @media (max-width: 760px) {
+  /* auf schmalen Bildschirmen nur der Pfeil */
+  .back-to-top-label {
+    display: none;
+  }
+
+  .back-to-top {
+    padding: 6px 4px;
+    font-size: 1.15rem;
+  }
+
   .app-header-content {
-    min-height: auto;
-    padding: 16px 0;
+    padding-top: 12px;
     align-items: flex-start;
-    flex-wrap: wrap;
   }
 
   .app-nav {
-    order: 3;
-    width: 100%;
     min-height: 42px;
   }
 
@@ -743,7 +811,6 @@ h2 {
 }
 
 .admin-page {
-  width: min(1400px, calc(100% - 32px));
   padding-top: 40px;
 }
 
@@ -1252,4 +1319,161 @@ select {
   .import-result-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Status des automatischen Hager-Abrufs */
+.settings-status-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.settings-status-list > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) 1fr;
+  gap: 1rem;
+}
+
+.settings-status-list dt {
+  font-weight: 600;
+}
+
+.settings-status-list dd {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .settings-status-list > div {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+}
+
+/* Rechnungspositionen: Beschreibung darf umbrechen, damit die
+   Betragsspalten ohne horizontales Scrollen sichtbar bleiben */
+.invoice-items-table th,
+.invoice-items-table td {
+  padding: 14px 12px;
+}
+
+.invoice-items-table th:first-child,
+.invoice-items-table td:first-child {
+  padding-left: 24px;
+}
+
+.invoice-items-table th:last-child,
+.invoice-items-table td:last-child {
+  padding-right: 24px;
+}
+
+.invoice-items-table .invoice-item-description {
+  white-space: normal;
+  min-width: 12rem;
+  width: 100%;
+}
+
+/* Ladevorgänge verwerfen */
+.status-discarded {
+  background: var(--color-surface-muted, #eef0f3);
+  color: var(--color-text-muted, #5f6b7a);
+}
+
+.charging-sessions-table tr.session-discarded td {
+  color: var(--color-text-muted, #5f6b7a);
+}
+
+.session-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-bulk-actions input[type="text"] {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+}
+
+/* Ladevorgänge: Zeitraum zweizeilig, Namen dürfen umbrechen */
+.charging-sessions-table .session-select {
+  width: 1%;
+  padding-right: 4px;
+}
+
+.charging-sessions-table .session-period span {
+  display: block;
+}
+
+.charging-sessions-table .session-period .muted {
+  font-size: 0.85em;
+}
+
+.charging-sessions-table .session-user {
+  white-space: normal;
+  min-width: 7rem;
+}
+
+/* Ladevorgänge: Kennzahlen links, Filter rechts */
+.sessions-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px 48px;
+  align-items: start;
+}
+
+.sessions-statistics {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.sessions-statistics > div {
+  display: grid;
+  grid-template-columns: 4ch auto;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.sessions-statistics dd {
+  grid-row: 1;
+  grid-column: 1;
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sessions-statistics dt {
+  grid-column: 2;
+  color: var(--color-text-muted, #5f6b7a);
+}
+
+.sessions-statistics > div:first-child dt {
+  color: inherit;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .sessions-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Eingabefelder in Tabellen (z. B. Wallbox-Namen): wie Formularfelder,
+   etwas kompakter */
+.data-table input[type="text"] {
+  width: 100%;
+  min-width: 12rem;
+  border: 1px solid #cfd6e2;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 7px 10px;
+  color: #172033;
+  font: inherit;
+  outline: none;
+}
+
+.data-table input[type="text"]:focus {
+  border-color: #3659d9;
+  box-shadow: 0 0 0 3px rgb(54 89 217 / 14%);
 }

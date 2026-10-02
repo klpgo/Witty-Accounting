@@ -51,9 +51,8 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 PASSWORD_RESET_REQUEST_MESSAGE = (
-    "Falls ein aktives Benutzerkonto mit dieser "
-    "E-Mail-Adresse existiert, wurde ein Link zum "
-    "Zurücksetzen des Passworts versendet."
+    "If an active user account with this email address exists, a "
+    "link to reset the password has been sent."
 )
 
 
@@ -87,12 +86,12 @@ def login(
 
     if user is None:
         logger.warning(
-            "Login fehlgeschlagen: Benutzername=%r.",
+            "Login failed: username=%r.",
             normalized_username,
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="E-Mail-Adresse oder Passwort ist falsch.",
+            detail="Email address or password is incorrect.",
             headers={
                 "WWW-Authenticate": "Bearer",
             },
@@ -110,8 +109,7 @@ def login(
 
     if maintenance_mode and not user.is_admin:
         logger.warning(
-            "Login im Wartungsmodus abgelehnt: "
-            "Benutzername=%r.",
+            "Login rejected in maintenance mode: username=%r.",
             user.email,
         )
         raise HTTPException(
@@ -119,9 +117,8 @@ def login(
                 status.HTTP_503_SERVICE_UNAVAILABLE
             ),
             detail=(
-                "Der Wartungsmodus ist aktiv. "
-                "Die Anmeldung ist derzeit nur für "
-                "Administratoren möglich."
+                "Maintenance mode is active. Only administrators can sign in "
+                "at the moment."
             ),
         )
 
@@ -209,8 +206,7 @@ def confirm_password_reset(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Der Link ist ungültig, abgelaufen "
-                "oder wurde bereits verwendet."
+                "The link is invalid, has expired or has already been used."
             ),
         ) from exc
     except PasswordPolicyError as exc:

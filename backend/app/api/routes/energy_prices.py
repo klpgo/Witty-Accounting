@@ -14,7 +14,15 @@ from app.models.energy_price import EnergyPrice
 from app.schemas.energy_price import (
     CurrentEnergyPriceUpdate,
     EnergyPriceCreate,
+    EnergyPriceEditableFrom,
     EnergyPriceRead,
+    EnergyPriceUpdate,
+)
+from app.services.energy_price_rules import (
+    EnergyPriceLockedError,
+    day_start,
+    editable_from,
+    ensure_editable,
 )
 
 from app.schemas.pricing import PricingResult
@@ -75,6 +83,37 @@ def list_energy_prices(
         ).all()
     )
 
+def check_editable(db: Session, *moments) -> None:
+    try:
+        ensure_editable(db, *moments)
+    except EnergyPriceLockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+def reprice_from(db: Session, start_from) -> None:
+    """Nicht abgerechnete Ladevorgänge ab dem Zeitpunkt neu bepreisen."""
+    price_charging_sessions(
+        db=db,
+        overwrite=True,
+        start_from=start_from,
+    )
+
+
+@router.get(
+    "/editable-from",
+    response_model=EnergyPriceEditableFrom,
+    dependencies=[Depends(require_admin)],
+)
+def read_editable_from(
+    db: Session = Depends(get_db),
+) -> EnergyPriceEditableFrom:
+    """Frühester Zeitpunkt, ab dem Energiepreise gesetzt werden dürfen."""
+    return EnergyPriceEditableFrom(editable_from=editable_from(db))
+
+
 @router.get(
     "/current",
     response_model=EnergyPriceRead,
@@ -89,8 +128,7 @@ def read_current_energy_price(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                "Es ist noch kein aktuell gültiger "
-                "Energietarif vorhanden."
+                "There is no currently valid energy tariff yet."
             ),
         )
 
@@ -126,6 +164,8 @@ def update_current_energy_price(
     ):
         return current_price
 
+    check_editable(db, day_start)
+
     today_prices = list(
         db.scalars(
             select(EnergyPrice)
@@ -144,8 +184,7 @@ def update_current_energy_price(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Für den heutigen Tag existieren "
-                "mehrere Energietarife."
+                "Several energy tariffs exist for today."
             ),
         )
 
@@ -202,9 +241,8 @@ def update_current_energy_price(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Der heutige Energietarif konnte "
-                "wegen eines Datenbankkonflikts "
-                "nicht gespeichert werden."
+                "Today's energy tariff could not be saved because of a "
+                "database conflict."
             ),
         ) from exc
     except Exception:
@@ -212,6 +250,7 @@ def update_current_energy_price(
         raise
 
     db.refresh(energy_price)
+    reprice_from(db, day_start)
 
     return energy_price
 
@@ -226,6 +265,8 @@ def create_energy_price(
     data: EnergyPriceCreate,
     db: Session = Depends(get_db),
 ) -> EnergyPrice:
+    check_editable(db, data.valid_from)
+
     existing_price_id = db.scalar(
         select(EnergyPrice.id).where(
             EnergyPrice.valid_from
@@ -237,8 +278,7 @@ def create_energy_price(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Für diesen Gültigkeitszeitpunkt "
-                "existiert bereits ein Tarif."
+                "A tariff already exists for this validity date."
             ),
         )
 
@@ -259,8 +299,8 @@ def create_energy_price(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Der Tarif konnte wegen eines "
-                "Datenbankkonflikts nicht angelegt werden."
+                "The tariff could not be created because of a database "
+                "conflict."
             ),
         ) from exc
     except Exception:
@@ -268,8 +308,75 @@ def create_energy_price(
         raise
 
     db.refresh(energy_price)
+    reprice_from(db, energy_price.valid_from)
 
     return energy_price
+
+
+@router.put(
+    "/{price_id}",
+    response_model=EnergyPriceRead,
+    dependencies=[Depends(require_admin)],
+)
+def update_energy_price(
+    price_id: int,
+    data: EnergyPriceUpdate,
+    db: Session = Depends(get_db),
+) -> EnergyPrice:
+    """
+    Ändert einen Tarif (Gültigkeit ab einem Kalendertag und Preise).
+    Alter und neuer Zeitpunkt dürfen nicht in einem abgerechneten Zeitraum
+    liegen; danach werden die nicht abgerechneten Ladevorgänge ab dem
+    früheren der beiden Zeitpunkte neu bepreist.
+    """
+    energy_price = db.get(EnergyPrice, price_id)
+
+    if energy_price is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Energy tariff {price_id} was not found.",
+        )
+
+    new_valid_from = day_start(data.valid_from)
+    check_editable(db, energy_price.valid_from, new_valid_from)
+
+    other_price_id = db.scalar(
+        select(EnergyPrice.id).where(
+            EnergyPrice.valid_from == new_valid_from,
+            EnergyPrice.id != price_id,
+        )
+    )
+
+    if other_price_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A tariff already exists for this validity date.",
+        )
+
+    reprice_start = min(energy_price.valid_from, new_valid_from)
+    energy_price.valid_from = new_valid_from
+    energy_price.grid_price_net = data.grid_price_net
+    energy_price.pv_price_net = data.pv_price_net
+    energy_price.vat_rate = data.vat_rate
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The tariff could not be changed because of a database "
+                "conflict."
+            ),
+        ) from exc
+
+    db.refresh(energy_price)
+    reprice_from(db, reprice_start)
+
+    return energy_price
+
 
 @router.post(
     "/reprice",

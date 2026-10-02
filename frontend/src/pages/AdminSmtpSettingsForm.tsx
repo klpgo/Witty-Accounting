@@ -16,6 +16,7 @@ import {
 
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { useTranslation } from '../i18n/useTranslation'
 
 const MAX_SMIME_FILE_SIZE = 65535
 
@@ -35,6 +36,7 @@ async function fileToBase64(
 }
 
 function AdminSmtpSettingsForm() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -205,7 +207,7 @@ function AdminSmtpSettingsForm() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Mailserver-Einstellungen konnten nicht geladen werden.',
+            : t('settings.smtp.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -246,7 +248,7 @@ function AdminSmtpSettingsForm() {
     if (useDatabaseSettings) {
       if (!normalizedHost) {
         setErrorMessage(
-          'Der SMTP-Host darf nicht leer sein.',
+          t('settings.smtp.hostMissing'),
         )
         return
       }
@@ -257,7 +259,7 @@ function AdminSmtpSettingsForm() {
         port > 65535
       ) {
         setErrorMessage(
-          'Der SMTP-Port muss zwischen 1 und 65535 liegen.',
+          t('settings.smtp.portRange'),
         )
         return
       }
@@ -268,14 +270,14 @@ function AdminSmtpSettingsForm() {
         timeout > 300
       ) {
         setErrorMessage(
-          'Der SMTP-Timeout muss größer als 0 und höchstens 300 Sekunden sein.',
+          t('settings.smtp.timeoutRange'),
         )
         return
       }
 
       if (!normalizedFromName) {
         setErrorMessage(
-          'Der Absendername darf nicht leer sein.',
+          t('settings.smtp.senderNameMissing'),
         )
         return
       }
@@ -286,7 +288,7 @@ function AdminSmtpSettingsForm() {
         )
       ) {
         setErrorMessage(
-          'Bitte gib eine gültige Absenderadresse ein.',
+          t('settings.smtp.senderAddressInvalid'),
         )
         return
       }
@@ -297,7 +299,7 @@ function AdminSmtpSettingsForm() {
         !smtpPassword
       ) {
         setErrorMessage(
-          'Für den SMTP-Benutzernamen ist ein Passwort erforderlich.',
+          t('settings.smtp.passwordRequired'),
         )
         return
       }
@@ -309,7 +311,7 @@ function AdminSmtpSettingsForm() {
         MAX_SMIME_FILE_SIZE
     ) {
       setErrorMessage(
-        'Die S/MIME-Datei darf höchstens 65.535 Byte groß sein.',
+        t('settings.smime.fileTooLarge'),
       )
       return
     }
@@ -323,7 +325,7 @@ function AdminSmtpSettingsForm() {
       )
     ) {
       setErrorMessage(
-        'Für das S/MIME-Zertifikat ist ein Passwort erforderlich.',
+        t('settings.smime.passwordRequired'),
       )
       return
     }
@@ -334,7 +336,7 @@ function AdminSmtpSettingsForm() {
       smimeCertificateSource !== 'upload'
     ) {
       setErrorMessage(
-        'Bitte wähle zusammen mit dem S/MIME-Passwort eine Zertifikatsdatei aus.',
+        t('settings.smime.fileRequired'),
       )
       return
     }
@@ -345,7 +347,7 @@ function AdminSmtpSettingsForm() {
       smimeCertificateFile === null
     ) {
       setErrorMessage(
-        'Vor dem Aktivieren muss ein S/MIME-Zertifikat hochgeladen werden.',
+        t('settings.smime.uploadRequired'),
       )
       return
     }
@@ -472,7 +474,7 @@ function AdminSmtpSettingsForm() {
       setSmimeFileInputKey((key) => key + 1)
 
       setSuccessMessage(
-        'Die Mail-Einstellungen wurden gespeichert.',
+        t('settings.smtp.saved'),
       )
     } catch (error) {
       if (
@@ -486,7 +488,7 @@ function AdminSmtpSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Mail-Einstellungen konnten nicht gespeichert werden.',
+          : t('settings.smtp.saveFailed'),
       )
     } finally {
       setIsSaving(false)
@@ -511,7 +513,7 @@ function AdminSmtpSettingsForm() {
       )
 
       setSuccessMessage(
-        `Die Testmail wurde an ${result.recipient_email} gesendet.`,
+        t('settings.smtp.testSent', { email: result.recipient_email }),
       )
     } catch (error) {
       if (
@@ -525,7 +527,7 @@ function AdminSmtpSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die SMTP-Testnachricht konnte nicht versendet werden.',
+          : t('settings.smtp.testFailed'),
       )
     } finally {
       setIsTesting(false)
@@ -550,7 +552,7 @@ function AdminSmtpSettingsForm() {
       )
 
       setSuccessMessage(
-        `Die signierte S/MIME-Testmail wurde an ${result.recipient_email} gesendet.`,
+        t('settings.smime.testSent', { email: result.recipient_email }),
       )
     } catch (error) {
       if (
@@ -564,7 +566,7 @@ function AdminSmtpSettingsForm() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die S/MIME-Testnachricht konnte nicht versendet werden.',
+          : t('settings.smime.testFailed'),
       )
     } finally {
       setIsTestingSmime(false)
@@ -575,7 +577,7 @@ function AdminSmtpSettingsForm() {
     return (
       <section className="card">
         <p className="muted">
-          Mailserver-Einstellungen werden geladen …
+          {t('settings.smtp.loading')}
         </p>
       </section>
     )
@@ -588,11 +590,10 @@ function AdminSmtpSettingsForm() {
     >
       <section className="settings-section">
         <div>
-          <h2>Mailserver</h2>
+          <h2>{t('settings.smtp.title')}</h2>
 
           <p className="muted">
-            SMTP-Versand und Absender für
-            Rechnungs-E-Mails verwalten.
+            {t('settings.smtp.intro')}
           </p>
         </div>
 
@@ -616,7 +617,7 @@ function AdminSmtpSettingsForm() {
 
         <div className="form-grid settings-business-grid">
           <label className="form-field">
-            <span>Konfigurationsquelle</span>
+            <span>{t('settings.smtp.source')}</span>
 
             <select
               value={
@@ -632,16 +633,16 @@ function AdminSmtpSettingsForm() {
               }}
             >
               <option value="environment">
-                Umgebung (.env)
+                {t('settings.smtp.source.environment')}
               </option>
               <option value="database">
-                Admin-Einstellungen
+                {t('settings.smtp.source.database')}
               </option>
             </select>
           </label>
 
           <label className="form-field settings-checkbox-field">
-            <span>E-Mail-Versand</span>
+            <span>{t('settings.smtp.sending')}</span>
 
             <span className="settings-checkbox-control">
               <input
@@ -654,13 +655,12 @@ function AdminSmtpSettingsForm() {
                 }}
               />
 
-              Rechnungs-E-Mails dürfen
-              versendet werden
+              {t('settings.smtp.sendingEnabled')}
             </span>
           </label>
 
           <label className="form-field">
-            <span>SMTP-Host</span>
+            <span>{t('settings.smtp.host')}</span>
 
             <input
               type="text"
@@ -675,7 +675,7 @@ function AdminSmtpSettingsForm() {
           </label>
 
           <label className="form-field">
-            <span>SMTP-Port</span>
+            <span>{t('settings.smtp.port')}</span>
 
             <input
               type="number"
@@ -692,7 +692,7 @@ function AdminSmtpSettingsForm() {
           </label>
 
           <label className="form-field">
-            <span>Timeout in Sekunden</span>
+            <span>{t('settings.smtp.timeout')}</span>
 
             <input
               type="text"
@@ -709,7 +709,7 @@ function AdminSmtpSettingsForm() {
           </label>
 
           <label className="form-field settings-checkbox-field">
-            <span>Transportverschlüsselung</span>
+            <span>{t('settings.smtp.encryption')}</span>
 
             <span className="settings-checkbox-control">
               <input
@@ -723,12 +723,12 @@ function AdminSmtpSettingsForm() {
                 }}
               />
 
-              STARTTLS verwenden
+              {t('settings.smtp.starttls')}
             </span>
           </label>
 
           <label className="form-field">
-            <span>SMTP-Benutzername</span>
+            <span>{t('settings.smtp.username')}</span>
 
             <input
               type="text"
@@ -746,7 +746,7 @@ function AdminSmtpSettingsForm() {
 
           <div className="form-field settings-password-field">
             <span id="smtp-password-label">
-              SMTP-Passwort
+              {t('settings.smtp.password')}
             </span>
 
             <input
@@ -767,8 +767,8 @@ function AdminSmtpSettingsForm() {
 
             <small className="muted">
               {smtpPasswordConfigured
-                ? 'Ein Passwort ist gespeichert. Leer lassen, um es beizubehalten.'
-                : 'Es ist noch kein Passwort gespeichert.'}
+                ? t('settings.hager.passwordStored')
+                : t('settings.hager.passwordMissing')}
             </small>
 
             <label className="settings-checkbox-control settings-password-clear-control">
@@ -790,13 +790,12 @@ function AdminSmtpSettingsForm() {
                 }}
               />
 
-              Gespeichertes Passwort beim Speichern
-              löschen
+              {t('settings.hager.clearPassword')}
             </label>
           </div>
 
           <label className="form-field settings-smtp-sender-field">
-            <span>Absendername</span>
+            <span>{t('settings.smtp.senderName')}</span>
 
             <input
               type="text"
@@ -813,7 +812,7 @@ function AdminSmtpSettingsForm() {
           </label>
 
           <label className="form-field">
-            <span>Absenderadresse</span>
+            <span>{t('settings.smtp.senderAddress')}</span>
 
             <input
               type="email"
@@ -834,17 +833,16 @@ function AdminSmtpSettingsForm() {
 
       <section className="settings-section settings-smime-section">
         <div>
-          <h2>S/MIME-Signatur</h2>
+          <h2>{t('settings.smime.title')}</h2>
 
           <p className="muted">
-            Ausgehende E-Mails mit dem Zertifikat des
-            Absenders digital signieren.
+            {t('settings.smime.intro')}
           </p>
         </div>
 
         <div className="form-grid settings-business-grid">
           <label className="form-field settings-checkbox-field">
-            <span>S/MIME-Versand</span>
+            <span>{t('settings.smime.sending')}</span>
 
             <span className="settings-checkbox-control">
               <input
@@ -857,12 +855,12 @@ function AdminSmtpSettingsForm() {
                 }}
               />
 
-              E-Mails mit S/MIME signieren
+              {t('settings.smime.enable')}
             </span>
           </label>
 
           <label className="form-field settings-smime-file-field">
-            <span>PKCS#12-Zertifikat</span>
+            <span>{t('settings.smime.certificate')}</span>
 
             <input
               key={smimeFileInputKey}
@@ -883,14 +881,23 @@ function AdminSmtpSettingsForm() {
 
             <small className="muted">
               {smimeCertificateConfigured
-                ? `${smimeCertificateFilename ?? 'Ein Zertifikat'} ist konfiguriert${smimeCertificateSource === 'environment' ? ' (Umgebung/Secret)' : ''}. Eine neue Datei ersetzt es beim Speichern.`
-                : 'Es ist noch kein Zertifikat konfiguriert.'}
+                ? t(
+                    smimeCertificateSource === 'environment'
+                      ? 'settings.smime.configuredEnvironment'
+                      : 'settings.smime.configured',
+                    {
+                      name:
+                        smimeCertificateFilename ??
+                        t('settings.smime.aCertificate'),
+                    },
+                  )
+                : t('settings.smime.notConfigured')}
             </small>
           </label>
 
           <div className="form-field settings-password-field">
             <span id="smime-password-label">
-              Zertifikatspasswort
+              {t('settings.smime.password')}
             </span>
 
             <input
@@ -908,8 +915,8 @@ function AdminSmtpSettingsForm() {
 
             <small className="muted">
               {smimePasswordConfigured
-                ? 'Ein Passwort ist konfiguriert. Leer lassen, um ein hochgeladenes Passwort beizubehalten.'
-                : 'Beim ersten Upload ist das Zertifikatspasswort erforderlich.'}
+                ? t('settings.smime.passwordConfigured')
+                : t('settings.smime.passwordFirstUpload')}
             </small>
 
             <label className="settings-checkbox-control settings-password-clear-control">
@@ -937,16 +944,13 @@ function AdminSmtpSettingsForm() {
                 }}
               />
 
-              Hochgeladenes Zertifikat und Passwort
-              beim Speichern löschen
+              {t('settings.smime.clear')}
             </label>
           </div>
         </div>
 
         <p className="settings-security-warning" role="note">
-          Sicherheits-Hinweis: Lade das Zertifikat nur
-          bei lokaler Nutzung oder über eine
-          verschlüsselte HTTPS-Verbindung hoch.
+          {t('settings.smime.securityHint')}
         </p>
       </section>
 
@@ -961,8 +965,8 @@ function AdminSmtpSettingsForm() {
           }
         >
           {isSaving
-            ? 'Mail-Einstellungen werden gespeichert …'
-            : 'Mail-Einstellungen speichern'}
+            ? t('settings.smtp.saving')
+            : t('settings.smtp.save')}
         </button>
 
         <button
@@ -978,8 +982,8 @@ function AdminSmtpSettingsForm() {
           }}
         >
           {isTesting
-            ? 'Testmail wird versendet …'
-            : 'Mailserver testen'}
+            ? t('settings.smtp.testing')
+            : t('settings.smtp.test')}
         </button>
 
         <button
@@ -995,18 +999,13 @@ function AdminSmtpSettingsForm() {
           }}
         >
           {isTestingSmime
-            ? 'S/MIME-Testmail wird versendet …'
-            : 'S/MIME testen'}
+            ? t('settings.smime.testing')
+            : t('settings.smime.test')}
         </button>
       </div>
 
       <p className="muted">
-        Beide Tests verwenden die zuletzt gespeicherten
-        Einstellungen und senden an die E-Mail-Adresse
-        des angemeldeten Administrators. Der
-        Mailserver-Test bleibt unsigniert; der
-        S/MIME-Test wird immer signiert, auch wenn der
-        S/MIME-Versand noch nicht aktiviert ist.
+        {t('settings.smtp.testHint')}
       </p>
     </form>
   )

@@ -132,9 +132,22 @@ InvoicePdfFormat = Literal[
 ]
 
 
+# Unterstützte Gebietsschemata und Währungen (siehe app/utils/locale_format.py)
+LocaleCode = Literal["de-DE", "de-AT", "de-CH", "en-GB", "en-US"]
+LanguageCode = Literal["de", "en"]
+CurrencyCode = Literal["EUR", "CHF", "GBP", "USD"]
+
+
 class PublicSettingsResponse(BaseModel):
     app_name: str
     tenant_name: str
+    # Zeitzone der Installation für die Anzeige im Frontend
+    timezone: str
+    # Gebietsschema und Währung für Zahlen-, Datums- und Betragsformat
+    locale: str = "de-DE"
+    currency: str = "EUR"
+    # Sprache für Benutzer ohne eigene Wahl und vor der Anmeldung
+    default_language: str = "de"
 
 
 class GlobalSettingsResponse(BaseModel):
@@ -168,6 +181,9 @@ class GlobalSettingsResponse(BaseModel):
     password_require_special: bool
     frontend_base_url: str
     password_reset_token_expire_minutes: int
+    locale: str
+    currency: str
+    default_language: str
 
 
 class GlobalSettingsUpdate(BaseModel):
@@ -177,6 +193,9 @@ class GlobalSettingsUpdate(BaseModel):
 
     app_name: AppName | None = None
     maintenance_mode: bool | None = None
+    locale: LocaleCode | None = None
+    currency: CurrencyCode | None = None
+    default_language: LanguageCode | None = None
     dashboard_note: DashboardNote | None = None
     monthly_base_fee_net: BaseFeeDecimal | None = None
     monthly_base_fee_vat_rate: VatDecimal | None = None
@@ -237,7 +256,7 @@ class GlobalSettingsUpdate(BaseModel):
     ) -> object:
         if value is None:
             raise ValueError(
-                "Der Einstellungswert darf nicht null sein."
+                "The setting value must not be null."
             )
 
         return value
@@ -252,7 +271,7 @@ class GlobalSettingsUpdate(BaseModel):
 
         if not normalized:
             raise ValueError(
-                "Der Anwendungsname darf nicht leer sein."
+                "The application name must not be empty."
             )
 
         return normalized
@@ -275,10 +294,8 @@ class GlobalSettingsUpdate(BaseModel):
             or parsed.fragment
         ):
             raise ValueError(
-                "Die öffentliche Frontend-Adresse muss "
-                "eine vollständige HTTP- oder HTTPS-URL "
-                "ohne Zugangsdaten, Parameter oder Fragment "
-                "sein."
+                "The public frontend address must be a complete HTTP or "
+                "HTTPS URL without credentials, parameters or fragment."
             )
 
         return normalized

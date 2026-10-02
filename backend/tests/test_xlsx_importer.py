@@ -224,7 +224,7 @@ def test_import_xlsx_rejects_missing_file(
 
     with pytest.raises(
         FileNotFoundError,
-        match="XLSX-Datei nicht gefunden",
+        match="XLSX file not found",
     ):
         import_xlsx(missing_path)
 
@@ -255,7 +255,7 @@ def test_import_xlsx_reports_invalid_duration(
 
     with pytest.raises(
         ValueError,
-        match="Fehler in XLSX-Zeile 2",
+        match="Error in XLSX row 2",
     ):
         import_xlsx(xlsx_path)
 
@@ -282,6 +282,6 @@ def test_import_xlsx_rejects_invalid_headers(
 
     with pytest.raises(
         ValueError,
-        match="Ungültige XLSX-Kopfzeile",
+        match="Invalid XLSX header row",
     ):
         import_xlsx(xlsx_path)

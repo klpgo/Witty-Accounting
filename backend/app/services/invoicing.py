@@ -3,9 +3,12 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import dataclass
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.i18n import normalize_language, translate
+from app.utils import locale_format
+from app.services.wallboxes import refresh_station_names
 from app.models.charging_session import ChargingSession
 from app.models.energy_price import EnergyPrice
 from app.models.invoice import Invoice, InvoiceItem
@@ -27,21 +30,6 @@ from app.config import settings
 FOUR_DECIMALS = Decimal("0.0001")
 CENT = Decimal("0.01")
 HUNDRED = Decimal("100")
-MONTH_NAMES_DE = (
-    "",
-    "Januar",
-    "Februar",
-    "März",
-    "April",
-    "Mai",
-    "Juni",
-    "Juli",
-    "August",
-    "September",
-    "Oktober",
-    "November",
-    "Dezember",
-)
 
 
 def normalize_optional_text(
@@ -232,7 +220,44 @@ def _next_month_start(value: datetime) -> datetime:
     )
 
 
-def format_billed_days(value: Decimal) -> str:
+def chronological_positions(
+    fee_candidates: list[MonthlyBaseFeeCandidate],
+    charging_sessions: list,
+) -> tuple[list[int], list[int]]:
+    """
+    Positionsnummern in chronologischer Reihenfolge, Monat für Monat:
+    zuerst die Monatsgebühr(en) des Monats, danach dessen Ladevorgänge
+    nach Beginn. Rückgabe: (Positionen der Gebühren, Positionen der
+    Ladevorgänge) in der Reihenfolge der übergebenen Listen.
+    """
+    entries = []
+
+    for index, candidate in enumerate(fee_candidates):
+        month = (candidate.fee_month.year, candidate.fee_month.month)
+        entries.append((month, 0, datetime.min, index, "fee", index))
+
+    for index, (charging_session, _rebill) in enumerate(charging_sessions):
+        start = charging_session.start_time
+        entries.append(((start.year, start.month), 1, start, index, "session", index))
+
+    entries.sort(key=lambda entry: entry[:4])
+
+    fee_positions = [0] * len(fee_candidates)
+    session_positions = [0] * len(charging_sessions)
+
+    for position, entry in enumerate(entries, start=1):
+        if entry[4] == "fee":
+            fee_positions[entry[5]] = position
+        else:
+            session_positions[entry[5]] = position
+
+    return fee_positions, session_positions
+
+
+def format_billed_days(
+    value: Decimal,
+    locale: str | None = None,
+) -> str:
     normalized = value.quantize(
         FOUR_DECIMALS,
         rounding=ROUND_HALF_UP,
@@ -240,23 +265,53 @@ def format_billed_days(value: Decimal) -> str:
 
     return format(normalized, "f").replace(
         ".",
-        ",",
+        locale_format.locale_format(locale).decimal_separator,
     )
 
 
 def _effective_assignment_start_date(
     valid_from: datetime,
+    *,
+    handover: bool,
 ) -> date:
-    # Wechseltag zählt voll für die ALTE Zuordnung: eine
-    # Zuordnung, die mitten am Tag beginnt, zählt diesen
-    # Tag noch nicht mit - erst der Folgetag ist ein
-    # voller Tag der neuen Zuordnung. Beginnt sie exakt um
-    # Mitternacht, gibt es keinen Wechsel mitten im Tag und
-    # der Tag zählt sofort voll.
-    if valid_from.time() == time.min:
+    # Beginnt eine Zuordnung mitten am Tag und übernimmt sie die Karte von
+    # einer anderen Zuordnung, die an diesem Tag endet, zählt der Tag voll
+    # für die ALTE Zuordnung – erst der Folgetag gehört der neuen. Ohne
+    # Übergabe (z. B. erste Zuordnung einer Karte) zählt der Tag voll für
+    # die neue Zuordnung, egal zu welcher Uhrzeit sie beginnt.
+    if valid_from.time() == time.min or not handover:
         return valid_from.date()
 
     return valid_from.date() + timedelta(days=1)
+
+
+def _is_mid_day_handover(
+    db: Session,
+    assignment: RFIDCardAssignment,
+) -> bool:
+    """
+    True, wenn die Karte am ersten Tag der Zuordnung von einer anderen
+    Zuordnung übergeben wird, die an diesem Tag nach 00:00 Uhr endet und
+    den Tag deshalb voll erhält.
+    """
+    valid_from = assignment.valid_from
+
+    if valid_from.time() == time.min:
+        return False
+
+    day_start = datetime.combine(valid_from.date(), time.min)
+    next_day_start = day_start + timedelta(days=1)
+
+    return bool(
+        db.scalar(
+            select(func.count(RFIDCardAssignment.id)).where(
+                RFIDCardAssignment.rfid_card_id == assignment.rfid_card_id,
+                RFIDCardAssignment.id != assignment.id,
+                RFIDCardAssignment.valid_to > day_start,
+                RFIDCardAssignment.valid_to < next_day_start,
+            )
+        )
+    )
 
 
 def _effective_assignment_end_date_exclusive(
@@ -334,7 +389,8 @@ def find_monthly_base_fee_assignments(
             effective_start = max(
                 month_start_date,
                 _effective_assignment_start_date(
-                    assignment.valid_from
+                    assignment.valid_from,
+                    handover=_is_mid_day_handover(db, assignment),
                 ),
             )
 
@@ -550,10 +606,8 @@ def find_billable_monthly_base_fee_candidates(
 
         if charge.user_id != user_id:
             raise InvoiceDraftError(
-                "Die gespeicherte Grundgebühr für "
-                f"RFID-Karte {assignment.rfid_card_id} "
-                f"und Monat {fee_month:%m.%Y} ist "
-                "einem anderen Benutzer zugeordnet."
+                f"The stored base fee for RFID card {assignment.rfid_card_id} "
+                f"and month {fee_month:%m.%Y} is assigned to another user."
             )
 
         if (
@@ -572,12 +626,33 @@ def find_billable_monthly_base_fee_candidates(
         if not is_billable:
             continue
 
-        net_amount = to_decimal(
-            charge.net_amount
-        ).quantize(
-            FOUR_DECIMALS,
-            rounding=ROUND_HALF_UP,
-        )
+        # Noch nicht abgerechneter Eintrag (z. B. aus einem gelöschten Entwurf
+        # oder nach einem Storno): Betrag neu aus Grundgebühr und aktuellen
+        # Tagen berechnen – die Tage können sich durch eine geänderte
+        # Zuordnung verschoben haben. Ohne eingestellte Grundgebühr bleibt
+        # der gespeicherte Betrag.
+        if (
+            configured_net_amount is not None
+            and configured_vat_rate is not None
+            and configured_net_amount > 0
+        ):
+            net_amount = (
+                configured_net_amount
+                * assignment_period.billed_days
+                / Decimal(assignment_period.days_in_month)
+            ).quantize(
+                FOUR_DECIMALS,
+                rounding=ROUND_HALF_UP,
+            )
+            vat_rate = configured_vat_rate
+        else:
+            net_amount = to_decimal(
+                charge.net_amount
+            ).quantize(
+                FOUR_DECIMALS,
+                rounding=ROUND_HALF_UP,
+            )
+            vat_rate = to_decimal(charge.vat_rate)
 
         if net_amount <= 0:
             continue
@@ -597,9 +672,7 @@ def find_billable_monthly_base_fee_candidates(
                     rebill_source_item_id
                 ),
                 net_amount=net_amount,
-                vat_rate=to_decimal(
-                    charge.vat_rate
-                ).quantize(
+                vat_rate=vat_rate.quantize(
                     CENT,
                     rounding=ROUND_HALF_UP,
                 ),
@@ -618,15 +691,14 @@ def create_invoice_draft(
 ) -> Invoice:
     if service_period_start >= service_period_end:
         raise InvalidServicePeriodError(
-            "Das Ende des Leistungszeitraums "
-            "muss nach dem Beginn liegen."
+            "The end of the service period must be after its start."
         )
 
     user = db.get(User, user_id)
 
     if user is None:
         raise InvoiceUserNotFoundError(
-            f"Benutzer {user_id} wurde nicht gefunden."
+            f"User {user_id} was not found."
         )
 
     global_settings = db.get(
@@ -650,12 +722,10 @@ def create_invoice_draft(
 
         if service_period_end <= billing_start:
             raise NoBillableSessionsError(
-                "Der gewählte Leistungszeitraum liegt "
-                "vollständig vor dem Abrechnungs-"
-                "Startdatum "
-                f"{global_settings.billing_start_date:%d.%m.%Y}. "
-                "Ladevorgänge und Grundgebühren vor "
-                "diesem Datum werden nicht abgerechnet."
+                "The selected service period lies entirely before the "
+                f"billing start date {global_settings.billing_start_date:%d.%m.%Y}"
+                ". Charging sessions and base fees before this date are not "
+                "billed."
             )
 
         effective_service_period_start = max(
@@ -679,6 +749,7 @@ def create_invoice_draft(
                 ChargingSession.end_time
                 <= service_period_end,
                 ChargingSession.invoiced.is_(False),
+                ChargingSession.discarded_at.is_(None),
             )
             .order_by(
                 ChargingSession.start_time,
@@ -717,17 +788,14 @@ def create_invoice_draft(
 
                 if pricing_status == "missing_price":
                     raise MissingEnergyPriceError(
-                        "Kein gültiger Tarif für "
-                        "Ladevorgang "
-                        f"{charging_session.id} vom "
-                        f"{charging_session.start_time:%d.%m.%Y}."
+                        f"No valid tariff for charging session {charging_session.id} "
+                        f"on {charging_session.start_time:%d.%m.%Y}."
                     )
 
                 if pricing_status == "invalid_energy":
                     raise InvalidChargingSessionError(
-                        "Ungültige Energiemengen bei "
-                        "Ladevorgang "
-                        f"{charging_session.id}."
+                        f"Invalid energy values for charging session {charging_session.id}"
+                        "."
                     )
 
             charging_sessions.append(
@@ -753,10 +821,8 @@ def create_invoice_draft(
         and not monthly_base_fee_candidates
     ):
         raise NoBillableSessionsError(
-            "Für diesen Benutzer und Zeitraum "
-            "wurden keine abrechenbaren "
-            "Ladevorgänge oder Grundgebühren "
-            "gefunden."
+            "No billable charging sessions or base fees were found for "
+            "this user and period."
         )
 
     recipient_name = " ".join(
@@ -770,8 +836,7 @@ def create_invoice_draft(
 
     if not user.address:
         raise InvoiceDraftError(
-            "Für den Rechnungsempfänger ist "
-            "keine Anschrift hinterlegt."
+            "No address is stored for the invoice recipient."
         )
 
     database_business_settings_configured = (
@@ -837,21 +902,18 @@ def create_invoice_draft(
 
     if issuer_name is None:
         raise InvoiceDraftError(
-            "Für den Rechnungsaussteller ist "
-            "kein Name konfiguriert."
+            "No name is configured for the invoice issuer."
         )
 
     if issuer_address is None:
         raise InvoiceDraftError(
-            "Für den Rechnungsaussteller ist "
-            "keine Anschrift konfiguriert."
+            "No address is configured for the invoice issuer."
         )
 
     if not issuer_tax_number and not issuer_vat_id:
         raise InvoiceDraftError(
-            "Für den Rechnungsaussteller muss "
-            "eine Steuernummer oder USt-IdNr. "
-            "konfiguriert sein."
+            "A tax number or VAT ID must be configured for the invoice "
+            "issuer."
         )
 
     invoice = Invoice(
@@ -876,7 +938,18 @@ def create_invoice_draft(
         due_date=None,
         service_period_start=service_period_start,
         service_period_end=service_period_end,
-        currency="EUR",
+        # Währung und Gebietsschema der Abrechnung festhalten
+        currency=(
+            getattr(global_settings, "currency", None) or "EUR"
+        ),
+        locale=(
+            getattr(global_settings, "locale", None) or "de-DE"
+        ),
+        # Sprache des Empfängers, ersatzweise Standardsprache des Mandanten
+        language=normalize_language(
+            user.language
+            or getattr(global_settings, "default_language", None)
+        ),
         total_net=Decimal("0.00"),
         vat_amount=Decimal("0.00"),
         total_gross=Decimal("0.00"),
@@ -895,14 +968,24 @@ def create_invoice_draft(
         db.add(invoice)
         db.flush()
 
-        for position_number, (
+        # Stationsnamen aus der Tabelle der Wallboxen (eigener Name, Name aus
+        # der Hager Cloud oder Kurzform der ID)
+        refresh_station_names(
+            db,
+            [charging_session for charging_session, _rebill in charging_sessions],
+        )
+
+        fee_positions, session_positions = chronological_positions(
+            monthly_base_fee_candidates,
+            charging_sessions,
+        )
+
+        for (
             charging_session,
             rebill_source_item_id,
-        ) in enumerate(
+        ), position_number in zip(
             charging_sessions,
-            start=(
-                len(monthly_base_fee_candidates) + 1
-            ),
+            session_positions,
         ):
             energy_price = find_energy_price(
                 db,
@@ -911,8 +994,7 @@ def create_invoice_draft(
 
             if energy_price is None:
                 raise MissingEnergyPriceError(
-                    "Kein gültiger Tarif für "
-                    f"Ladevorgang {charging_session.id}."
+                    f"No valid tariff for charging session {charging_session.id}."
                 )
 
             energy_total = to_decimal(
@@ -942,8 +1024,8 @@ def create_invoice_draft(
                 or energy_grid < 0
             ):
                 raise InvalidChargingSessionError(
-                    "Ungültige Energiemengen bei "
-                    f"Ladevorgang {charging_session.id}."
+                    f"Invalid energy values for charging session {charging_session.id}"
+                    "."
                 )
 
             cost_grid = to_decimal(
@@ -1005,10 +1087,17 @@ def create_invoice_draft(
                 reversed_invoice_item_id=None,
                 rebills_invoice_item_id=rebill_source_item_id,
                 position_number=position_number,
-                description=(
-                    "Ladevorgang "
-                    f"{charging_session.start_time:%d.%m.%Y %H:%M} "
-                    f"an {charging_session.station_id}"
+                description=translate(
+                    invoice.language,
+                    "item.chargingSession",
+                    start=(
+                        locale_format.format_date(
+                            charging_session.start_time.date(),
+                            invoice.locale,
+                        )
+                        + f" {charging_session.start_time:%H:%M}"
+                    ),
+                    station=charging_session.station_id,
                 ),
                 session_start=(
                     charging_session.start_time
@@ -1045,9 +1134,9 @@ def create_invoice_draft(
             total_net += net_amount_cents
             total_vat += vat_amount
             total_gross += gross_amount
-        for position_number, candidate in enumerate(
+        for candidate, position_number in zip(
             monthly_base_fee_candidates,
-            start=1,
+            fee_positions,
         ):
             charge = candidate.charge
 
@@ -1069,6 +1158,10 @@ def create_invoice_draft(
                 db.add(charge)
                 db.flush()
             else:
+                # noch nicht abgerechnet: Betrag neu übernehmen (z. B. nach
+                # geändertem Beginn der Zuordnung oder neuer Grundgebühr)
+                charge.net_amount = candidate.net_amount
+                charge.vat_rate = candidate.vat_rate
                 charge.invoice_id = invoice.id
                 charge.invoiced = False
 
@@ -1097,18 +1190,23 @@ def create_invoice_draft(
                 card.description
                 or card.rfid_number
             )
-            month_name = MONTH_NAMES_DE[
-                candidate.fee_month.month
-            ]
+            month_name = translate(
+                invoice.language,
+                f"month.{candidate.fee_month.month}",
+            )
             proration_suffix = ""
 
             if candidate.billed_days != Decimal(
                 candidate.days_in_month
             ):
-                proration_suffix = (
-                    " (anteilig "
-                    f"{format_billed_days(candidate.billed_days)}"
-                    f"/{candidate.days_in_month} Tage)"
+                proration_suffix = translate(
+                    invoice.language,
+                    "item.proration",
+                    days=format_billed_days(
+                        candidate.billed_days,
+                        invoice.locale,
+                    ),
+                    total=candidate.days_in_month,
                 )
 
             db.add(
@@ -1124,12 +1222,13 @@ def create_invoice_draft(
                         candidate.rebill_source_item_id
                     ),
                     position_number=position_number,
-                    description=(
-                        "Monatsgebühr Ladekarte "
-                        f"{card_label} - "
-                        f"{month_name} "
-                        f"{candidate.fee_month.year}"
-                        f"{proration_suffix}"
+                    description=translate(
+                        invoice.language,
+                        "item.monthlyFee",
+                        card=card_label,
+                        month=month_name,
+                        year=candidate.fee_month.year,
+                        proration=proration_suffix,
                     ),
                     session_start=None,
                     session_end=None,
@@ -1210,7 +1309,10 @@ def create_invoice_draft(
                         + len(charging_sessions)
                         + 1
                     ),
-                    description="Briefporto",
+                    description=translate(
+                        invoice.language,
+                        "item.postage",
+                    ),
                     session_start=None,
                     session_end=None,
                     station_id=None,
@@ -1271,18 +1373,17 @@ def finalize_invoice(
 
     if invoice is None:
         raise InvoiceNotFoundError(
-            f"Rechnung {invoice_id} wurde nicht gefunden."
+            f"Invoice {invoice_id} was not found."
         )
 
     if invoice.status != "draft":
         raise InvoiceAlreadyFinalizedError(
-            f"Rechnung {invoice_id} ist bereits finalisiert."
+            f"Invoice {invoice_id} is already finalized."
         )
 
     if not invoice.items:
         raise EmptyInvoiceError(
-            "Eine Rechnung ohne Positionen "
-            "kann nicht finalisiert werden."
+            "An invoice without line items cannot be finalized."
         )
 
     final_issue_date = (
@@ -1304,8 +1405,7 @@ def finalize_invoice(
 
     if payment_term_days < 0:
         raise InvalidDueDateError(
-            "Die konfigurierte Zahlungsfrist "
-            "darf nicht negativ sein."
+            "The configured payment term must not be negative."
         )
 
     final_due_date = (
@@ -1317,8 +1417,7 @@ def finalize_invoice(
 
     if final_due_date < final_issue_date:
         raise InvalidDueDateError(
-            "Das Zahlungsziel darf nicht vor "
-            "dem Rechnungsdatum liegen."
+            "The payment due date must not be before the invoice date."
         )
 
     invoice_number_prefix = (
@@ -1348,9 +1447,8 @@ def finalize_invoice(
 
                 if charging_session is None:
                     raise InvoiceItemStateError(
-                        "Der Ladeposition "
-                        f"{item.id} ist kein "
-                        "Ladevorgang zugeordnet."
+                        f"No charging session is assigned to charging line item {item.id}"
+                        "."
                     )
 
                 if (
@@ -1364,9 +1462,8 @@ def finalize_invoice(
                 ):
                     raise (
                         InvoiceSessionAlreadyInvoicedError(
-                            "Ladevorgang "
-                            f"{charging_session.id} "
-                            "wurde bereits fakturiert."
+                            f"Charging session {charging_session.id} has already been "
+                            "invoiced."
                         )
                     )
 
@@ -1383,9 +1480,7 @@ def finalize_invoice(
 
                 if base_fee_charge is None:
                     raise InvoiceItemStateError(
-                        "Der Grundgebührenposition "
-                        f"{item.id} ist keine "
-                        "Grundgebühr zugeordnet."
+                        f"No base fee is assigned to base fee line item {item.id}."
                     )
 
                 if (
@@ -1394,10 +1489,8 @@ def finalize_invoice(
                     != invoice.id
                 ):
                     raise InvoiceItemStateError(
-                        "Die Grundgebühr "
-                        f"{base_fee_charge.id} ist "
-                        "nicht mehr diesem "
-                        "Rechnungsentwurf zugeordnet."
+                        f"Base fee {base_fee_charge.id} is no longer assigned to this "
+                        "invoice draft."
                     )
 
                 base_fee_charge.invoiced = True
@@ -1410,173 +1503,14 @@ def finalize_invoice(
                 continue
 
             raise InvoiceItemStateError(
-                "Die Rechnungsposition "
-                f"{item.id} besitzt den unbekannten "
-                f"Typ {item.item_type!r}."
+                f"Invoice line item {item.id} has the unknown type {item.item_type!r}"
+                "."
             )
 
         db.commit()
         db.refresh(invoice)
 
         return invoice
-
-    except Exception:
-        db.rollback()
-        raise
-
-
-def create_cancellation_number(
-    db: Session,
-    *,
-    issue_date: date,
-) -> str:
-    prefix = f"ST-{issue_date.year}-"
-
-    last_number = db.scalar(
-        select(Invoice.invoice_number)
-        .where(
-            Invoice.document_type == "cancellation",
-            Invoice.invoice_number.is_not(None),
-            Invoice.invoice_number.like(
-                f"{prefix}%"
-            ),
-        )
-        .order_by(
-            Invoice.invoice_number.desc()
-        )
-        .limit(1)
-    )
-
-    sequence_number = 1
-
-    if last_number is not None:
-        try:
-            sequence_number = (
-                int(last_number.rsplit("-", 1)[1])
-                + 1
-            )
-        except (IndexError, ValueError) as exc:
-            raise InvoiceCancellationError(
-                "Die letzte Stornonummer besitzt "
-                "ein ungültiges Format."
-            ) from exc
-
-    return (
-        f"{prefix}"
-        f"{sequence_number:06d}"
-    )
-
-
-def finalize_cancellation(
-    db: Session,
-    *,
-    cancellation_id: int,
-    issue_date: date,
-) -> Invoice:
-    cancellation = db.scalar(
-        select(Invoice)
-        .options(
-            selectinload(Invoice.items),
-            selectinload(
-                Invoice.original_invoice
-            ),
-        )
-        .where(
-            Invoice.id == cancellation_id
-        )
-        .with_for_update()
-    )
-
-    if cancellation is None:
-        raise InvoiceCancellationNotFoundError(
-            f"Storno {cancellation_id} "
-            "wurde nicht gefunden."
-        )
-
-    if (
-        cancellation.document_type
-        != "cancellation"
-    ):
-        raise InvoiceCancellationStateError(
-            "Nur ein Stornodokument kann über "
-            "diese Funktion finalisiert werden."
-        )
-
-    if cancellation.status != "draft":
-        raise InvoiceCancellationStateError(
-            "Nur ein Storno-Entwurf kann "
-            "finalisiert werden."
-        )
-
-    original_invoice = (
-        cancellation.original_invoice
-    )
-
-    if original_invoice is None:
-        raise InvoiceCancellationStateError(
-            "Dem Storno ist keine "
-            "Originalrechnung zugeordnet."
-        )
-
-    if original_invoice.status != "finalized":
-        raise InvoiceCancellationStateError(
-            "Die Originalrechnung ist nicht "
-            "finalisiert."
-        )
-
-    if (
-        original_invoice.issue_date is not None
-        and issue_date
-        < original_invoice.issue_date
-    ):
-        raise InvoiceCancellationStateError(
-            "Das Stornodatum darf nicht vor "
-            "dem Rechnungsdatum liegen."
-        )
-
-    if not cancellation.items:
-        raise InvoiceCancellationStateError(
-            "Ein Storno ohne Positionen kann "
-            "nicht finalisiert werden."
-        )
-
-    timestamp = utc_now()
-
-    cancellation.invoice_number = (
-        create_cancellation_number(
-            db,
-            issue_date=issue_date,
-        )
-    )
-    cancellation.status = "finalized"
-    cancellation.issue_date = issue_date
-    cancellation.due_date = None
-    cancellation.finalized_at = timestamp
-    cancellation.cancelled_at = timestamp
-
-    try:
-        db.commit()
-
-        finalized_cancellation = db.scalar(
-            select(Invoice)
-            .options(
-                selectinload(Invoice.items),
-                selectinload(
-                    Invoice.original_invoice
-                ),
-            )
-            .where(
-                Invoice.id == cancellation.id
-            )
-        )
-
-        if finalized_cancellation is None:
-            raise InvoiceCancellationError(
-                "Das finalisierte Storno konnte "
-                "nicht geladen werden."
-            )
-
-        return finalized_cancellation
 
     except Exception:
         db.rollback()

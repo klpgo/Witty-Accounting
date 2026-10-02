@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 
@@ -50,3 +50,16 @@ class EnergyPriceRead(BaseModel):
     vat_rate: Decimal
     created_at: datetime
     updated_at: datetime
+
+
+class EnergyPriceUpdate(BaseModel):
+    """Ändern eines Tarifs: Gültigkeit ab einem Kalendertag (00:00 Uhr)."""
+    valid_from: date
+    grid_price_net: PriceDecimal
+    pv_price_net: PriceDecimal
+    vat_rate: VatDecimal
+
+
+class EnergyPriceEditableFrom(BaseModel):
+    # None, solange es keine Rechnung gibt (alle Zeitpunkte erlaubt)
+    editable_from: datetime | None

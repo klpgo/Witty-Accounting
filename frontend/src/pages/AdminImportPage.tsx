@@ -6,58 +6,103 @@ import {
 import { useNavigate } from 'react-router-dom'
 
 import {
+  getImportFileType,
   ImportApiError,
+  importFromHager,
+  type HagerImportRequest,
   type ImportResult,
-  uploadXlsx,
+  uploadImportFile,
 } from '../api/imports'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import type { I18nContextValue } from '../i18n/i18nContext'
+import { formatDate } from '../utils/dateFormat'
+import { formatNumber } from '../utils/numberFormat'
+import { useTranslation } from '../i18n/useTranslation'
 
 const MAX_UPLOAD_SIZE_BYTES =
   10 * 1024 * 1024
 
+type Translate = I18nContextValue['t']
+
+
 function validateFile(
   file: File,
+  t: Translate,
 ): string | null {
-  if (
-    !file.name
-      .toLowerCase()
-      .endsWith('.xlsx')
-  ) {
-    return (
-      'Bitte wähle eine Datei mit der ' +
-      'Endung .xlsx aus.'
-    )
+  if (getImportFileType(file.name) === null) {
+    return t('import.file.invalidType')
   }
 
   if (file.size === 0) {
-    return 'Die ausgewählte Datei ist leer.'
+    return t('import.file.empty')
   }
 
   if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-    return (
-      'Die XLSX-Datei ist zu groß. ' +
-      'Maximal erlaubt sind 10 MB.'
-    )
+    return t('import.file.tooLarge')
   }
 
   return null
 }
 
+
+
+
+interface RfidIssueGroup {
+  title: string
+  hint: string
+  numbers: string[]
+}
+
+function rfidIssueGroups(
+  result: ImportResult,
+  t: Translate,
+): RfidIssueGroup[] {
+  const hasDetails =
+    result.unknown_rfid_cards !== undefined ||
+    result.inactive_rfid_cards !== undefined ||
+    result.unassigned_rfid_numbers !== undefined
+
+  if (!hasDetails) {
+    return [
+      {
+        title: t('import.issue.none.title'),
+        hint: t('import.issue.none.hint'),
+        numbers: result.unknown_rfid_numbers,
+      },
+    ]
+  }
+
+  const groups: RfidIssueGroup[] = [
+    {
+      title: t('import.issue.noAssignment.title'),
+      hint: t('import.issue.noAssignment.hint'),
+      numbers: result.unassigned_rfid_numbers ?? [],
+    },
+    {
+      title: t('import.issue.inactive.title'),
+      hint: t('import.issue.inactive.hint'),
+      numbers: result.inactive_rfid_cards ?? [],
+    },
+    {
+      title: t('import.issue.unknown.title'),
+      hint: t('import.issue.unknown.hint'),
+      numbers: result.unknown_rfid_cards ?? [],
+    },
+  ]
+
+  return groups.filter((group) => group.numbers.length > 0)
+}
+
+
 function formatFileSize(
   sizeBytes: number,
 ): string {
-  const sizeMegabytes =
-    sizeBytes / 1024 / 1024
-
-  return (
-    sizeMegabytes
-      .toFixed(2)
-      .replace('.', ',') + ' MB'
-  )
+  return `${formatNumber(sizeBytes / 1024 / 1024, 2)} MB`
 }
 
 function AdminImportPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -81,6 +126,18 @@ function AdminImportPage() {
     setIsUploading,
   ] = useState(false)
 
+  const [
+    isFetchingHager,
+    setIsFetchingHager,
+  ] = useState(false)
+
+  const [hagerFrom, setHagerFrom] = useState('')
+  const [hagerTo, setHagerTo] = useState('')
+  const [hagerFetchAll, setHagerFetchAll] = useState(false)
+  const [resultFromHager, setResultFromHager] = useState(false)
+
+  const isBusy = isUploading || isFetchingHager
+
   function handleFileChange(
     event: ChangeEvent<HTMLInputElement>,
   ): void {
@@ -96,7 +153,7 @@ function AdminImportPage() {
     }
 
     const validationError =
-      validateFile(file)
+      validateFile(file, t)
 
     if (validationError !== null) {
       setSelectedFile(null)
@@ -119,13 +176,13 @@ function AdminImportPage() {
 
     if (selectedFile === null) {
       setErrorMessage(
-        'Bitte wähle zuerst eine XLSX-Datei aus.',
+        t('import.file.missing'),
       )
       return
     }
 
     const validationError =
-      validateFile(selectedFile)
+      validateFile(selectedFile, t)
 
     if (validationError !== null) {
       setErrorMessage(validationError)
@@ -147,12 +204,13 @@ function AdminImportPage() {
     setIsUploading(true)
 
     try {
-      const result = await uploadXlsx(
+      const result = await uploadImportFile(
         accessToken,
         selectedFile,
       )
 
       setImportResult(result)
+      setResultFromHager(false)
     } catch (error) {
       if (
         error instanceof ImportApiError &&
@@ -170,13 +228,85 @@ function AdminImportPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : (
-              'Die XLSX-Datei konnte nicht ' +
-              'importiert werden.'
-            ),
+          : t('import.file.failed'),
       )
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  async function handleHagerImport(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
+    event.preventDefault()
+
+    setErrorMessage(null)
+    setImportResult(null)
+
+    if (hagerFrom && hagerTo && hagerFrom > hagerTo) {
+      setErrorMessage(
+        t('import.hager.rangeInvalid'),
+      )
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+
+      navigate('/login', {
+        replace: true,
+      })
+
+      return
+    }
+
+    const payload: HagerImportRequest = {}
+
+    if (hagerFetchAll) {
+      payload.fetch_all = true
+    } else {
+      if (hagerFrom) {
+        payload.date_from = hagerFrom
+      }
+
+      if (hagerTo) {
+        payload.date_to = hagerTo
+      }
+    }
+
+    setIsFetchingHager(true)
+
+    try {
+      setImportResult(
+        await importFromHager(
+          accessToken,
+          payload,
+        ),
+      )
+      setResultFromHager(true)
+    } catch (error) {
+      if (
+        error instanceof ImportApiError &&
+        error.status === 401
+      ) {
+        signOut()
+
+        navigate('/login', {
+          replace: true,
+        })
+
+        return
+      }
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t('import.hager.failed'),
+      )
+    } finally {
+      setIsFetchingHager(false)
     }
   }
 
@@ -185,15 +315,13 @@ function AdminImportPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Administration
+            {t('common.administration')}
           </p>
 
-          <h1>XLSX-Import</h1>
+          <h1>{t('import.title')}</h1>
 
           <p className="muted">
-            Lade einen Hager-Export hoch, um
-            Ladevorgänge zu importieren und
-            automatisch zu bepreisen.
+            {t('import.intro')}
           </p>
         </div>
       </header>
@@ -209,28 +337,91 @@ function AdminImportPage() {
 
       <form
         className="card import-form"
+        onSubmit={handleHagerImport}
+      >
+        <div>
+          <h2>{t('import.hager.title')}</h2>
+
+          <p className="muted">
+            {t('import.hager.intro')}
+          </p>
+        </div>
+
+        <div className="form-grid">
+          <label className="form-field">
+            <span>{t('import.hager.from')}</span>
+            <input
+              type="date"
+              value={hagerFrom}
+              disabled={isBusy || hagerFetchAll}
+              onChange={(event) => {
+                setHagerFrom(event.target.value)
+              }}
+            />
+          </label>
+
+          <label className="form-field">
+            <span>{t('import.hager.to')}</span>
+            <input
+              type="date"
+              value={hagerTo}
+              disabled={isBusy || hagerFetchAll}
+              onChange={(event) => {
+                setHagerTo(event.target.value)
+              }}
+            />
+          </label>
+        </div>
+
+        <label className="settings-checkbox-control">
+          <input
+            type="checkbox"
+            checked={hagerFetchAll}
+            disabled={isBusy}
+            onChange={(event) => {
+              setHagerFetchAll(event.target.checked)
+            }}
+          />
+          {t('import.hager.all')}
+        </label>
+
+        <div className="form-actions">
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={isBusy}
+          >
+            {isFetchingHager
+              ? t('import.hager.submitting')
+              : t('import.hager.submit')}
+          </button>
+        </div>
+      </form>
+
+      <form
+        className="card import-form"
         onSubmit={handleSubmit}
       >
         <div>
-          <h2>Importdatei</h2>
+          <h2>{t('import.file.title')}</h2>
 
           <p className="muted">
-            Unterstützt werden ausschließlich
-            XLSX-Dateien bis maximal 10 MB.
+            {t('import.file.intro')}
           </p>
         </div>
 
         <label className="form-field">
-          <span>XLSX-Datei auswählen</span>
+          <span>{t('import.file.choose')}</span>
 
           <input
             type="file"
             accept={
-              '.xlsx,' +
+              '.xlsx,.json,' +
               'application/vnd.openxmlformats-' +
-              'officedocument.spreadsheetml.sheet'
+              'officedocument.spreadsheetml.sheet,' +
+              'application/json'
             }
-            disabled={isUploading}
+            disabled={isBusy}
             onChange={handleFileChange}
           />
         </label>
@@ -254,13 +445,13 @@ function AdminImportPage() {
             className="button button-primary"
             type="submit"
             disabled={
-              isUploading ||
+              isBusy ||
               selectedFile === null
             }
           >
             {isUploading
-              ? 'Datei wird importiert …'
-              : 'XLSX-Datei importieren'}
+              ? t('import.file.submitting')
+              : t('import.file.submit')}
           </button>
         </div>
       </form>
@@ -272,42 +463,42 @@ function AdminImportPage() {
         >
           <div className="import-result-header">
             <p className="eyebrow">
-              Import abgeschlossen
+              {t('import.result.eyebrow')}
             </p>
 
-            <h2>Importergebnis</h2>
+            <h2>{t('import.result.title')}</h2>
           </div>
 
           <dl className="import-result-grid">
             <div>
-              <dt>Gelesen</dt>
+              <dt>{t('import.result.read')}</dt>
               <dd>{importResult.read}</dd>
             </div>
 
             <div>
-              <dt>Neu importiert</dt>
+              <dt>{t('import.result.imported')}</dt>
               <dd>{importResult.imported}</dd>
             </div>
 
             <div>
-              <dt>Übersprungen</dt>
+              <dt>{t('import.result.skipped')}</dt>
               <dd>{importResult.skipped}</dd>
             </div>
 
             <div>
-              <dt>Bepreist</dt>
+              <dt>{t('import.result.priced')}</dt>
               <dd>{importResult.priced}</dd>
             </div>
 
             <div>
-              <dt>Ohne Preis</dt>
+              <dt>{t('import.result.missingPrice')}</dt>
               <dd>
                 {importResult.missing_price}
               </dd>
             </div>
 
             <div>
-              <dt>Ungültige Energie</dt>
+              <dt>{t('import.result.invalidEnergy')}</dt>
               <dd>
                 {importResult.invalid_energy}
               </dd>
@@ -315,7 +506,7 @@ function AdminImportPage() {
 
             <div>
               <dt>
-                Unbekannte RFID-Sitzungen
+                {t('import.result.unassigned')}
               </dt>
               <dd>
                 {
@@ -326,29 +517,80 @@ function AdminImportPage() {
             </div>
           </dl>
 
+          {resultFromHager && (
+            <p className="muted">
+              {importResult.fetched_from
+                ? t('import.result.fetchedFrom', {
+                    date: formatDate(importResult.fetched_from),
+                  })
+                : t('import.result.fetchedAll')}
+            </p>
+          )}
+
+          {((importResult.skipped_before_billing_start ?? 0) > 0 ||
+            (importResult.skipped_empty ?? 0) > 0) && (
+            <p className="muted">
+              {t('import.result.notTaken', {
+                items: [
+                  (importResult.skipped_before_billing_start ?? 0) > 0
+                    ? t('import.result.beforeBillingStart', {
+                        count: importResult.skipped_before_billing_start ?? 0,
+                      })
+                    : null,
+                  (importResult.skipped_empty ?? 0) > 0
+                    ? t('import.result.withoutEnergy', {
+                        count: importResult.skipped_empty ?? 0,
+                      })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+              })}
+            </p>
+          )}
+
+          {(importResult.reassigned_sessions ?? 0) > 0 && (
+            <p className="form-success" role="status">
+              {t('import.result.reassigned', {
+                count: importResult.reassigned_sessions ?? 0,
+              })}
+            </p>
+          )}
+
           {importResult
             .unknown_rfid_numbers
             .length > 0 && (
             <div className="import-warning">
               <h3>
-                Unbekannte RFID-Nummern
+                {t('import.result.unassignedTitle')}
               </h3>
 
               <p>
-                Für folgende RFID-Nummern
-                konnte keine Karte zugeordnet
-                werden:
+                {t('import.result.unassignedText', {
+                  count: importResult.unknown_rfid_sessions,
+                })}{' '}
+                {t('import.result.unassignedHint')}
               </p>
 
-              <ul>
-                {importResult
-                  .unknown_rfid_numbers
-                  .map((rfidNumber) => (
-                    <li key={rfidNumber}>
-                      {rfidNumber}
-                    </li>
-                  ))}
-              </ul>
+              {rfidIssueGroups(importResult, t).map(
+                (group) => (
+                  <div key={group.title}>
+                    <h4>{group.title}</h4>
+                    <p className="muted">
+                      {group.hint}
+                    </p>
+                    <ul>
+                      {group.numbers.map(
+                        (rfidNumber) => (
+                          <li key={rfidNumber}>
+                            {rfidNumber}
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </div>
+                ),
+              )}
             </div>
           )}
         </section>

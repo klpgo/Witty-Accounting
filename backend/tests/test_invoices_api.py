@@ -404,9 +404,8 @@ def test_draft_reports_missing_historical_tariff(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Kein gültiger Tarif für "
-            f"Ladevorgang {charging_session.id} "
-            "vom 17.06.2026."
+            f"No valid tariff for charging session {charging_session.id} "
+            "on 17.06.2026."
         )
     }
     assert database_session.scalar(
@@ -441,8 +440,7 @@ def test_create_draft_rejects_missing_recipient_address(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Für den Rechnungsempfänger "
-            "ist keine Anschrift hinterlegt."
+            "No address is stored for the invoice recipient."
         ),
     }
 
@@ -995,7 +993,7 @@ def test_rejects_second_cancellation_draft(
     )
 
     assert second_response.status_code == 409
-    assert "existiert bereits" in (
+    assert "already exists" in (
         second_response.json()["detail"]
     )
 
@@ -1036,7 +1034,7 @@ def test_rejects_cancellation_of_draft_invoice(
     )
 
     assert response.status_code == 409
-    assert "Nur eine finalisierte Rechnung" in (
+    assert "Only a finalized invoice" in (
         response.json()["detail"]
     )
 
@@ -1051,7 +1049,7 @@ def test_rejects_cancellation_for_missing_invoice(
     )
 
     assert response.status_code == 404
-    assert "wurde nicht gefunden" in (
+    assert "was not found" in (
         response.json()["detail"]
     )
 
@@ -1612,8 +1610,7 @@ def test_rejects_deleting_finalized_invoice(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Nur ein Entwurf kann gelöscht "
-            "werden."
+            "Only a draft can be deleted."
         ),
     }
 
@@ -1688,12 +1685,12 @@ def test_sends_invoice_email(
     [
         (
             InvoiceEmailNotFoundError,
-            "Rechnung wurde nicht gefunden.",
+            "Invoice was not found.",
             404,
         ),
         (
             InvoiceEmailStateError,
-            "Die Rechnung ist nicht finalisiert.",
+            "The invoice is not finalized.",
             409,
         ),
         (
@@ -1744,3 +1741,234 @@ def test_maps_invoice_email_errors(
     assert response.json() == {
         "detail": message,
     }
+
+
+def test_lists_invoices_newest_first(
+    client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+
+    def create_draft(suffix: str) -> int:
+        user, _ = create_billable_session(
+            database_session,
+            suffix=suffix,
+        )
+        response = client.post(
+            "/api/invoices/drafts",
+            json={
+                "user_id": user.id,
+                "service_period_start": "2026-06-01T00:00:00",
+                "service_period_end": "2026-07-01T00:00:00",
+            },
+        )
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def finalize(invoice_id: int, issue_date: str) -> None:
+        response = client.post(
+            f"/api/invoices/{invoice_id}/finalize",
+            json={
+                "issue_date": issue_date,
+                "due_date": "2026-08-31",
+            },
+        )
+        assert response.status_code == 200
+
+    # zuerst angelegt, aber jüngeres Rechnungsdatum
+    later_dated = create_draft("-later")
+    finalize(later_dated, "2026-07-20")
+
+    earlier_dated = create_draft("-earlier")
+    finalize(earlier_dated, "2026-07-05")
+
+    draft = create_draft("-draft")
+
+    response = client.get("/api/invoices")
+
+    assert response.status_code == 200
+    assert [invoice["id"] for invoice in response.json()] == [
+        draft,
+        later_dated,
+        earlier_dated,
+    ]
+
+
+def test_failed_pdf_archiving_is_logged_and_can_be_retried(
+    client: TestClient,
+    database_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.api.routes import invoices as invoice_routes
+    from app.services.invoice_archive import InvoiceArchiveError
+
+    monkeypatch.setattr(
+        settings,
+        "invoice_pdf_archive_dir",
+        tmp_path,
+    )
+
+    user, _ = create_billable_session(database_session)
+    draft_response = client.post(
+        "/api/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": "2026-06-01T00:00:00",
+            "service_period_end": "2026-07-01T00:00:00",
+        },
+    )
+    invoice_id = draft_response.json()["id"]
+
+    real_archive = invoice_routes.archive_invoice_pdf
+
+    def failing_archive(db, invoice_id):
+        raise InvoiceArchiveError(
+            "A different file already exists at the intended archive "
+            "path."
+        )
+
+    monkeypatch.setattr(invoice_routes, "archive_invoice_pdf", failing_archive)
+
+    with caplog.at_level("ERROR", logger="app.api.routes.invoices"):
+        finalize_response = client.post(
+            f"/api/invoices/{invoice_id}/finalize",
+            json={"issue_date": "2026-07-05", "due_date": "2026-07-19"},
+        )
+
+    assert finalize_response.status_code == 500
+    assert "different file already exists" in finalize_response.json()["detail"]
+    assert any(
+        "PDF archiving failed" in record.getMessage()
+        and "different file already exists" in record.getMessage()
+        for record in caplog.records
+    )
+
+    invoice = client.get(f"/api/invoices/{invoice_id}").json()
+    assert invoice["status"] == "finalized"
+    assert invoice["pdf_storage_path"] is None
+
+    # Ursache behoben -> PDF nachträglich erzeugen
+    monkeypatch.setattr(invoice_routes, "archive_invoice_pdf", real_archive)
+
+    archive_response = client.post(f"/api/invoices/{invoice_id}/archive")
+
+    assert archive_response.status_code == 200
+    assert archive_response.json()["pdf_storage_path"] is not None
+    assert (tmp_path / archive_response.json()["pdf_storage_path"]).is_file()
+
+
+def test_discarded_session_is_not_invoiced(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.services.charging_session_discard import discard_sessions
+
+    user, charging_session = create_billable_session(database_session)
+    discard_sessions(database_session, [charging_session.id], user_id=None)
+
+    response = client.post(
+        "/api/invoices/drafts",
+        json={
+            "user_id": user.id,
+            "service_period_start": "2026-06-01T00:00:00",
+            "service_period_end": "2026-07-01T00:00:00",
+        },
+    )
+
+    if response.status_code == 201:
+        assert all(
+            item["charging_session_id"] != charging_session.id
+            for item in response.json()["items"]
+        )
+    else:
+        # ohne den verworfenen Vorgang gibt es nichts abzurechnen
+        assert response.status_code in (400, 409, 422)
+
+
+# --------------------------------------------------------------------------
+# Sprache der Rechnung
+# --------------------------------------------------------------------------
+def create_draft_for(client: TestClient, user_id: int) -> dict:
+    response = client.post(
+        "/api/invoices/drafts",
+        json={
+            "user_id": user_id,
+            "service_period_start": "2026-06-01T00:00:00",
+            "service_period_end": "2026-07-01T00:00:00",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_draft_without_language_is_german(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.models.invoice import Invoice
+
+    user, _ = create_billable_session(database_session)
+
+    draft = create_draft_for(client, user.id)
+
+    assert draft["items"][0]["description"].startswith("Ladevorgang ")
+    assert " an " in draft["items"][0]["description"]
+    assert database_session.get(Invoice, draft["id"]).language == "de"
+
+
+def test_draft_uses_recipient_language(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.models.invoice import Invoice
+
+    user, _ = create_billable_session(database_session)
+    user.language = "en"
+    database_session.commit()
+
+    draft = create_draft_for(client, user.id)
+
+    assert draft["items"][0]["description"].startswith("Charging session ")
+    assert " at " in draft["items"][0]["description"]
+    assert database_session.get(Invoice, draft["id"]).language == "en"
+
+
+def test_cancellation_keeps_language_of_original(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    from app.models.invoice import Invoice
+
+    user, _ = create_billable_session(database_session)
+    user.language = "en"
+    database_session.commit()
+
+    draft = create_draft_for(client, user.id)
+    assert client.post(
+        f"/api/invoices/{draft['id']}/finalize",
+        json={"issue_date": "2026-07-05"},
+    ).status_code == 200
+
+    # die Sprache des Benutzers ändert sich später – das Storno bleibt englisch
+    user.language = "de"
+    database_session.commit()
+
+    response = client.post(
+        f"/api/invoices/{draft['id']}/cancellations",
+        json={"reason": "Fehlerhafte Abrechnung"},
+    )
+
+    assert response.status_code == 201
+    cancellation = response.json()
+    assert cancellation["items"][0]["description"].startswith(
+        "Cancellation of Charging session "
+    )
+    assert database_session.get(Invoice, cancellation["id"]).language == "en"

@@ -1,3 +1,4 @@
+from typing import Literal
 from datetime import datetime
 
 from pydantic import (
@@ -6,6 +7,9 @@ from pydantic import (
     Field,
     field_validator,
 )
+
+
+UserLanguage = Literal["de", "en"]
 
 
 class UserResponse(BaseModel):
@@ -23,6 +27,7 @@ class UserResponse(BaseModel):
     invoice_delivery_post: bool
     active: bool
     is_admin: bool
+    language: str | None = None
     last_login: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -54,6 +59,8 @@ class UserProfileUpdate(BaseModel):
     )
     invoice_delivery_email: bool | None = None
     invoice_delivery_post: bool | None = None
+    # null = Standardsprache des Mandanten
+    language: UserLanguage | None = None
 
     @field_validator(
         "first_name",
@@ -66,14 +73,14 @@ class UserProfileUpdate(BaseModel):
     ) -> str:
         if value is None:
             raise ValueError(
-                "Der Wert darf nicht leer sein."
+                "The value must not be empty."
             )
 
         normalized = value.strip()
 
         if not normalized:
             raise ValueError(
-                "Der Wert darf nicht leer sein."
+                "The value must not be empty."
             )
 
         return normalized
@@ -86,8 +93,7 @@ class UserProfileUpdate(BaseModel):
     ) -> str:
         if value is None:
             raise ValueError(
-                "Die E-Mail-Adresse darf nicht "
-                "leer sein."
+                "The email address must not be empty."
             )
 
         normalized = value.strip().lower()
@@ -99,7 +105,7 @@ class UserProfileUpdate(BaseModel):
             or normalized.endswith("@")
         ):
             raise ValueError(
-                "Die E-Mail-Adresse ist ungültig."
+                "The email address is invalid."
             )
 
         return normalized
@@ -131,7 +137,7 @@ class UserProfileUpdate(BaseModel):
     ) -> bool:
         if value is None:
             raise ValueError(
-                "Der Wert darf nicht leer sein."
+                "The value must not be empty."
             )
 
         return value
@@ -166,7 +172,7 @@ class UserAdminUpdate(UserProfileUpdate):
     ) -> bool:
         if value is None:
             raise ValueError(
-                "Der Wert darf nicht leer sein."
+                "The value must not be empty."
             )
 
         return value

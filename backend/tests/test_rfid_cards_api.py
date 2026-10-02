@@ -150,6 +150,7 @@ def create_charging_session(
     assignment: RFIDCardAssignment,
     start_time: datetime,
     import_hash: str,
+    invoiced: bool = False,
 ) -> ChargingSession:
     session = ChargingSession(
         hager_session_id=None,
@@ -162,6 +163,7 @@ def create_charging_session(
         energy_pv_kwh=4.0,
         import_hash=import_hash,
         source="xlsx",
+        invoiced=invoiced,
     )
 
     db.add(session)
@@ -333,8 +335,7 @@ def test_assignment_history_returns_not_found(
     assert response.status_code == 404
     assert response.json() == {
         "detail": (
-            "RFID-Karte 999999 wurde nicht "
-            "gefunden."
+            "RFID card 999999 was not found."
         ),
     }
 
@@ -428,8 +429,7 @@ def test_create_rfid_card_rejects_duplicate_number(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Diese RFID-Nummer wird "
-            "bereits verwendet."
+            "This RFID number is already in use."
         ),
     }
 
@@ -570,8 +570,7 @@ def test_update_rfid_card_returns_not_found(
     assert response.status_code == 404
     assert response.json() == {
         "detail": (
-            "RFID-Karte 999999 wurde nicht "
-            "gefunden."
+            "RFID card 999999 was not found."
         ),
     }
 
@@ -704,10 +703,8 @@ def test_create_assignment_rejects_overlap(
     assert response.status_code == 409
     assert response.json() == {
         "detail": (
-            "Der Zuordnungszeitraum "
-            "überschneidet sich mit einer "
-            "bestehenden Zuordnung dieser "
-            "RFID-Karte."
+            "The assignment period overlaps with an existing assignment "
+            "of this RFID card."
         ),
     }
 
@@ -984,8 +981,7 @@ def test_update_assignment_returns_404(
     assert (
         response.json()["detail"]
         == (
-            "RFID-Zuordnung 999999 "
-            "wurde nicht gefunden."
+            "RFID assignment 999999 was not found."
         )
     )
 
@@ -1026,7 +1022,7 @@ def test_update_assignment_returns_404_for_unknown_user(
     assert response.status_code == 404
     assert (
         response.json()["detail"]
-        == "Benutzer 999999 wurde nicht gefunden."
+        == "User 999999 was not found."
     )
 
 
@@ -1071,7 +1067,7 @@ def test_update_assignment_rejects_overlap(
     )
 
     assert response.status_code == 409
-    assert "überschneidet sich" in (
+    assert "overlaps" in (
         response.json()["detail"]
     )
 
@@ -1114,8 +1110,7 @@ def test_update_assignment_rejects_invalid_period(
     assert (
         response.json()["detail"]
         == (
-            "Das Ende der Zuordnung muss "
-            "nach ihrem Beginn liegen."
+            "The end of the assignment must be after its start."
         )
     )
 
@@ -1166,13 +1161,13 @@ def test_used_assignment_rejects_user_change(
     )
 
     assert response.status_code == 409
-    assert "Benutzer" in response.json()["detail"]
-    assert "nicht geändert" in (
+    assert "user" in response.json()["detail"]
+    assert "cannot be changed" in (
         response.json()["detail"]
     )
 
 
-def test_used_assignment_rejects_start_change(
+def test_billed_assignment_rejects_start_change(
     client: TestClient,
     database_session: Session,
 ) -> None:
@@ -1199,6 +1194,7 @@ def test_used_assignment_rejects_start_change(
         assignment=assignment,
         start_time=datetime(2026, 6, 15, 10, 0),
         import_hash="b" * 64,
+        invoiced=True,
     )
 
     response = client.patch(
@@ -1213,8 +1209,8 @@ def test_used_assignment_rejects_start_change(
     )
 
     assert response.status_code == 409
-    assert "Beginn" in response.json()["detail"]
-    assert "nicht geändert" in (
+    assert "start" in response.json()["detail"]
+    assert "cannot be changed" in (
         response.json()["detail"]
     )
 
@@ -1269,7 +1265,7 @@ def test_used_assignment_rejects_end_excluding_session(
     )
 
     assert response.status_code == 409
-    assert "Ladevorgänge" in (
+    assert "charging sessions" in (
         response.json()["detail"]
     )
 
@@ -1328,3 +1324,92 @@ def test_used_assignment_allows_safe_end_change(
         6,
         16,
     )
+
+
+def test_admin_lists_rfid_cards_sorted_by_description(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+
+    for rfid_number, description in [
+        ("AAA001", None),
+        ("BBB002", "Karte 10"),
+        ("CCC003", "Wartung"),
+        ("DDD004", "Karte 2"),
+        ("EEE005", "karte 1"),
+    ]:
+        card = create_card(
+            database_session,
+            user=admin,
+            rfid_number=rfid_number,
+        )
+        card.description = description
+        database_session.commit()
+
+    response = client.get(
+        "/api/rfid-cards",
+        headers=authorization_header(admin),
+    )
+
+    assert response.status_code == 200
+    # natürliche Sortierung, ohne Beschreibung zuletzt
+    assert [card["description"] for card in response.json()] == [
+        "karte 1",
+        "Karte 2",
+        "Karte 10",
+        "Wartung",
+        None,
+    ]
+
+
+
+def test_unbilled_assignment_allows_earlier_start(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin = create_user(
+        database_session,
+        email="start-admin@example.com",
+        first_name="Admin",
+        is_admin=True,
+    )
+    card = create_card(database_session, user=admin, rfid_number="START1")
+    assignment = create_assignment(
+        database_session,
+        card=card,
+        user=admin,
+        valid_from=datetime(2026, 6, 1, 14, 18),
+    )
+    create_charging_session(
+        database_session,
+        card=card,
+        assignment=assignment,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        import_hash="s" * 64,
+    )
+
+    # Ladevorgang zugeordnet, aber nicht abgerechnet: Beginn auf 00:00
+    response = client.patch(
+        f"/api/rfid-card-assignments/{assignment.id}",
+        headers=authorization_header(admin),
+        json={"valid_from": "2026-06-01T00:00:00"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["valid_from"] == "2026-06-01T00:00:00"
+
+    # nach dem Ladevorgang beginnen ist weiterhin nicht erlaubt
+    response = client.patch(
+        f"/api/rfid-card-assignments/{assignment.id}",
+        headers=authorization_header(admin),
+        json={"valid_from": "2026-07-01T00:00:00"},
+    )
+
+    assert response.status_code == 409
+    assert "charging sessions" in response.json()["detail"]

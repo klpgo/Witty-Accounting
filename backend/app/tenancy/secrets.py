@@ -23,8 +23,7 @@ def get_fernet(
 ) -> Fernet:
     if encryption_key is None:
         raise TenantSecretConfigurationError(
-            "TENANT_DB_ENCRYPTION_KEY ist nicht "
-            "konfiguriert."
+            "TENANT_DB_ENCRYPTION_KEY is not configured."
         )
 
     try:
@@ -35,8 +34,7 @@ def get_fernet(
         )
     except (TypeError, ValueError) as exc:
         raise TenantSecretConfigurationError(
-            "TENANT_DB_ENCRYPTION_KEY ist "
-            "ungültig."
+            "TENANT_DB_ENCRYPTION_KEY is invalid."
         ) from exc
 
 
@@ -47,8 +45,7 @@ def encrypt_tenant_db_password(
 ) -> str:
     if not password:
         raise TenantSecretError(
-            "Ein leeres Mandanten-DB-Passwort kann "
-            "nicht verschlüsselt werden."
+            "An empty tenant database password cannot be encrypted."
         )
 
     return (
@@ -75,8 +72,7 @@ def decrypt_tenant_db_password(
         ValueError,
     ) as exc:
         raise TenantSecretDecryptionError(
-            "Das Mandanten-DB-Passwort konnte "
-            "nicht entschlüsselt werden."
+            "The tenant database password could not be decrypted."
         ) from exc
 
     return decrypted.decode("utf-8")

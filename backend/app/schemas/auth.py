@@ -24,6 +24,7 @@ class AuthenticatedUserResponse(BaseModel):
     last_name: str
     is_admin: bool
     active: bool
+    language: str | None = None
 
 
 class PasswordResetRequest(BaseModel):
@@ -50,7 +51,7 @@ class PasswordResetRequest(BaseModel):
             or normalized.endswith("@")
         ):
             raise ValueError(
-                "Die E-Mail-Adresse ist ungültig."
+                "The email address is invalid."
             )
 
         return normalized

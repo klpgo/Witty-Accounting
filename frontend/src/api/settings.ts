@@ -5,6 +5,10 @@ const API_BASE_URL =
 export interface PublicSettings {
   app_name: string
   tenant_name: string
+  timezone?: string
+  locale?: string
+  currency?: string
+  default_language?: string
 }
 
 export interface GlobalSettings {
@@ -34,6 +38,9 @@ export interface GlobalSettings {
   password_require_special: boolean
   frontend_base_url: string
   password_reset_token_expire_minutes: number
+  locale: string
+  currency: string
+  default_language: string
 }
 
 export interface GlobalSettingsUpdate {
@@ -63,6 +70,9 @@ export interface GlobalSettingsUpdate {
   password_require_special?: boolean
   frontend_base_url?: string
   password_reset_token_expire_minutes?: number
+  locale?: string
+  currency?: string
+  default_language?: string
 }
 
 export interface SmtpSettings {
@@ -133,6 +143,43 @@ export interface InvoiceExportTestResponse {
   directory: string
 }
 
+export type HagerAutoImportStatus = 'running' | 'success' | 'error'
+
+export interface HagerSettings {
+  username: string | null
+  installation_id: string | null
+  serial_number: string | null
+  password_configured: boolean
+  skip_empty_sessions: boolean
+  auto_import_enabled: boolean
+  auto_import_interval_hours: number
+  auto_import_start_time: string
+  auto_import_next_run_at: string | null
+  auto_import_last_started_at: string | null
+  auto_import_last_finished_at: string | null
+  auto_import_last_status: HagerAutoImportStatus | null
+  auto_import_last_message: string | null
+  last_successful_fetch_at: string | null
+}
+
+export interface HagerConnectionTestResponse {
+  // null: die Quelle nennt keine Gesamtzahl
+  sessions: number | null
+  latest_session_start: string | null
+}
+
+export interface HagerSettingsUpdate {
+  username?: string
+  installation_id?: string
+  serial_number?: string
+  skip_empty_sessions?: boolean
+  password?: string
+  clear_password?: boolean
+  auto_import_enabled?: boolean
+  auto_import_interval_hours?: number
+  auto_import_start_time?: string
+}
+
 export interface EnergyPrice {
   id: number
   valid_from: string
@@ -197,7 +244,7 @@ async function getErrorMessage(
     // Die Antwort enthielt kein JSON.
   }
 
-  return `Anfrage fehlgeschlagen (${response.status}).`
+  return `Request failed (${response.status}).`
 }
 
 function createHeaders(
@@ -507,4 +554,197 @@ export async function updateCurrentEnergyPrice(
   return (
     await response.json()
   ) as EnergyPrice
+}
+
+export interface EnergyPriceInput {
+  // Kalendertag JJJJ-MM-TT; der Tarif gilt ab 00:00 Uhr
+  valid_from: string
+  grid_price_net: string
+  pv_price_net: string
+  vat_rate: string
+}
+
+async function readEnergyResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as T
+}
+
+export async function listEnergyPrices(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<EnergyPrice[]> {
+  return readEnergyResponse<EnergyPrice[]>(
+    await fetch(`${API_BASE_URL}/energy-prices`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+}
+
+// Frühester Zeitpunkt, ab dem Tarife angelegt oder geändert werden dürfen
+// (Ende des spätesten abgerechneten Zeitraums); null ohne Rechnungen
+export async function getEnergyPriceEditableFrom(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const result = await readEnergyResponse<{ editable_from: string | null }>(
+    await fetch(`${API_BASE_URL}/energy-prices/editable-from`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+
+  return result.editable_from
+}
+
+export async function createEnergyPrice(
+  accessToken: string,
+  payload: EnergyPriceInput,
+): Promise<EnergyPrice> {
+  return readEnergyResponse<EnergyPrice>(
+    await fetch(`${API_BASE_URL}/energy-prices`, {
+      method: 'POST',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify({
+        ...payload,
+        valid_from: `${payload.valid_from}T00:00:00`,
+      }),
+    }),
+  )
+}
+
+export async function updateEnergyPrice(
+  accessToken: string,
+  priceId: number,
+  payload: EnergyPriceInput,
+): Promise<EnergyPrice> {
+  return readEnergyResponse<EnergyPrice>(
+    await fetch(`${API_BASE_URL}/energy-prices/${priceId}`, {
+      method: 'PUT',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    }),
+  )
+}
+
+export interface Wallbox {
+  id: number
+  wallbox_id: string
+  hager_name: string | null
+  custom_name: string | null
+  // eigener Name, sonst Name aus der Hager Cloud, sonst "ID: ..XXXXX"
+  display_name: string
+  session_count: number
+  last_session_at: string | null
+}
+
+export interface WallboxUpdateResult extends Wallbox {
+  updated_sessions: number
+}
+
+export async function listWallboxes(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<Wallbox[]> {
+  return readEnergyResponse<Wallbox[]>(
+    await fetch(`${API_BASE_URL}/wallboxes`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+}
+
+export async function updateWallboxName(
+  accessToken: string,
+  wallboxPk: number,
+  customName: string,
+): Promise<WallboxUpdateResult> {
+  return readEnergyResponse<WallboxUpdateResult>(
+    await fetch(`${API_BASE_URL}/wallboxes/${wallboxPk}`, {
+      method: 'PATCH',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify({ custom_name: customName.trim() || null }),
+    }),
+  )
+}
+
+export async function getHagerSettings(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<HagerSettings> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/hager`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as HagerSettings
+}
+
+export async function updateHagerSettings(
+  accessToken: string,
+  payload: HagerSettingsUpdate,
+): Promise<HagerSettings> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/hager`,
+    {
+      method: 'PATCH',
+      headers: createHeaders(
+        accessToken,
+        true,
+      ),
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as HagerSettings
+}
+
+export async function testHagerSettings(
+  accessToken: string,
+): Promise<HagerConnectionTestResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/settings/hager/test`,
+    {
+      method: 'POST',
+      headers: createHeaders(accessToken),
+    },
+  )
+
+  if (!response.ok) {
+    throw new SettingsApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (
+    await response.json()
+  ) as HagerConnectionTestResponse
 }

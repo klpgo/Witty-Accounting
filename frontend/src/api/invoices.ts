@@ -102,7 +102,7 @@ async function getErrorMessage(
     // Die Antwort enthielt kein JSON.
   }
 
-  return `Anfrage fehlgeschlagen (${response.status}).`
+  return `Request failed (${response.status}).`
 }
 
 export async function listInvoices(
@@ -141,6 +141,32 @@ export async function getInvoice(
         Authorization: `Bearer ${accessToken}`,
       },
       signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as Invoice
+}
+
+// Erzeugt und archiviert das PDF einer finalisierten Rechnung erneut,
+// z. B. wenn die Archivierung beim Finalisieren fehlgeschlagen ist
+export async function archiveInvoicePdf(
+  accessToken: string,
+  invoiceId: number,
+): Promise<Invoice> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/archive`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
   )
 
