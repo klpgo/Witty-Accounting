@@ -1,6 +1,6 @@
 # Release notes
 
-## 2.0.0
+## 2.0.0 2026-10-02
 
 Witty-Accounting 2.0.0 brings automatic synchronization with the Hager Cloud,
 a fully bilingual application (German and English), invoices in the
