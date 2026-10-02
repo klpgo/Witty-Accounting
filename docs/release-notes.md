@@ -1,5 +1,14 @@
 # Release notes
 
+## 2.0.1 2026-10-02
+
+### Fixes
+
+- When finalizing an invoice, the due date was preset to 14 days instead of
+  the payment term configured in the settings. The form now uses the
+  configured payment term and follows changes of the invoice date; only a
+  manually changed due date is sent.
+
 ## 2.0.0 2026-10-02
 
 Witty-Accounting 2.0.0 brings automatic synchronization with the Hager Cloud,
