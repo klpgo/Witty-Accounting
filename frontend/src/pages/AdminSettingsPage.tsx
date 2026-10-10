@@ -23,6 +23,7 @@ import AdminInvoiceExportSettingsForm from './AdminInvoiceExportSettingsForm'
 import AdminHagerSettingsForm from './AdminHagerSettingsForm'
 import AdminWallboxesForm from './AdminWallboxesForm'
 import AdminRetentionForm from './AdminRetentionForm'
+import AdminAutoBillingForm from './AdminAutoBillingForm'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
@@ -1074,6 +1075,9 @@ function AdminSettingsPage() {
 
       {!isLoading && (
         <AdminWallboxesForm />
+      )}
+      {!isLoading && (
+        <AdminAutoBillingForm />
       )}
       {!isLoading && (
         <AdminInvoiceExportSettingsForm />

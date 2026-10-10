@@ -63,6 +63,77 @@ MESSAGES: dict[str, str] = {
     "pdf.closing.invoice": "Thank you. Please keep this invoice for your records.",
     "pdf.closing.cancellation": "Please keep this cancellation document together with the original invoice.",
 
+    "pdf.title.invoiceDraft": "Charging invoice – draft",
+    "pdf.draftWatermark": "DRAFT",
+    "pdf.draftPending": "to follow",
+    "pdf.footer.draft": "Invoice draft for review – not a valid invoice for tax purposes",
+    "pdf.payment.draft": (
+        "Payment term: {days} days from the invoice date. Please do not pay "
+        "yet – the binding invoice will follow."
+    ),
+    "pdf.payment.draftImmediately": (
+        "Payable immediately from the invoice date. Please do not pay yet – "
+        "the binding invoice will follow."
+    ),
+    "pdf.closing.draft": (
+        "Please review this draft. The invoice number and invoice date are "
+        "assigned when the invoice is finalized."
+    ),
+
+    "email.review.subject": "Invoice draft for review – service period {period}",
+    "email.review.intro": (
+        "we have prepared a draft of your charging invoice for the service "
+        "period {period} amounting to {amount}. Please review it after "
+        "signing in to the portal:"
+    ),
+    "email.review.deadline": (
+        "Unless we hear from you, the invoice will be issued on {date} and "
+        "sent to you. If you have questions or objections before then, "
+        "choose “Question about the invoice draft” on the draft."
+    ),
+
+    "billing.waiting.subject": "Automatic billing is waiting for charging data ({period})",
+    "billing.waiting.body": (
+        "the invoice drafts for the service period {period} have not been "
+        "created yet because the charging sessions have not been fetched from "
+        "the Hager Cloud up to the end of the period (last successful fetch: "
+        "{last_fetch}).\n\nPlease check the automatic fetch. The drafts will "
+        "be created as soon as a fetch has succeeded."
+    ),
+    "billing.never": "never",
+    "billing.drafts.subject": "Automatic billing: invoice drafts for {period}",
+    "billing.drafts.body": (
+        "{count} invoice drafts were created for the service period {period} "
+        "and sent to the customers for review. Unless a customer raises a "
+        "question, they will be finalized and delivered on {date}."
+    ),
+    "billing.drafts.none": (
+        "no invoice drafts were created for the service period {period}."
+    ),
+    "billing.section.skipped": "Not billed:",
+    "billing.section.notifyFailed": (
+        "The review email could not be sent (further attempts will follow; "
+        "drafts are not finalized automatically without a delivered review "
+        "email):"
+    ),
+    "billing.reason.existingDraft": "draft #{id} already exists for this period",
+    "billing.finalized.subject": "Automatic billing: {count} invoice(s) finalized",
+    "billing.finalized.body": (
+        "the following invoice drafts were finalized after the review period:"
+    ),
+    "billing.section.sent": "Delivered by email:",
+    "billing.section.postal": "Please send by post:",
+    "billing.section.failed": "Errors (please check in the portal):",
+    "billing.inquiry.subject": "Invoice draft put on hold – {name}",
+    "billing.inquiry.body": (
+        "{name} ({email}) has raised a question about invoice draft #{id} "
+        "(service period {period}, {amount}). The draft has been put on hold "
+        "and will not be finalized automatically.\n\nThe customer was asked "
+        "to contact {contact} by email. Once resolved, please finalize the "
+        "draft in the portal, or delete and recreate it:"
+    ),
+    "billing.link": "Open in the portal:",
+
     "email.subject.invoice": "Invoice {number}",
     "email.subject.cancellation": "Cancellation invoice {number}",
     "email.greeting": "Hello,",

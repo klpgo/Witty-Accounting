@@ -107,6 +107,10 @@ function InvoiceDraftCreatePage() {
     setServicePeriodEnd,
   ] = useState(getDefaultPeriodEnd)
 
+  // Grundgebühr anteilig für die Tage im Zeitraum (z. B. für eine Woche)
+  const [prorateBaseFee, setProrateBaseFee] =
+    useState(false)
+
   const [isLoadingUsers, setIsLoadingUsers] =
     useState(true)
 
@@ -278,6 +282,7 @@ function InvoiceDraftCreatePage() {
             servicePeriodStart,
           service_period_end:
             servicePeriodEnd,
+          prorate_base_fee: prorateBaseFee,
         },
       )
 
@@ -454,6 +459,24 @@ function InvoiceDraftCreatePage() {
                 )}
               </div>
             )}
+
+            <label className="settings-checkbox-control">
+              <input
+                type="checkbox"
+                checked={prorateBaseFee}
+                disabled={isSubmitting}
+                onChange={(event) => {
+                  setProrateBaseFee(event.target.checked)
+                }}
+              />
+              <span>
+                {t('draft.prorateBaseFee')}
+                <br />
+                <small className="muted">
+                  {t('draft.prorateBaseFeeHint')}
+                </small>
+              </span>
+            </label>
 
             {errorMessage && (
               <p

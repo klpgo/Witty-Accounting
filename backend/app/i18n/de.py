@@ -71,6 +71,82 @@ MESSAGES: dict[str, str] = {
     "pdf.closing.invoice": "Vielen Dank. Bitte bewahren Sie diese Rechnung für Ihre Unterlagen auf.",
     "pdf.closing.cancellation": "Bitte bewahren Sie diesen Stornobeleg zusammen mit der Originalrechnung auf.",
 
+    # Rechnungsentwurf (automatische Abrechnung)
+    "pdf.title.invoiceDraft": "Ladestromrechnung – Entwurf",
+    "pdf.draftWatermark": "ENTWURF",
+    "pdf.draftPending": "folgt",
+    "pdf.footer.draft": "Rechnungsentwurf zur Prüfung – keine Rechnung im Sinne des UStG",
+    "pdf.payment.draft": (
+        "Zahlungsziel: {days} Tage ab Rechnungsdatum. Bitte noch nicht "
+        "überweisen – die verbindliche Rechnung folgt."
+    ),
+    "pdf.payment.draftImmediately": (
+        "Zahlbar sofort ab Rechnungsdatum. Bitte noch nicht überweisen – "
+        "die verbindliche Rechnung folgt."
+    ),
+    "pdf.closing.draft": (
+        "Bitte prüfen Sie diesen Entwurf. Rechnungsnummer und Rechnungsdatum "
+        "werden bei der Finalisierung vergeben."
+    ),
+
+    # Prüf-E-Mail an den Kunden
+    "email.review.subject": "Rechnungsentwurf zur Prüfung – Leistungszeitraum {period}",
+    "email.review.intro": (
+        "für den Leistungszeitraum {period} haben wir einen Entwurf Ihrer "
+        "Ladestrom-Rechnung über {amount} erstellt. Bitte prüfen Sie ihn "
+        "nach der Anmeldung im Portal:"
+    ),
+    "email.review.deadline": (
+        "Ohne Rückmeldung wird die Rechnung am {date} verbindlich erstellt "
+        "und Ihnen zugestellt. Haben Sie bis dahin Fragen oder Einwände, "
+        "wählen Sie beim Entwurf „Nachfrage zum Rechnungsentwurf“."
+    ),
+
+    # Hinweise der automatischen Abrechnung an den Rechnungssteller
+    "billing.waiting.subject": "Automatische Abrechnung wartet auf Ladedaten ({period})",
+    "billing.waiting.body": (
+        "die Rechnungsentwürfe für den Leistungszeitraum {period} wurden noch "
+        "nicht erstellt, weil die Ladevorgänge aus der Hager Cloud noch nicht "
+        "bis zum Ende des Zeitraums abgerufen wurden (letzter erfolgreicher "
+        "Abruf: {last_fetch}).\n\nBitte den automatischen Abruf prüfen. Die "
+        "Entwürfe werden erstellt, sobald ein Abruf erfolgreich war."
+    ),
+    "billing.never": "noch nie",
+    "billing.drafts.subject": "Automatische Abrechnung: Rechnungsentwürfe für {period}",
+    "billing.drafts.body": (
+        "für den Leistungszeitraum {period} wurden {count} Rechnungsentwürfe "
+        "erstellt und den Kunden zur Prüfung gesendet. Ohne Nachfrage werden "
+        "sie am {date} finalisiert und zugestellt."
+    ),
+    "billing.drafts.none": (
+        "für den Leistungszeitraum {period} wurden keine Rechnungsentwürfe "
+        "erstellt."
+    ),
+    "billing.section.skipped": "Nicht abgerechnet:",
+    "billing.section.notifyFailed": (
+        "Prüf-E-Mail konnte nicht gesendet werden (weitere Versuche folgen; "
+        "ohne zugestellte Prüf-E-Mail wird nicht automatisch finalisiert):"
+    ),
+    "billing.reason.existingDraft": "es gibt bereits den Entwurf #{id} für diesen Zeitraum",
+    "billing.finalized.subject": "Automatische Abrechnung: {count} Rechnung(en) finalisiert",
+    "billing.finalized.body": (
+        "folgende Rechnungsentwürfe wurden nach Ablauf der Prüffrist "
+        "finalisiert:"
+    ),
+    "billing.section.sent": "Per E-Mail zugestellt:",
+    "billing.section.postal": "Bitte per Post versenden:",
+    "billing.section.failed": "Fehler (bitte im Portal prüfen):",
+    "billing.inquiry.subject": "Rechnungsentwurf zurückgestellt – {name}",
+    "billing.inquiry.body": (
+        "{name} ({email}) hat eine Nachfrage zum Rechnungsentwurf #{id} "
+        "(Leistungszeitraum {period}, {amount}) gestellt. Der Entwurf wurde "
+        "zurückgestellt und wird nicht automatisch finalisiert.\n\nDer Kunde "
+        "wurde gebeten, sich per E-Mail an {contact} zu wenden. Nach der "
+        "Klärung bitte den Entwurf im Portal finalisieren oder löschen und "
+        "neu erstellen:"
+    ),
+    "billing.link": "Im Portal öffnen:",
+
     # Rechnungs-E-Mail
     "email.subject.invoice": "Rechnung {number}",
     "email.subject.cancellation": "Stornorechnung {number}",

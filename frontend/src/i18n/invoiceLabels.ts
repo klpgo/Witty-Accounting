@@ -31,3 +31,41 @@ export function documentTypeLabel(
       return documentType
   }
 }
+
+/** Prüfstatus eines Entwurfs der automatischen Abrechnung */
+export function reviewStatusLabel(t: Translate, reviewStatus: string): string {
+  switch (reviewStatus) {
+    case 'in_review':
+      return t('invoice.review.in_review')
+    case 'on_hold':
+      return t('invoice.review.on_hold')
+    case 'failed':
+      return t('invoice.review.failed')
+    default:
+      return reviewStatus
+  }
+}
+
+/** Badge (Text und CSS-Klasse) für Rechnungslisten und Detailseite */
+export function invoiceBadge(
+  t: Translate,
+  invoice: { status: string; review_status: string | null },
+): { label: string; className: string } {
+  if (invoice.status === 'draft' && invoice.review_status !== null) {
+    return {
+      label: reviewStatusLabel(t, invoice.review_status),
+      className:
+        invoice.review_status === 'in_review'
+          ? 'status-badge status-review'
+          : 'status-badge status-hold',
+    }
+  }
+
+  return {
+    label: invoiceStatusLabel(t, invoice.status),
+    className:
+      invoice.status === 'finalized'
+        ? 'status-badge status-finalized'
+        : 'status-badge status-draft',
+  }
+}

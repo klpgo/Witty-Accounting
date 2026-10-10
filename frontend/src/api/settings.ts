@@ -857,3 +857,119 @@ export async function purgeRetentionYear(
     }),
   )
 }
+
+// Automatische Abrechnung
+
+export type BillingInterval = 'weekly' | 'monthly' | 'quarterly'
+
+export interface BillingRunSkipped {
+  user_id: number | null
+  name: string
+  // existing_draft oder error
+  reason: string
+  invoice_id: number | null
+  message: string | null
+}
+
+export interface BillingRun {
+  id: number
+  // Ortszeit, Ende exklusiv
+  period_start: string
+  period_end: string
+  cutoff_date: string
+  interval: BillingInterval
+  status: 'waiting_for_data' | 'in_review' | 'completed'
+  review_due_date: string | null
+  drafts_created: number
+  open_drafts: number
+  on_hold: number
+  skipped: BillingRunSkipped[]
+  created_at: string
+  drafts_created_at: string | null
+  completed_at: string | null
+}
+
+export interface AutoBillingSettings {
+  enabled: boolean
+  interval: BillingInterval
+  cutoff_day: number
+  grace_days: number
+  review_days: number
+  run_time: string
+  notification_email: string | null
+  effective_notification_email: string | null
+  active_since: string | null
+  next_period_start: string | null
+  next_period_end: string | null
+  next_cutoff: string | null
+  next_run_at: string | null
+  waits_for_hager_fetch: boolean
+  open_in_review: number
+  open_on_hold: number
+  open_failed: number
+  delivery_failed: number
+  runs: BillingRun[]
+}
+
+export interface AutoBillingSettingsUpdate {
+  enabled?: boolean
+  interval?: BillingInterval
+  cutoff_day?: number
+  grace_days?: number
+  review_days?: number
+  run_time?: string
+  notification_email?: string
+}
+
+export interface AutoBillingPreviewCustomer {
+  user_id: number
+  name: string
+  email: string
+  delivery: 'email' | 'portal' | 'post'
+  has_address: boolean
+  existing_draft_id: number | null
+}
+
+export interface AutoBillingPreview {
+  period_start: string
+  period_end: string
+  cutoff_date: string
+  run_at: string
+  data_ready: boolean
+  customers: AutoBillingPreviewCustomer[]
+}
+
+export async function getAutoBillingSettings(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<AutoBillingSettings> {
+  return readEnergyResponse<AutoBillingSettings>(
+    await fetch(`${API_BASE_URL}/settings/auto-billing`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+}
+
+export async function updateAutoBillingSettings(
+  accessToken: string,
+  payload: AutoBillingSettingsUpdate,
+): Promise<AutoBillingSettings> {
+  return readEnergyResponse<AutoBillingSettings>(
+    await fetch(`${API_BASE_URL}/settings/auto-billing`, {
+      method: 'PATCH',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify(payload),
+    }),
+  )
+}
+
+export async function getAutoBillingPreview(
+  accessToken: string,
+): Promise<AutoBillingPreview> {
+  return readEnergyResponse<AutoBillingPreview>(
+    await fetch(`${API_BASE_URL}/settings/auto-billing/preview`, {
+      headers: createHeaders(accessToken),
+    }),
+  )
+}

@@ -13,7 +13,21 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.billing_run import BillingRun  # noqa: F401 (FK-Ziel)
 from app.utils.utc import utc_now
+
+
+# Prüfstatus eines Entwurfs der automatischen Abrechnung (None: manuell
+# erstellter Entwurf ohne Prüfung durch den Kunden)
+REVIEW_IN_REVIEW = "in_review"
+REVIEW_ON_HOLD = "on_hold"
+REVIEW_FAILED = "failed"
+
+# Zustellung einer automatisch finalisierten Rechnung
+DELIVERY_PENDING = "pending"
+DELIVERY_SENT = "sent"
+DELIVERY_POSTAL = "postal"
+DELIVERY_FAILED = "failed"
 
 
 class Invoice(Base):
@@ -199,6 +213,63 @@ class Invoice(Base):
 
     finalized_at: Mapped[datetime | None] = mapped_column(
         DateTime,
+        nullable=True,
+    )
+
+    # Automatische Abrechnung: Lauf, in dem der Entwurf erstellt wurde
+    billing_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "billing_runs.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    # in_review: Kunde prüft; on_hold: Nachfrage des Kunden, wird nicht
+    # automatisch finalisiert; failed: automatische Finalisierung
+    # fehlgeschlagen. Bleibt nach der Finalisierung zur Nachvollziehbarkeit.
+    review_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        index=True,
+    )
+
+    # Ortsdatum, ab dem der Entwurf automatisch finalisiert wird
+    review_due_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+
+    # Versand der Prüf-E-Mail an den Kunden (UTC)
+    review_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    # Nachfrage des Kunden zum Entwurf (UTC)
+    inquiry_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    # Zustellung nach automatischer Finalisierung
+    delivery_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    # Versuche und letzter Fehler der jeweils anstehenden E-Mail
+    # (Prüf-E-Mail, danach Rechnungsversand)
+    notification_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    notification_error: Mapped[str | None] = mapped_column(
+        String(500),
         nullable=True,
     )
 

@@ -4,6 +4,20 @@
 
 ### New features
 
+- **Automatic billing** (optional): under **Settings → Automatic billing**,
+  Witty creates a combined invoice draft per customer for each weekly,
+  monthly or quarterly service period, sends the customers a link to review
+  it in the portal and finalizes and delivers the invoices after a
+  configurable review period. Customers can put a draft on hold with
+  **Question about the invoice draft**; the issuer is notified and finalizes
+  it manually, optionally notifying the customer in the same step. Drafts
+  can be downloaded as a PDF with a "DRAFT" watermark. See the administrator
+  guide, section 5.1.
+- **Pro-rata base fee**: automatic billing charges the monthly base fee for
+  the days of the service period, so weekly invoices contain the matching
+  share. Manual drafts offer the same as an option. Days already charged are
+  never charged twice.
+
 - **Delete users** (e.g. on request under the GDPR): under **Users**, an
   administrator can check and delete a user. Charging sessions, base fees,
   card assignments and the account are deleted; invoices and cancellation
@@ -33,7 +47,12 @@
   fees, new table `deleted_charging_sessions`.
 - Migration `c9d1e3f5a7b4`: retention settings and table `retention_purges`
   (deletion log).
-- Apply both as described in the administrator guide, section 8.
+- Migration `d0e2f4a6b8c1`: table `billing_runs`, review and delivery
+  columns on `invoices`, automatic billing settings in `global_settings`.
+- Migration `e1f3a5b7c9d2`: base fee entries store the billed part of the
+  month (`slice_start`, `slice_end`) for pro-rata base fees; existing entries
+  are set to the whole month.
+- Apply all four as described in the administrator guide, section 8.
 
 ## 2.0.1 2026-10-02
 

@@ -13,6 +13,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.auto_billing import router as auto_billing_router
 from app.api.routes.wallboxes import router as wallboxes_router
 from app.api.routes.energy_prices import (
     router as energy_prices_router,
@@ -166,6 +167,7 @@ api_router.include_router(charging_sessions_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(wallboxes_router)
 api_router.include_router(retention_router)
+api_router.include_router(auto_billing_router)
 app.include_router(api_router)
 
 

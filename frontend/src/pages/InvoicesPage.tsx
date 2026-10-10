@@ -20,7 +20,7 @@ import {
 } from '../utils/numberFormat'
 import {
   documentTypeLabel,
-  invoiceStatusLabel,
+  invoiceBadge,
 } from '../i18n/invoiceLabels'
 import { useTranslation } from '../i18n/useTranslation'
 
@@ -212,16 +212,10 @@ function InvoicesPage() {
                       <td>
                         <span
                           className={
-                            invoice.status ===
-                            'finalized'
-                              ? 'status-badge status-finalized'
-                              : 'status-badge status-draft'
+                            invoiceBadge(t, invoice).className
                           }
                         >
-                          {invoiceStatusLabel(
-                            t,
-                            invoice.status,
-                          )}
+                          {invoiceBadge(t, invoice).label}
                         </span>
                       </td>
 

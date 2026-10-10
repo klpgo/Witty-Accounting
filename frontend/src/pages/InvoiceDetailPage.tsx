@@ -10,6 +10,7 @@ import {
 
 import {
   archiveInvoicePdf,
+  downloadInvoiceDraftPdf,
   downloadInvoicePdf,
   getInvoice,
   InvoiceApiError,
@@ -23,6 +24,7 @@ import { useAuth } from '../auth/useAuth'
 import InvoiceFinalizeForm from '../components/InvoiceFinalizeForm'
 import InvoiceCancellationCreateForm from '../components/InvoiceCancellationCreateForm'
 import InvoiceCancellationFinalizeForm from '../components/InvoiceCancellationFinalizeForm'
+import InvoiceReviewPanel from '../components/InvoiceReviewPanel'
 
 import {
   getUser,
@@ -41,7 +43,7 @@ import {
 } from '../utils/numberFormat'
 import {
   documentTypeLabel,
-  invoiceStatusLabel,
+  invoiceBadge,
 } from '../i18n/invoiceLabels'
 import { useTranslation } from '../i18n/useTranslation'
 
@@ -295,13 +297,76 @@ function InvoiceDetailPage() {
     }
   }
 
+  async function handleDraftPdfDownload(): Promise<void> {
+    if (invoice === null) {
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+
+      navigate('/login', {
+        replace: true,
+      })
+
+      return
+    }
+
+    setPdfErrorMessage(null)
+    setIsDownloading(true)
+
+    try {
+      const pdfBlob = await downloadInvoiceDraftPdf(
+        accessToken,
+        invoice.id,
+      )
+      const downloadUrl = URL.createObjectURL(pdfBlob)
+      const anchor = document.createElement('a')
+
+      anchor.href = downloadUrl
+      anchor.download = `rechnungsentwurf-${invoice.id}.pdf`
+
+      document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+
+      URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      if (
+        error instanceof InvoiceApiError &&
+        error.status === 401
+      ) {
+        signOut()
+
+        navigate('/login', {
+          replace: true,
+        })
+
+        return
+      }
+
+      setPdfErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t('invoiceReview.draftPdfFailed'),
+      )
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   function handleFinalized(
     finalizedInvoice: Invoice,
     warning?: string,
+    notice?: string,
   ): void {
     setInvoice(finalizedInvoice)
     setPdfSuccessMessage(null)
     setPdfErrorMessage(warning ?? null)
+    setEmailErrorMessage(null)
+    setEmailSuccessMessage(notice ?? null)
   }
 
   async function handleArchivePdf(): Promise<void> {
@@ -875,21 +940,37 @@ function InvoiceDetailPage() {
           </button>
         )}
 
-        <button
-          className="button button-primary"
-          type="button"
-          disabled={
-            !hasArchivedPdf ||
-            isDownloading
-          }
-          onClick={() => {
-            void handlePdfDownload()
-          }}
-        >
-          {isDownloading
-            ? t('invoiceDetail.pdf.downloading')
-            : t('invoiceDetail.pdf.download')}
-        </button>
+        {invoice.status === 'draft' &&
+        invoice.document_type === 'invoice' ? (
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={isDownloading}
+            onClick={() => {
+              void handleDraftPdfDownload()
+            }}
+          >
+            {isDownloading
+              ? t('invoiceReview.draftPdfLoading')
+              : t('invoiceReview.draftPdf')}
+          </button>
+        ) : (
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={
+              !hasArchivedPdf ||
+              isDownloading
+            }
+            onClick={() => {
+              void handlePdfDownload()
+            }}
+          >
+            {isDownloading
+              ? t('invoiceDetail.pdf.downloading')
+              : t('invoiceDetail.pdf.download')}
+          </button>
+        )}
       </div>
 
       <header className="page-header">
@@ -911,16 +992,16 @@ function InvoiceDetailPage() {
           </p>
         </div>
 
-        <span
-          className={
-            invoice.status === 'finalized'
-              ? 'status-badge status-finalized'
-              : 'status-badge status-draft'
-          }
-        >
-          {invoiceStatusLabel(t, invoice.status)}
+        <span className={invoiceBadge(t, invoice).className}>
+          {invoiceBadge(t, invoice).label}
         </span>
       </header>
+
+      <InvoiceReviewPanel
+        invoice={invoice}
+        isAdmin={isAdmin}
+        onChanged={setInvoice}
+      />
 
       {deleteErrorMessage && (
         <section
@@ -1126,6 +1207,8 @@ function InvoiceDetailPage() {
           <InvoiceFinalizeForm
             invoiceId={invoice.id}
             onFinalized={handleFinalized}
+            canNotifyCustomer={canSendInvoiceEmail}
+            notifyByDefault={invoice.review_status !== null}
           />
       )}
 

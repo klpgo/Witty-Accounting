@@ -20,6 +20,12 @@ def heartbeat():
 
     check_all_tenants()
 
+    # Automatische Abrechnung: fällige Läufe, Finalisierungen und
+    # E-Mail-Wiederholungen der Mandanten
+    from app.services import auto_billing
+
+    auto_billing.check_all_tenants()
+
 
 def start_scheduler() -> None:
     if scheduler.running:
@@ -48,5 +54,9 @@ def stop_scheduler() -> None:
     from app.services.hager_auto_import import shutdown
 
     shutdown()
+
+    from app.services import auto_billing
+
+    auto_billing.shutdown()
 
     logger.info("Scheduler stopped")

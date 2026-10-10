@@ -59,7 +59,27 @@ export interface Invoice {
   pdf_exported_at: string | null
   pdf_exported_by_user_id: number | null
   pdf_export_remote_path: string | null
+  // Automatische Abrechnung
+  billing_run_id: number | null
+  // in_review, on_hold, failed; null bei manuell erstellten Entwürfen
+  review_status: ReviewStatus | null
+  review_due_date: string | null
+  review_notified_at: string | null
+  inquiry_at: string | null
+  // pending, sent, postal, failed (nach automatischer Finalisierung)
+  delivery_status: string | null
+  // nur für Administratoren
+  notification_error: string | null
+  // Kontaktadresse für Nachfragen (nur bei Entwürfen zur Prüfung)
+  review_contact_email: string | null
   items: InvoiceItem[]
+}
+
+export type ReviewStatus = 'in_review' | 'on_hold' | 'failed'
+
+export interface InvoiceInquiryResponse {
+  invoice: Invoice
+  contact_email: string | null
 }
 
 export interface InvoiceEmailResponse {
@@ -260,6 +280,8 @@ export interface InvoiceDraftCreate {
   user_id: number
   service_period_start: string
   service_period_end: string
+  // Grundgebühr anteilig für die Tage im Zeitraum
+  prorate_base_fee?: boolean
 }
 
 export async function createInvoiceDraft(
@@ -404,4 +426,53 @@ export async function deleteInvoiceDraft(
       response.status,
     )
   }
+}
+
+// Ansicht eines Entwurfs als PDF (Wasserzeichen, ohne Nummer und Girocode)
+export async function downloadInvoiceDraftPdf(
+  accessToken: string,
+  invoiceId: number,
+): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/draft-pdf`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return response.blob()
+}
+
+// "Nachfrage zum Rechnungsentwurf": Entwurf zurückstellen
+export async function requestInvoiceInquiry(
+  accessToken: string,
+  invoiceId: number,
+): Promise<InvoiceInquiryResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/inquiry`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as InvoiceInquiryResponse
 }

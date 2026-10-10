@@ -9,6 +9,7 @@ import {
   finalizeInvoice,
   getInvoice,
   InvoiceApiError,
+  sendInvoiceEmail,
   type Invoice,
 } from '../api/invoices'
 import { getGlobalSettings } from '../api/settings'
@@ -23,7 +24,18 @@ interface InvoiceFinalizeFormProps {
    * das PDF aber nicht archiviert werden konnte. Die Detailseite
    * zeigt sie an, weil dieses Formular danach verschwindet.
    */
-  onFinalized: (invoice: Invoice, warning?: string) => void
+  onFinalized: (
+    invoice: Invoice,
+    warning?: string,
+    notice?: string,
+  ) => void
+  /*
+   * Kunde kann per E-Mail benachrichtigt werden (nicht bei reinem
+   * Postversand). notifyByDefault: Häkchen vorbelegt, z. B. bei
+   * zurückgestellten Entwürfen der automatischen Abrechnung.
+   */
+  canNotifyCustomer?: boolean
+  notifyByDefault?: boolean
 }
 
 function formatDateInput(date: Date): string {
@@ -52,6 +64,8 @@ function addDays(day: string, days: number): string {
 function InvoiceFinalizeForm({
   invoiceId,
   onFinalized,
+  canNotifyCustomer = false,
+  notifyByDefault = false,
 }: InvoiceFinalizeFormProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -59,6 +73,9 @@ function InvoiceFinalizeForm({
 
   const [issueDate, setIssueDate] =
     useState(getDefaultIssueDate)
+
+  const [notifyCustomer, setNotifyCustomer] =
+    useState(notifyByDefault)
 
   // Zahlungsziel aus den Einstellungen (null, solange nicht geladen)
   const [paymentTermDays, setPaymentTermDays] =
@@ -141,6 +158,37 @@ function InvoiceFinalizeForm({
             ...(dueDateChanged && dueDate ? { due_date: dueDate } : {}),
           },
         )
+
+      if (
+        canNotifyCustomer &&
+        notifyCustomer &&
+        finalizedInvoice.pdf_storage_path !== null
+      ) {
+        try {
+          const result = await sendInvoiceEmail(
+            accessToken,
+            finalizedInvoice.id,
+          )
+
+          onFinalized(
+            finalizedInvoice,
+            undefined,
+            t('invoiceFinalize.notified', {
+              email: result.recipient_email,
+            }),
+          )
+        } catch (error) {
+          onFinalized(
+            finalizedInvoice,
+            t('invoiceFinalize.notifyFailed', {
+              message:
+                error instanceof Error ? error.message : '',
+            }),
+          )
+        }
+
+        return
+      }
 
       onFinalized(finalizedInvoice)
     } catch (error) {
@@ -247,6 +295,26 @@ function InvoiceFinalizeForm({
             )}
           </label>
         </div>
+
+        {canNotifyCustomer && (
+          <label className="settings-checkbox-control">
+            <input
+              type="checkbox"
+              checked={notifyCustomer}
+              disabled={isSubmitting}
+              onChange={(event) => {
+                setNotifyCustomer(event.target.checked)
+              }}
+            />
+            <span>
+              {t('invoiceFinalize.notifyCustomer')}
+              <br />
+              <small className="muted">
+                {t('invoiceFinalize.notifyCustomerHint')}
+              </small>
+            </span>
+          </label>
+        )}
 
         {errorMessage && (
           <p

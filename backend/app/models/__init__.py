@@ -1,3 +1,4 @@
+from app.models.billing_run import BillingRun
 from app.models.charging_session import (
     ChargingSession,
 )
@@ -27,6 +28,7 @@ from app.models.wallbox import Wallbox
 
 
 __all__ = [
+    "BillingRun",
     "ChargingSession",
     "DeletedChargingSession",
     "EnergyPrice",

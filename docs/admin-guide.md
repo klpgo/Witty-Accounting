@@ -503,6 +503,75 @@ A JSON file created with the `hager-fetch` tool can be imported the same way.
    **Finalize cancellation invoice bindingly**. The charging sessions become
    billable again and can be included in a new, corrected invoice.
 
+### 5.1 Automatic billing (optional)
+
+Under **Settings → Automatic billing**, Witty can create the drafts, have the
+customers review them and finalize them on its own.
+
+**Settings**
+
+- **Interval** and **Cutoff date**: the cutoff date is the last day of a
+  service period. Weekly: a weekday. Monthly: day 1–28 or the last day of the
+  month. Quarterly: like monthly, in March, June, September and December.
+- **Buffer after the cutoff date**: the drafts are created this many days
+  after the cutoff date, so late charging sessions are included.
+- **Customer review period**: days between sending the drafts and
+  finalizing them.
+- **Time for creating and finalizing**: local time of both steps.
+- **Email address of the invoice issuer**: receives notices and customer
+  questions; customers are asked to contact this address. Empty: the sender
+  address of the mail server settings.
+
+**Base fee:** automatic billing charges the monthly base fee pro rata for
+the days of the service period (monthly fee × days / days of the month). A
+week from 28 September to 4 October contains 3/30 of the September fee and
+4/31 of the October fee; the weeks of a month add up to the full fee. For
+calendar months and quarters this is the same as before. Days already
+charged by another invoice or draft – for example a manually billed full
+month – are not charged again. To rebill a cancelled week, create a manual
+draft for exactly that week with **Calculate the base fee pro rata for the
+days in the service period**.
+
+When enabled, service periods whose cutoff date is on or after the day of
+enabling are billed. Bill earlier periods manually. **Show trial run** lists
+the next service period and the customers who would get a draft.
+
+**Flow**
+
+1. **Drafts.** At the creation time (cutoff date + buffer, configured time),
+   Witty creates one combined draft per customer with a card assignment in
+   the service period – charging sessions, base fees and, for postal
+   delivery, postage, as for a manual draft. Customers with nothing to bill
+   get no draft. Customers who already have a draft overlapping the period
+   are skipped. If the automatic Hager fetch is enabled, Witty waits until a
+   successful fetch covers the end of the period, and notifies the issuer
+   once if it has to wait.
+2. **Review.** Each customer receives an email with a link to the draft. After
+   signing in, they see the draft with the **Draft as PDF** button (watermark
+   "DRAFT", no invoice number, no Girocode) and the button
+   **Question about the invoice draft**. The issuer receives a summary of
+   the drafts created and of customers that were skipped.
+3. **Question.** If a customer clicks **Question about the invoice draft**,
+   the draft is put on hold and is not finalized automatically. The customer
+   is asked to contact the issuer by email; the issuer receives an email
+   "Invoice draft put on hold". After clarifying, open the draft and either
+   finalize it – with **Notify the customer by email** checked, the invoice is
+   sent right away – or delete it and create a corrected draft manually.
+4. **Finalization.** When the review period has passed (day of creation +
+   review period, at the configured time), all drafts still under review are
+   finalized: invoice number,
+   invoice date and due date are assigned now, the PDF is archived and the
+   invoice is delivered according to the customer's delivery method (email
+   with PDF or portal notice). Invoices for postal delivery are listed in the
+   issuer's summary for printing.
+
+Drafts whose review email could not be delivered are not finalized
+automatically. Failed emails are retried up to five times; the remaining
+problems are shown on the invoice page and under **Settings → Automatic
+billing**. Every service period is billed only once, even after restarts.
+While automatic billing is disabled, nothing is created or finalized
+automatically.
+
 ---
 
 ## 6. Backup and restore

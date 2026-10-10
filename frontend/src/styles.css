@@ -1544,3 +1544,26 @@ select {
 .retention-notice p {
   margin: 0;
 }
+
+/* Automatische Abrechnung: Prüfstatus von Entwürfen */
+.status-review {
+  background: #eef4ff;
+  color: #2949bd;
+}
+
+.status-hold {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.review-panel {
+  border-left: 4px solid #2949bd;
+}
+
+.review-panel-attention {
+  border-left-color: #d97706;
+}
+
+.review-panel p:last-child {
+  margin-bottom: 0;
+}

@@ -10,7 +10,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import (
     Session,
     selectinload,
@@ -21,6 +21,7 @@ from app.auth import (
     get_current_user,
     require_admin,
 )
+from app.models.global_settings import GlobalSettings
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.models.monthly_base_fee_charge import (
@@ -40,6 +41,7 @@ from app.schemas.invoice import (
     InvoiceDraftCreate,
     InvoiceEmailResponse,
     InvoiceFinalizeRequest,
+    InvoiceInquiryResponse,
     InvoiceResponse,
 )
 from app.schemas.invoice_export import (
@@ -84,7 +86,14 @@ from app.services.invoice_archive import (
 from app.services.invoice_pdf import (
     InvoiceNotFinalizedError,
     InvoicePdfError,
+    build_invoice_pdf,
 )
+from app.services.auto_billing import (
+    InquiryNotFoundError,
+    InquiryStateError,
+    request_review_hold,
+)
+from app.services.billing_email import notification_address
 
 from app.services.invoice_email import (
     InvoiceEmailConfigurationError,
@@ -111,6 +120,39 @@ router = APIRouter(
 )
 
 
+def customer_visibility():
+    """
+    Kunden sehen ihre finalisierten Rechnungen und Entwürfe der
+    automatischen Abrechnung, die ihnen zur Prüfung gesendet wurden.
+    Manuell erstellte Entwürfe bleiben verborgen.
+    """
+    return or_(
+        Invoice.status == "finalized",
+        and_(
+            Invoice.status == "draft",
+            Invoice.review_status.is_not(None),
+        ),
+    )
+
+
+def to_invoice_response(
+    db: Session,
+    invoice: Invoice,
+    current_user: User,
+) -> InvoiceResponse:
+    response = InvoiceResponse.model_validate(invoice)
+    updates: dict[str, object] = {}
+
+    if invoice.status == "draft" and invoice.review_status is not None:
+        updates["review_contact_email"] = notification_address(db)
+
+    if not current_user.is_admin:
+        # technische Fehlermeldungen nur für Administratoren
+        updates["notification_error"] = None
+
+    return response.model_copy(update=updates) if updates else response
+
+
 def get_readable_invoice_or_404(
     db: Session,
     *,
@@ -130,7 +172,7 @@ def get_readable_invoice_or_404(
     if not current_user.is_admin:
         statement = statement.where(
             Invoice.user_id == current_user.id,
-            Invoice.status == "finalized",
+            customer_visibility(),
         )
 
     invoice = db.scalar(statement)
@@ -159,7 +201,7 @@ def list_invoices(
         Session,
         Depends(get_db),
     ],
-) -> list[Invoice]:
+) -> list[InvoiceResponse]:
     statement = (
         select(Invoice)
         .options(
@@ -179,12 +221,13 @@ def list_invoices(
     if not current_user.is_admin:
         statement = statement.where(
             Invoice.user_id == current_user.id,
-            Invoice.status == "finalized",
+            customer_visibility(),
         )
 
-    return list(
-        db.scalars(statement).all()
-    )
+    return [
+        to_invoice_response(db, invoice, current_user)
+        for invoice in db.scalars(statement).all()
+    ]
 
 
 @router.post(
@@ -210,6 +253,7 @@ def create_draft(
             service_period_end=(
                 payload.service_period_end
             ),
+            prorate_base_fee=payload.prorate_base_fee,
         )
 
     except InvoiceUserNotFoundError as exc:
@@ -499,6 +543,120 @@ def download_invoice_pdf(
     )
 
 
+@router.get(
+    "/{invoice_id}/draft-pdf",
+)
+def download_invoice_draft_pdf(
+    invoice_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> Response:
+    """
+    Ansicht eines Rechnungsentwurfs als PDF (Wasserzeichen "ENTWURF", ohne
+    Rechnungsnummer und Girocode). Wird bei jedem Abruf neu erzeugt und
+    nicht archiviert.
+    """
+    invoice = get_readable_invoice_or_404(
+        db,
+        invoice_id=invoice_id,
+        current_user=current_user,
+        include_items=True,
+    )
+
+    if (
+        invoice.status != "draft"
+        or invoice.document_type != "invoice"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only invoice drafts can be shown as a draft PDF.",
+        )
+
+    global_settings = db.get(GlobalSettings, 1)
+
+    try:
+        pdf_bytes = build_invoice_pdf(
+            invoice,
+            draft=True,
+            payment_term_days=(
+                global_settings.invoice_payment_term_days
+                if global_settings is not None
+                else None
+            ),
+        )
+    except InvoicePdfError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="rechnungsentwurf-{invoice.id}.pdf"'
+            ),
+        },
+    )
+
+
+@router.post(
+    "/{invoice_id}/inquiry",
+    response_model=InvoiceInquiryResponse,
+)
+def create_invoice_inquiry(
+    invoice_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> InvoiceInquiryResponse:
+    """
+    "Nachfrage zum Rechnungsentwurf" durch den Kunden: der Entwurf wird
+    zurückgestellt und nicht automatisch finalisiert; der
+    Rechnungssteller wird per E-Mail benachrichtigt.
+    """
+    try:
+        invoice, contact_email = request_review_hold(
+            db,
+            invoice_id=invoice_id,
+            user=current_user,
+        )
+    except InquiryNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InquiryStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    invoice = get_readable_invoice_or_404(
+        db,
+        invoice_id=invoice.id,
+        current_user=current_user,
+        include_items=True,
+    )
+
+    return InvoiceInquiryResponse(
+        invoice=to_invoice_response(db, invoice, current_user),
+        contact_email=contact_email,
+    )
+
+
 @router.post(
     "/{invoice_id}/cancellations",
     response_model=InvoiceResponse,
@@ -733,11 +891,15 @@ def get_invoice(
         Session,
         Depends(get_db),
     ],
-) -> Invoice:
+) -> InvoiceResponse:
 
-    return get_readable_invoice_or_404(
+    return to_invoice_response(
         db,
-        invoice_id=invoice_id,
-        current_user=current_user,
-        include_items=True,
+        get_readable_invoice_or_404(
+            db,
+            invoice_id=invoice_id,
+            current_user=current_user,
+            include_items=True,
+        ),
+        current_user,
     )

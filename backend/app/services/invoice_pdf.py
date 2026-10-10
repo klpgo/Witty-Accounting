@@ -137,29 +137,40 @@ def format_iban_display(value: str) -> str:
     )
 
 
-def validate_invoice(invoice: Invoice) -> None:
-    if invoice.status != "finalized":
-        raise InvoiceNotFinalizedError(
-            "Only finalized invoices can be generated as PDF."
-        )
+def validate_invoice(
+    invoice: Invoice,
+    *,
+    draft: bool = False,
+) -> None:
+    if draft:
+        # Entwurfsansicht zur Prüfung: noch ohne Nummer und Datum
+        if invoice.status != "draft" or invoice.document_type != "invoice":
+            raise InvoicePdfError(
+                "Only invoice drafts can be generated as a draft PDF."
+            )
+    else:
+        if invoice.status != "finalized":
+            raise InvoiceNotFinalizedError(
+                "Only finalized invoices can be generated as PDF."
+            )
 
-    if not invoice.invoice_number:
-        raise IncompleteInvoicePdfDataError(
-            "The invoice number is missing."
-        )
+        if not invoice.invoice_number:
+            raise IncompleteInvoicePdfDataError(
+                "The invoice number is missing."
+            )
 
-    if invoice.issue_date is None:
-        raise IncompleteInvoicePdfDataError(
-            "The invoice date is missing."
-        )
+        if invoice.issue_date is None:
+            raise IncompleteInvoicePdfDataError(
+                "The invoice date is missing."
+            )
 
-    if (
-        invoice.document_type == "invoice"
-        and invoice.due_date is None
-    ):
-        raise InvoicePdfError(
-            "The payment due date is missing."
-        )
+        if (
+            invoice.document_type == "invoice"
+            and invoice.due_date is None
+        ):
+            raise InvoicePdfError(
+                "The payment due date is missing."
+            )
 
     if not invoice.issuer_name:
         raise IncompleteInvoicePdfDataError(
@@ -192,11 +203,13 @@ class InvoiceCanvas(pdf_canvas.Canvas):
         self,
         *args: object,
         is_cancellation: bool = False,
+        is_draft: bool = False,
         **kwargs: object,
     ) -> None:
         kwargs["invariant"] = 1
         super().__init__(*args, **kwargs)
         self.is_cancellation = is_cancellation
+        self.is_draft = is_draft
         self._saved_page_states: list[
             dict[str, object]
         ] = []
@@ -223,6 +236,9 @@ class InvoiceCanvas(pdf_canvas.Canvas):
         self,
         page_count: int,
     ) -> None:
+        if self.is_draft:
+            self._draw_draft_watermark()
+
         self.saveState()
         self.setFont("Helvetica", 8)
         self.setFillColor(
@@ -230,7 +246,9 @@ class InvoiceCanvas(pdf_canvas.Canvas):
         )
     
         footer_document_label = _t(
-            "pdf.footer.cancellation"
+            "pdf.footer.draft"
+            if self.is_draft
+            else "pdf.footer.cancellation"
             if self.is_cancellation
             else "pdf.footer.invoice"
         )
@@ -253,15 +271,33 @@ class InvoiceCanvas(pdf_canvas.Canvas):
 
         self.restoreState()
 
+    def _draw_draft_watermark(self) -> None:
+        # Diagonaler, halbtransparenter Schriftzug über dem Seiteninhalt
+        self.saveState()
+        self.setFillColor(colors.HexColor("#999999"))
+        self.setFillAlpha(0.18)
+        self.setFont("Helvetica-Bold", 96)
+        self.translate(A4[0] / 2, A4[1] / 2)
+        self.rotate(45)
+        self.drawCentredString(0, -32, _t("pdf.draftWatermark"))
+        self.restoreState()
+
 
 def build_invoice_pdf(
     invoice: Invoice,
     *,
     girocode_enabled: bool = False,
     issuer_email: str | None = None,
+    draft: bool = False,
+    payment_term_days: int | None = None,
 ) -> bytes:
     """
     Erzeugt das PDF in Sprache, Gebietsschema und Währung der Rechnung.
+
+    draft=True erzeugt eine Ansicht eines Rechnungsentwurfs zur Prüfung:
+    Wasserzeichen "ENTWURF", ohne Rechnungsnummer, Rechnungsdatum und
+    Girocode; statt des Fälligkeitsdatums steht das Zahlungsziel
+    (payment_term_days) im PDF. Entwurfs-PDFs werden nicht archiviert.
     Beides wird beim Anlegen der Rechnung festgehalten, damit ein später
     erneut erzeugtes PDF der ursprünglichen Rechnung entspricht. Ältere
     Rechnungen ohne Gebietsschema erscheinen wie bisher in de-DE.
@@ -279,8 +315,10 @@ def build_invoice_pdf(
     try:
         return _build_invoice_pdf(
             invoice,
-            girocode_enabled=girocode_enabled,
+            girocode_enabled=girocode_enabled and not draft,
             issuer_email=issuer_email,
+            draft=draft,
+            payment_term_days=payment_term_days,
         )
     finally:
         _pdf_language.reset(language_token)
@@ -293,8 +331,10 @@ def _build_invoice_pdf(
     *,
     girocode_enabled: bool,
     issuer_email: str | None,
+    draft: bool = False,
+    payment_term_days: int | None = None,
 ) -> bytes:
-    validate_invoice(invoice)
+    validate_invoice(invoice, draft=draft)
 
     girocode = None
     girocode_label = None
@@ -372,7 +412,11 @@ def _build_invoice_pdf(
         rightMargin=18 * mm,
         topMargin=15 * mm,
         bottomMargin=18 * mm,
-        title=invoice.invoice_number,
+        title=(
+            _t("pdf.title.invoiceDraft")
+            if draft
+            else invoice.invoice_number
+        ),
         author=invoice.issuer_name,
     )
 
@@ -443,7 +487,9 @@ def _build_invoice_pdf(
     )
 
     header_title_text = _t(
-        "pdf.title.cancellation"
+        "pdf.title.invoiceDraft"
+        if draft
+        else "pdf.title.cancellation"
         if is_cancellation
         else "pdf.title.invoice"
     )
@@ -747,7 +793,9 @@ def _build_invoice_pdf(
         [
             meta_field(
                 document_number_label,
-                invoice.invoice_number,
+                _t("pdf.draftPending")
+                if draft
+                else invoice.invoice_number,
             ),
             meta_field(
                 _t("pdf.servicePeriod"),
@@ -755,7 +803,9 @@ def _build_invoice_pdf(
             ),
             meta_field(
                 issue_date_label,
-                format_date(invoice.issue_date),
+                _t("pdf.draftPending")
+                if draft
+                else format_date(invoice.issue_date),
                 align_right=True,
             ),
         ],
@@ -1261,7 +1311,14 @@ def _build_invoice_pdf(
         )
     )
 
-    if invoice.document_type == "cancellation":
+    if draft:
+        draft_term_days = max(payment_term_days or 0, 0)
+        payment_text = (
+            _t("pdf.payment.draft", days=draft_term_days)
+            if draft_term_days > 0
+            else _t("pdf.payment.draftImmediately")
+        )
+    elif invoice.document_type == "cancellation":
         payment_text = _t("pdf.payment.cancellation")
     else:
         if invoice.due_date is None:
@@ -1367,7 +1424,9 @@ def _build_invoice_pdf(
         story.extend(payment_details)
 
     footer_text = _t(
-        "pdf.closing.cancellation"
+        "pdf.closing.draft"
+        if draft
+        else "pdf.closing.cancellation"
         if is_cancellation
         else "pdf.closing.invoice"
     )
@@ -1386,6 +1445,7 @@ def _build_invoice_pdf(
         canvasmaker=partial(
             InvoiceCanvas,
             is_cancellation=is_cancellation,
+            is_draft=draft,
         ),
     )
 

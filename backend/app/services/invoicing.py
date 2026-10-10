@@ -53,6 +53,10 @@ class MonthlyBaseFeeCandidate:
     rebill_source_item_id: int | None
     net_amount: Decimal
     vat_rate: Decimal
+    # abgerechneter Teil des Monats (Ende exklusiv); ganzer Monat oder
+    # bei anteiliger Abrechnung der Schnitt mit dem Leistungszeitraum
+    slice_start: date | None = None
+    slice_end: date | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,12 @@ class MonthlyBaseFeeAssignmentPeriod:
     fee_month: date
     billed_days: Decimal
     days_in_month: int
+    # Teil des Monats, für den abgerechnet wird (Ende exklusiv)
+    slice_start: date | None = None
+    slice_end: date | None = None
+    # Tage der Zuordnung innerhalb dieses Teils (Ende exklusiv)
+    effective_start: date | None = None
+    effective_end: date | None = None
 
 
 class InvoiceDraftError(Exception):
@@ -331,13 +341,30 @@ def _effective_assignment_end_date_exclusive(
     return valid_to.date() + timedelta(days=1)
 
 
+def _first_full_day(value: datetime) -> date:
+    """Erster ganzer Tag ab diesem Zeitpunkt."""
+    if value.time() == time.min:
+        return value.date()
+
+    return value.date() + timedelta(days=1)
+
+
 def find_monthly_base_fee_assignments(
     db: Session,
     *,
     user_id: int,
     service_period_start: datetime,
     service_period_end: datetime,
+    prorate: bool = False,
 ) -> list[MonthlyBaseFeeAssignmentPeriod]:
+    """
+    Grundgebühren im Leistungszeitraum.
+
+    prorate=False (Standard): ganze Monate, deren Monatserster im Zeitraum
+    liegt. prorate=True: jeder Monat, der den Zeitraum schneidet, anteilig
+    für die Tage im Zeitraum (z. B. bei wöchentlicher Abrechnung). Für
+    Zeiträume aus ganzen Kalendermonaten ist das Ergebnis gleich.
+    """
     month_start = service_period_start.replace(
         day=1,
         hour=0,
@@ -346,10 +373,14 @@ def find_monthly_base_fee_assignments(
         microsecond=0,
     )
 
-    if month_start < service_period_start:
+    if month_start < service_period_start and not prorate:
         month_start = _next_month_start(
             month_start
         )
+
+    period_first_day = _first_full_day(service_period_start)
+    # erster Tag NACH dem Zeitraum (das Ende ist exklusiv)
+    period_end_day = service_period_end.date()
 
     result: list[MonthlyBaseFeeAssignmentPeriod] = []
 
@@ -357,6 +388,17 @@ def find_monthly_base_fee_assignments(
         next_month_start = _next_month_start(
             month_start
         )
+
+        if prorate:
+            slice_start = max(month_start.date(), period_first_day)
+            slice_end = min(next_month_start.date(), period_end_day)
+        else:
+            slice_start = month_start.date()
+            slice_end = next_month_start.date()
+
+        if slice_start >= slice_end:
+            month_start = next_month_start
+            continue
 
         assignments = list(
             db.scalars(
@@ -380,10 +422,8 @@ def find_monthly_base_fee_assignments(
             ).all()
         )
 
-        month_start_date = month_start.date()
-        next_month_start_date = (
-            next_month_start.date()
-        )
+        month_start_date = slice_start
+        next_month_start_date = slice_end
 
         for assignment in assignments:
             effective_start = max(
@@ -429,6 +469,10 @@ def find_monthly_base_fee_assignments(
                         month_start.year,
                         month_start.month,
                     )[1],
+                    slice_start=slice_start,
+                    slice_end=slice_end,
+                    effective_start=effective_start,
+                    effective_end=effective_end_exclusive,
                 )
             )
 
@@ -510,12 +554,40 @@ def get_base_fee_rebill_source_item_id(
     return False, None
 
 
+def _charge_has_items(db: Session, charge_id: int) -> bool:
+    return bool(
+        db.scalar(
+            select(func.count(InvoiceItem.id)).where(
+                InvoiceItem.monthly_base_fee_charge_id == charge_id
+            )
+        )
+    )
+
+
+def _charge_slice(charge: MonthlyBaseFeeCharge) -> tuple[date, date]:
+    """Abgerechneter Teil des Monats; ältere Einträge: ganzer Monat."""
+    start = charge.slice_start or charge.fee_month
+    end = charge.slice_end
+
+    if end is None:
+        end = _next_month_start(
+            datetime.combine(charge.fee_month, time.min)
+        ).date()
+
+    return start, end
+
+
+def _days(start: date, end: date) -> set[int]:
+    return set(range(start.toordinal(), end.toordinal()))
+
+
 def find_billable_monthly_base_fee_candidates(
     db: Session,
     *,
     user_id: int,
     service_period_start: datetime,
     service_period_end: datetime,
+    prorate: bool = False,
 ) -> list[MonthlyBaseFeeCandidate]:
     global_settings = db.get(
         GlobalSettings,
@@ -549,11 +621,27 @@ def find_billable_monthly_base_fee_candidates(
             user_id=user_id,
             service_period_start=service_period_start,
             service_period_end=service_period_end,
+            prorate=prorate,
         )
     ):
         assignment = assignment_period.assignment
         fee_month = assignment_period.fee_month
-        charge = db.scalar(
+        slice_start = assignment_period.slice_start
+        slice_end = assignment_period.slice_end
+
+        # Einträge derselben Zuordnung und desselben Monats: derselbe Teil
+        # wird wiederverwendet. Andere Teile, die abgerechnet, in einem
+        # Entwurf oder storniert sind, belegen ihre Tage – so wird beim
+        # Wechsel zwischen ganzen Monaten und anteiliger Abrechnung kein Tag
+        # doppelt berechnet. Belegt sind die Tage eines Eintrags, die nicht
+        # schon ein älterer Eintrag belegt (ein Monat nach zwei Wochen
+        # belegt nur die übrigen Tage). Verwaiste Einträge ohne Positionen
+        # (gelöschter Entwurf) werden entfernt.
+        charge = None
+        covered: set[int] = set()
+        occupied_so_far: set[int] = set()
+
+        for existing in db.scalars(
             select(MonthlyBaseFeeCharge)
             .where(
                 MonthlyBaseFeeCharge.rfid_assignment_id
@@ -561,8 +649,56 @@ def find_billable_monthly_base_fee_candidates(
                 MonthlyBaseFeeCharge.fee_month
                 == fee_month,
             )
+            .order_by(MonthlyBaseFeeCharge.id)
             .with_for_update()
-        )
+        ).all():
+            existing_start, existing_end = _charge_slice(existing)
+            is_identical = (
+                (existing_start, existing_end) == (slice_start, slice_end)
+            )
+            is_occupying = (
+                existing.invoiced
+                or existing.invoice_id is not None
+                or _charge_has_items(db, existing.id)
+            )
+
+            if is_identical:
+                charge = existing
+
+            if not is_occupying:
+                if not is_identical:
+                    db.delete(existing)
+                    db.flush()
+
+                continue
+
+            own_days = (
+                _days(existing_start, existing_end) - occupied_so_far
+            )
+            occupied_so_far |= own_days
+
+            if not is_identical:
+                covered |= own_days
+
+        if covered and assignment_period.effective_start is not None:
+            remaining = _days(
+                assignment_period.effective_start,
+                assignment_period.effective_end,
+            ) - covered
+
+            if not remaining:
+                continue
+
+            assignment_period = MonthlyBaseFeeAssignmentPeriod(
+                assignment=assignment,
+                fee_month=fee_month,
+                billed_days=Decimal(len(remaining)),
+                days_in_month=assignment_period.days_in_month,
+                slice_start=slice_start,
+                slice_end=slice_end,
+                effective_start=assignment_period.effective_start,
+                effective_end=assignment_period.effective_end,
+            )
 
         if charge is None:
             if (
@@ -600,6 +736,8 @@ def find_billable_monthly_base_fee_candidates(
                     rebill_source_item_id=None,
                     net_amount=prorated_net_amount,
                     vat_rate=configured_vat_rate,
+                    slice_start=slice_start,
+                    slice_end=slice_end,
                 )
             )
             continue
@@ -676,6 +814,8 @@ def find_billable_monthly_base_fee_candidates(
                     CENT,
                     rounding=ROUND_HALF_UP,
                 ),
+                slice_start=slice_start,
+                slice_end=slice_end,
             )
         )
 
@@ -688,6 +828,7 @@ def create_invoice_draft(
     user_id: int,
     service_period_start: datetime,
     service_period_end: datetime,
+    prorate_base_fee: bool = False,
 ) -> Invoice:
     if service_period_start >= service_period_end:
         raise InvalidServicePeriodError(
@@ -813,6 +954,7 @@ def create_invoice_draft(
                 effective_service_period_start
             ),
             service_period_end=service_period_end,
+            prorate=prorate_base_fee,
         )
     )
 
@@ -1150,6 +1292,8 @@ def create_invoice_draft(
                     ),
                     user_id=user_id,
                     fee_month=candidate.fee_month,
+                    slice_start=candidate.slice_start,
+                    slice_end=candidate.slice_end,
                     net_amount=candidate.net_amount,
                     vat_rate=candidate.vat_rate,
                     invoiced=False,

@@ -518,6 +518,72 @@ class GlobalSettings(Base):
         nullable=True,
     )
 
+    # Automatische Abrechnung: Entwürfe je Leistungszeitraum, Prüfung durch
+    # die Kunden, danach automatische Finalisierung und Versand
+    auto_billing_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    # weekly, monthly oder quarterly
+    auto_billing_interval: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="monthly",
+        server_default="monthly",
+    )
+
+    # Stichtag = letzter Tag des Leistungszeitraums. Wöchentlich: Wochentag
+    # 1 (Montag) bis 7 (Sonntag). Monatlich/vierteljährlich: Tag 1 bis 28
+    # des (Quartals-)Monats, 0 = Monatsletzter.
+    auto_billing_cutoff_day: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    # Tage nach dem Stichtag, bevor die Entwürfe erstellt werden
+    auto_billing_grace_days: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=2,
+        server_default="2",
+    )
+
+    # Prüffrist der Kunden in Tagen
+    auto_billing_review_days: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=7,
+        server_default="7",
+    )
+
+    # Uhrzeit (Ortszeit), zu der Entwürfe erstellt und Rechnungen
+    # finalisiert werden
+    auto_billing_run_time: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="06:00",
+        server_default="06:00",
+    )
+
+    # E-Mail-Adresse des Rechnungsstellers für Hinweise und Nachfragen;
+    # leer = Absenderadresse der E-Mails
+    auto_billing_notification_email: Mapped[str | None] = mapped_column(
+        String(320),
+        nullable=True,
+    )
+
+    # Tag des (letzten) Einschaltens: abgerechnet werden Zeiträume, deren
+    # Stichtag an oder nach diesem Tag liegt
+    auto_billing_active_since: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
