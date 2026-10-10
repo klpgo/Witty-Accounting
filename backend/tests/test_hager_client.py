@@ -209,7 +209,7 @@ def emobility_transport(
     requested: list[dict],
 ) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/e-mobility/322329007044/charging"
+        assert request.url.path == "/e-mobility/300012345678/charging"
         assert request.headers["authorization"] == "Bearer ACCESS"
         params = dict(request.url.params)
         requested.append(params)
@@ -242,7 +242,7 @@ def test_fetch_requests_newest_first_and_stops_at_cutoff(
 
     rows = hager_client.fetch_charging_sessions(
         "ACCESS",
-        "322329007044",
+        "300012345678",
         stop_before=datetime(2026, 9, 20, 0, 0, tzinfo=UTC),
         transport=emobility_transport(
             full_pages([[24, 23, 22], [21, 20, 19], [18, 17, 16]]),
@@ -265,7 +265,7 @@ def test_fetch_stops_at_last_partial_page(
 
     rows = hager_client.fetch_charging_sessions(
         "ACCESS",
-        "322329007044",
+        "300012345678",
         info=info,
         transport=emobility_transport(
             full_pages([[24, 23, 22], [21, 20]]),
@@ -285,7 +285,7 @@ def test_fetch_reads_all_pages_if_not_sorted(
 
     hager_client.fetch_charging_sessions(
         "ACCESS",
-        "322329007044",
+        "300012345678",
         stop_before=datetime(2026, 9, 20, 0, 0, tzinfo=UTC),
         transport=emobility_transport(
             full_pages([[24, 19, 22], [21, 20, 18], [23, 17]]),
@@ -302,7 +302,7 @@ def test_fetch_max_pages(monkeypatch: pytest.MonkeyPatch) -> None:
 
     rows = hager_client.fetch_charging_sessions(
         "ACCESS",
-        "322329007044",
+        "300012345678",
         max_pages=1,
         transport=emobility_transport(
             full_pages([[24, 23, 22], [21, 20, 19]]),
@@ -328,14 +328,14 @@ def test_fetch_http_errors(status_code: int, error: type) -> None:
     with pytest.raises(error, match=f"HTTP {status_code}"):
         hager_client.fetch_charging_sessions(
             "ACCESS",
-            "322329007044",
+            "300012345678",
             transport=transport,
         )
 
 
 def test_fetch_wallbox_names() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path.endswith("/wallbox/wallboxes/1000143617/active")
+        assert request.url.path.endswith("/wallbox/wallboxes/1000123456/active")
         return httpx.Response(
             200,
             json=[
@@ -347,7 +347,7 @@ def test_fetch_wallbox_names() -> None:
 
     assert hager_client.fetch_wallbox_names(
         "ACCESS",
-        "1000143617",
+        "1000123456",
         transport=httpx.MockTransport(handler),
     ) == {"WB-A": "WB2"}
 

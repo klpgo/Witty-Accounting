@@ -22,7 +22,7 @@ def row(**overrides) -> dict:
         "startAt": "2026-08-12T12:09:01.000Z",
         "stopAt": "2026-08-12T12:14:03.000Z",
         "authType": "RFID",
-        "authData": "de0d02a6",
+        "authData": "a1b2c3d4",
         "energyAll": "188.00",
         "energySolar": "180.00",
         "status": "FINISHED",
@@ -67,7 +67,7 @@ def test_parse_converts_wh_to_kwh_and_utc_to_local_time() -> None:
     assert parsed["energy_pv_kwh"] == pytest.approx(0.18)
     assert parsed["start_time"] == datetime(2026, 8, 12, 14, 9, 1)
     assert parsed["end_time"] == datetime(2026, 8, 12, 14, 14, 3)
-    assert parsed["rfid"] == "DE0D02A6"
+    assert parsed["rfid"] == "A1B2C3D4"
     assert parsed["station_id"] == "WB2"
     assert parsed["wallbox_id"] == "WB-A"
     assert parsed["hager_session_id"] == "WB-A-1786536541000-12ab3c4d"
@@ -101,7 +101,7 @@ def test_import_stores_new_session_with_wallbox_id() -> None:
         assert stored.wallbox_id == "WB-A"
         assert stored.station_id == "WB2"
         assert stored.energy_total_kwh == pytest.approx(0.188)
-        assert stored.rfid_number == "DE0D02A6"
+        assert stored.rfid_number == "A1B2C3D4"
 
 
 def test_reimport_is_skipped() -> None:
@@ -124,7 +124,7 @@ def test_legacy_bridge_session_is_recognized_and_backfilled() -> None:
         assert result["imported"] == 0
         assert len(sessions) == 1
         assert sessions[0].wallbox_id == "WB-A"
-        assert sessions[0].rfid_number == "DE0D02A6"
+        assert sessions[0].rfid_number == "A1B2C3D4"
         # bisherige Hager-ID bleibt erhalten
         assert sessions[0].hager_session_id == "bridge-uuid-1"
 
@@ -265,7 +265,7 @@ def test_discarded_sessions_are_not_priced_or_reassigned() -> None:
     with create_database_session() as db:
         db.add(
             legacy_session(
-                rfid_number="DE0D02A6",
+                rfid_number="A1B2C3D4",
                 discarded_at=datetime(2026, 9, 1, 12, 0),
             )
         )

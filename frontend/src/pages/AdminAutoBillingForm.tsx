@@ -394,7 +394,7 @@ function AdminAutoBillingForm() {
               type="email"
               value={notificationEmail}
               maxLength={320}
-              placeholder={settings?.effective_notification_email ?? ''}
+              placeholder="rechnung@example.org"
               onChange={(event) => {
                 setNotificationEmail(event.target.value)
               }}

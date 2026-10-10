@@ -112,9 +112,9 @@ def extract_rfid(authentication: str) -> str | None:
     Extrahiert die RFID-Nummer aus dem Authentifizierungstext.
 
     Beispiele:
-        Wartung Gottschalk (DE0D02A6) -> DE0D02A6
-        RFID Nr.4 (6005E5AC)          -> 6005E5AC
-        RFID N.3 (D0BEEEAC)           -> D0BEEEAC
+        Wartung Muster (A1B2C3D4) -> A1B2C3D4
+        RFID Nr.4 (C3D4E5F6)          -> C3D4E5F6
+        RFID N.3 (B2C3D4E5)           -> B2C3D4E5
         Keine Authentifizierung       -> None
     """
     normalized_authentication = authentication.strip()

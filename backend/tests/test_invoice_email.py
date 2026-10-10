@@ -225,7 +225,7 @@ def configure_mail_settings(
     monkeypatch.setattr(
         settings,
         "mail_from_name",
-        "Klaus Gottschalk",
+        "Erika Mustermann",
     )
     monkeypatch.setattr(
         settings,
@@ -463,7 +463,7 @@ def test_sends_archived_invoice_pdf(
 
     assert message is not None
     assert message["From"] == (
-        "Klaus Gottschalk "
+        "Erika Mustermann "
         "<rechnung@example.test>"
     )
     assert message["To"] == (
@@ -483,7 +483,7 @@ def test_sends_archived_invoice_pdf(
         "Ladestrom-Rechnung RE-2026-000001 "
         "als PDF-Datei.\n\n"
         "Mit freundlichen Grüßen\n"
-        "Klaus Gottschalk\n"
+        "Erika Mustermann\n"
     )
     assert (
         "RE-2026-000001"
@@ -1214,7 +1214,7 @@ def test_sends_smtp_test_email(
     assert message is not None
     assert message["To"] == "admin@example.test"
     assert message["From"] == (
-        "Klaus Gottschalk "
+        "Erika Mustermann "
         "<rechnung@example.test>"
     )
     assert message["Subject"] == (

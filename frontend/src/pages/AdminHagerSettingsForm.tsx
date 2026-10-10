@@ -438,7 +438,7 @@ function AdminHagerSettingsForm() {
               inputMode="numeric"
               value={installationId}
               maxLength={50}
-              placeholder={t('settings.hager.examplePrefix', { value: '1000143617' })}
+              placeholder={t('settings.hager.examplePrefix', { value: '1000123456' })}
               onChange={(event) => {
                 setInstallationId(event.target.value)
               }}
@@ -452,7 +452,7 @@ function AdminHagerSettingsForm() {
               inputMode="numeric"
               value={serialNumber}
               maxLength={50}
-              placeholder={t('settings.hager.examplePrefix', { value: '322329007044' })}
+              placeholder={t('settings.hager.examplePrefix', { value: '300012345678' })}
               onChange={(event) => {
                 setSerialNumber(event.target.value)
               }}

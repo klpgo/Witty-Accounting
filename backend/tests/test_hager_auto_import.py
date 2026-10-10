@@ -59,7 +59,7 @@ class TenantDatabases:
                     monthly_base_fee_vat_rate=Decimal("19.00"),
                     hager_username="user@example.com",
                     hager_password_encrypted="verschluesselt",
-                    hager_installation_id="1000143617",
+                    hager_installation_id="1000123456",
                     **settings,
                 )
             )

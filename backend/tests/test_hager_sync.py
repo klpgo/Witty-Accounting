@@ -60,8 +60,8 @@ from app.services.hager_sync import (
 ACCESS = HagerAccess(
     username="user@example.com",
     password="pw",
-    installation_id="1000143617",
-    serial_number="322329007044",
+    installation_id="1000123456",
+    serial_number="300012345678",
 )
 
 
@@ -129,7 +129,7 @@ def test_connection_check_forces_login(
     options: dict = {}
 
     def fake_fetch(token, serial_number, **kwargs):
-        assert serial_number == "322329007044"
+        assert serial_number == "300012345678"
         options.update(kwargs)
         return [{"startAt": "2026-07-15T09:26:37.000Z"}]
 

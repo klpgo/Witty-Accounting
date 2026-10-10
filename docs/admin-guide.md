@@ -292,7 +292,7 @@ their year once the retention period has expired, see
 ### 2.11 Charging cards and assignments
 
 Under **Charging cards → New RFID card**, create each card with its RFID
-number exactly as it appears in the Hager data (e.g. `6AA972EA`) and a
+number exactly as it appears in the Hager data (e.g. `D4E5F6A7`) and a
 description, then click **Create card**.
 
 Select the card and add a **New assignment** to a user:

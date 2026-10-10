@@ -652,7 +652,7 @@ def test_admin_sees_imported_rfid_number_of_unassigned_session(
         suffix="unassigned",
         start_time=datetime(2026, 6, 12, 8, 0),
     )
-    unassigned.rfid_number = "3027ECAC"
+    unassigned.rfid_number = "E5F6A7B8"
     database_session.commit()
 
     item = [
@@ -664,5 +664,5 @@ def test_admin_sees_imported_rfid_number_of_unassigned_session(
         if entry["id"] == unassigned.id
     ][0]
 
-    assert item["rfid_number"] == "3027ECAC"
+    assert item["rfid_number"] == "E5F6A7B8"
     assert item["user_id"] is None

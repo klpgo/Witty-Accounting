@@ -15,7 +15,7 @@ from app.services.importers.hager_json_importer import (
 
 def make_item(**overrides):
     session = {
-        "id": "cbe8e0d1-3224-480c-9d2f-579b4b8bd4e5",
+        "id": "00000000-0000-4000-8000-000000000001",
         "kwh": 12.345,
         "status": "COMPLETED",
         "start_date_time": "2026-07-15T09:26:37Z",
@@ -25,9 +25,9 @@ def make_item(**overrides):
     item = {
         "session": session,
         "emobilitySessionId": "HB-1784107597909",
-        "wallboxId": "HBgvt8tTxAczTHd2hfTHMj",
+        "wallboxId": "WallboxBeispielId0001",
         "wallboxName": "WB5",
-        "emobilityToken": "de0d02a6",
+        "emobilityToken": "a1b2c3d4",
         "energySolar": 1.5,
         "status": "FINISHED",
     }
@@ -56,12 +56,12 @@ def test_parse_session_maps_fields() -> None:
 
     assert parsed is not None
     assert parsed["hager_session_id"] == (
-        "cbe8e0d1-3224-480c-9d2f-579b4b8bd4e5"
+        "00000000-0000-4000-8000-000000000001"
     )
     assert parsed["start_time"] == datetime(2026, 7, 15, 11, 26, 37)
     assert parsed["end_time"] == datetime(2026, 7, 15, 13, 27, 30)
     assert parsed["station_id"] == "WB5"
-    assert parsed["rfid"] == "DE0D02A6"
+    assert parsed["rfid"] == "A1B2C3D4"
     assert parsed["energy_total_kwh"] == pytest.approx(12.345)
     assert parsed["energy_pv_kwh"] == pytest.approx(1.5)
     assert parsed["source"] == "json"

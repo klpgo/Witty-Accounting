@@ -647,7 +647,7 @@ def test_updates_invoice_business_settings(
         "/api/settings",
         json={
             "invoice_issuer_name": (
-                "  Klaus Gottschalk  "
+                "  Erika Mustermann  "
             ),
             "invoice_issuer_address": (
                 "  Musterstraße 1\n"
@@ -677,7 +677,7 @@ def test_updates_invoice_business_settings(
     body = response.json()
 
     assert body["invoice_issuer_name"] == (
-        "Klaus Gottschalk"
+        "Erika Mustermann"
     )
     assert body["invoice_issuer_address"] == (
         "Musterstraße 1\n12345 Musterstadt"
@@ -726,7 +726,7 @@ def test_clears_optional_invoice_business_settings(
 ) -> None:
     global_settings = add_global_settings(
         database_session,
-        invoice_issuer_name="Klaus Gottschalk",
+        invoice_issuer_name="Erika Mustermann",
         invoice_issuer_address=(
             "Musterstraße 1\n12345 Musterstadt"
         ),

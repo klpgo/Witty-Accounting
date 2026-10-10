@@ -497,7 +497,7 @@ def test_deleted_sessions_are_not_imported_again(
     make_card_assignment(
         db,
         customer,
-        rfid_number="DE0D02A6",
+        rfid_number="A1B2C3D4",
         valid_to=datetime(2026, 9, 1),
     )
     db.commit()
@@ -508,7 +508,7 @@ def test_deleted_sessions_are_not_imported_again(
         "startAt": "2026-08-12T12:09:01.000Z",
         "stopAt": "2026-08-12T12:14:03.000Z",
         "authType": "RFID",
-        "authData": "de0d02a6",
+        "authData": "a1b2c3d4",
         "energyAll": "188.00",
         "energySolar": "180.00",
         "status": "FINISHED",

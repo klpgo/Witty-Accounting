@@ -17,7 +17,7 @@ USER_SEEDS = [
         "first_name": "Max",
         "last_name": "Mustermann",
         "cards": [
-            ("6AA972EA", "RFID Nr.1"),
+            ("D4E5F6A7", "RFID Nr.1"),
         ],
     },
     {
@@ -25,8 +25,8 @@ USER_SEEDS = [
         "first_name": "Erika",
         "last_name": "Musterfrau",
         "cards": [
-            ("3027ECAC", "RFID Nr.2"),
-            ("D0BEEEAC", "RFID Nr.3"),
+            ("E5F6A7B8", "RFID Nr.2"),
+            ("B2C3D4E5", "RFID Nr.3"),
         ],
     },
     {
@@ -34,7 +34,7 @@ USER_SEEDS = [
         "first_name": "Testnutzer",
         "last_name": "4",
         "cards": [
-            ("6005E5AC", "RFID Nr.4"),
+            ("C3D4E5F6", "RFID Nr.4"),
         ],
     },
     {
@@ -42,7 +42,7 @@ USER_SEEDS = [
         "first_name": "Testnutzer",
         "last_name": "5",
         "cards": [
-            ("E033F68C", "RFID Nr.5"),
+            ("B8C9D0E1", "RFID Nr.5"),
         ],
     },
     {
@@ -50,7 +50,7 @@ USER_SEEDS = [
         "first_name": "Testnutzer",
         "last_name": "6",
         "cards": [
-            ("AA37FCF3", "RFID Nr.6"),
+            ("A7B8C9D0", "RFID Nr.6"),
         ],
     },
     {
@@ -58,15 +58,15 @@ USER_SEEDS = [
         "first_name": "Testnutzer",
         "last_name": "10",
         "cards": [
-            ("8A7704F4", "RFID Nr.10"),
+            ("F6A7B8C9", "RFID Nr.10"),
         ],
     },
     {
-        "email": "wartung.gottschalk@example.invalid",
+        "email": "wartung.muster@example.invalid",
         "first_name": "Wartung",
-        "last_name": "Gottschalk",
+        "last_name": "Muster",
         "cards": [
-            ("DE0D02A6", "Wartung Gottschalk"),
+            ("A1B2C3D4", "Wartung Muster"),
         ],
     },
 ]

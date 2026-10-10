@@ -57,8 +57,8 @@ def store_access(db: Session) -> None:
     settings = db.get(GlobalSettings, 1)
     settings.hager_username = "user@example.com"
     settings.hager_password_encrypted = "verschluesselt"
-    settings.hager_installation_id = "1000143617"
-    settings.hager_serial_number = "322329007044"
+    settings.hager_installation_id = "1000123456"
+    settings.hager_serial_number = "300012345678"
     db.commit()
 
 
@@ -154,11 +154,11 @@ def test_last_run_is_returned_with_timezone(
 def test_serial_number_is_stored_and_validated(client: TestClient) -> None:
     response = client.patch(
         "/api/settings/hager",
-        json={"serial_number": " 322329007044 "},
+        json={"serial_number": " 300012345678 "},
     )
 
     assert response.status_code == 200
-    assert response.json()["serial_number"] == "322329007044"
+    assert response.json()["serial_number"] == "300012345678"
     assert client.patch(
         "/api/settings/hager",
         json={"serial_number": "S-123"},

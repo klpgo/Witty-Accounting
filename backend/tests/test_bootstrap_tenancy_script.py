@@ -26,7 +26,7 @@ def test_bootstrap_cli_uses_existing_database_settings(
             "--name",
             "Am Wolfsberg 42",
             "--hostname",
-            " wb42.witty.kgem.de ",
+            " wb42.witty.example.org ",
         ],
     )
 

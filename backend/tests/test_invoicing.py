@@ -495,7 +495,7 @@ def test_uses_global_invoice_business_settings(
         GlobalSettings(
             id=1,
             invoice_issuer_name=(
-                "Klaus Gottschalk"
+                "Erika Mustermann"
             ),
             invoice_issuer_address=(
                 "Musterstraße 1\n"
@@ -529,7 +529,7 @@ def test_uses_global_invoice_business_settings(
     )
 
     assert invoice.issuer_name == (
-        "Klaus Gottschalk"
+        "Erika Mustermann"
     )
     assert invoice.issuer_address == (
         "Musterstraße 1\n12345 Musterstadt"
