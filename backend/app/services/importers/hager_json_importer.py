@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.models.charging_session import ChargingSession
 from app.services.importers.xlsx_importer import create_import_hash
 from app.services.data_timezone import ensure_data_timezone
+from app.services.deleted_sessions import find_deleted_session
 from app.services.wallboxes import fallback_name
 from app.services.importers.import_filters import (
     ExclusionCounter,
@@ -483,6 +484,18 @@ def import_parsed_sessions_to_db(
             continue
 
         seen_ids.add(session_data["hager_session_id"])
+
+        # Ladevorgang eines gelöschten Benutzers: nicht erneut anlegen
+        if find_deleted_session(
+            db,
+            start_time=session_data["start_time"],
+            import_hash=session_data["import_hash"],
+            hager_session_id=session_data["hager_session_id"],
+            wallbox_id=session_data.get("wallbox_id"),
+            station_aliases=session_data.get("station_aliases"),
+        ) is not None:
+            skipped += 1
+            continue
 
         existing = find_existing_session(db, session_data)
 

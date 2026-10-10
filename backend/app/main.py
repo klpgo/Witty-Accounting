@@ -28,6 +28,7 @@ from app.api.routes.dashboard import (
     router as dashboard_router,
 )
 from app.api.routes.imports import router as imports_router
+from app.api.routes.retention import router as retention_router
 from app.api.routes.hager_settings import (
     router as hager_settings_router,
 )
@@ -164,6 +165,7 @@ api_router.include_router(settings_router)
 api_router.include_router(charging_sessions_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(wallboxes_router)
+api_router.include_router(retention_router)
 app.include_router(api_router)
 
 

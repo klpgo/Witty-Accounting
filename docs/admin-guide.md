@@ -253,6 +253,42 @@ delivery (email, post or portal download) and optionally the language, then
 click **Create user**. The user receives an email with a one-time link to set
 a personal password. The address is printed on the invoices.
 
+**Deleting a user** (e.g. on request under Art. 17 GDPR): select the user and
+click **Check deletion …** at the bottom of the form. Witty shows what will be
+deleted and what stays:
+
+- **Deleted:** the user's charging sessions, monthly base fee entries, card
+  assignments and pending password links, then the user account itself.
+- **Kept:** all invoices and cancellation invoices with their archived PDFs.
+  They contain recipient name, address and all line item details as their own
+  copy, so they stay complete and can still be opened and downloaded. The
+  RFID card is kept as well and can be assigned to someone else.
+
+Deletion is only possible when
+
+- no draft invoice of the user exists,
+- every finalized invoice has an archived PDF,
+- all card assignments have ended (set **Valid to** first), and
+- all charging sessions and base fees have been billed or discarded.
+
+Unbilled charging sessions and base fees can be deleted together with the
+user by ticking **Also delete unbilled charging sessions and base fees**;
+they are then never invoiced. Confirm and click **Delete permanently**. You
+cannot delete your own account.
+
+After the deletion:
+
+- Invoices of the deleted user show a note instead of the delivery actions;
+  they can no longer be sent or cancelled in Witty.
+- The Hager Cloud still holds the charging sessions. Witty remembers the
+  deleted sessions (only the technical identifiers, no energy or card data)
+  and skips them on every later sync or XLSX upload.
+- The data remains in older backups until they are rotated out.
+
+Invoices of deleted users are removed together with all other invoices of
+their year once the retention period has expired, see
+[section 2.13](#213-retention-and-deletion).
+
 ### 2.11 Charging cards and assignments
 
 Under **Charging cards → New RFID card**, create each card with its RFID
@@ -293,6 +329,51 @@ is:
 A replaced wallbox often has no name in the Hager Cloud. Enter a custom name
 and click **Save**; it is applied to all charging sessions of this wallbox that
 have not been billed yet. Invoices already created keep their names.
+
+### 2.13 Retention and deletion
+
+Invoices must be kept for a statutory period that starts at the end of the
+year in which they were issued. Under **Settings → Retention and deletion**,
+set the **Retention period in years** (default 10, allowed 6 to 30) and click
+**Save period**. Agree on the period with your tax advisor: in Germany it is
+currently 8 years for invoices, but it is extended while a tax assessment is
+still open, e.g. during a tax audit. Witty cannot detect that, so it never
+deletes on its own.
+
+With 10 years, an invoice issued in 2026 must be kept until 31 December 2036
+and can be deleted from 1 January 2037. Once a year has expired, the
+dashboard shows a note to administrators.
+
+**Expired years** lists every year whose period has expired with the number
+of invoices, cancellation invoices and the invoice number range. Deleting a
+year removes:
+
+- the invoices and cancellation invoices of that year with their archived
+  PDFs. An invoice and its cancellation are deleted together and count to the
+  later of the two years (an invoice from December 2026 cancelled in January
+  2027 is deleted with 2027);
+- the charging sessions and monthly base fees billed only in these invoices,
+  also for users who are still active. Users and their card assignments stay;
+- discarded charging sessions from the deleted period and the markers of
+  charging sessions deleted with a user (section 2.10).
+
+A charging session that was billed again in a later invoice after a
+cancellation stays with that later invoice.
+
+Years are deleted in chronological order. A year cannot be deleted while it
+still has draft invoices or cancellation drafts, or charging sessions or base
+fees that have been neither billed nor discarded. To delete, enter the year in
+the confirmation field and click **Delete … permanently**. Deletion cannot be
+undone. Afterwards, charging sessions from deleted years are no longer
+imported from the Hager Cloud or an XLSX upload.
+
+Every deletion is recorded in the **Deletion log**: year, invoice number
+range, numbers of documents, charging sessions and base fees, time and
+administrator. The log contains no customer data. If a PDF file could not be
+removed, the log names it; delete it by hand from the invoice archive.
+
+Copies outside Witty are not affected: PDFs exported via SFTP and backups
+(section 6) must be cleaned up separately, e.g. by rotating backups.
 
 ---
 
@@ -494,6 +575,8 @@ have been copied off the host.
    docker compose up -d
    docker compose run --rm --no-deps backend alembic upgrade head
    ```
+   In multi-tenant operation, run `python -m scripts.migrate_tenants`
+   instead of `alembic upgrade head` (see [section 7.6](#76-updates-and-backup)).
 5. Sign in and check a few invoices: **Download PDF** must work for finalized
    invoices.
 
@@ -768,7 +851,12 @@ docker compose run --rm --no-deps backend alembic upgrade head
 In multi-tenant operation, use
 `docker compose run --rm --no-deps backend python -m scripts.migrate_tenants`
 instead of the last command and update the control service as well (see
-[section 7.6](#76-updates-and-backup)).
+[section 7.6](#76-updates-and-backup)). With `TENANCY_ENABLED=true`, a plain
+`alembic` command stops with a message pointing to `migrate_tenants`, because
+it would only reach the database from `DATABASE_URL` and not the tenant
+databases. If you really need to work on that database directly, add
+`-x allow_default_database=true`, e.g.
+`alembic -x allow_default_database=true current`.
 
 ---
 

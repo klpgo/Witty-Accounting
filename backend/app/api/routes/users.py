@@ -20,6 +20,7 @@ from app.models.user import User
 from app.schemas.user import (
     UserAdminUpdate,
     UserCreate,
+    UserDeletionCheckResponse,
     UserPasswordChange,
     UserPasswordReset,
     UserProfileUpdate,
@@ -39,6 +40,11 @@ from app.services.password_reset import (
     PasswordResetEmailError,
     generate_temporary_password,
     issue_password_reset,
+)
+from app.services.user_deletion import (
+    UserDeletionBlockedError,
+    check_user_deletion,
+    delete_user,
 )
 
 router = APIRouter(
@@ -573,6 +579,77 @@ def reset_user_password(
     )
 
     db.commit()
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+
+
+@router.get(
+    "/{user_id}/deletion-check",
+    response_model=UserDeletionCheckResponse,
+)
+def get_user_deletion_check(
+    user_id: int,
+    current_admin: Annotated[
+        User,
+        Depends(require_admin),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> dict:
+    get_user_or_404(
+        db,
+        user_id,
+    )
+
+    return check_user_deletion(
+        db,
+        user_id=user_id,
+        acting_user_id=current_admin.id,
+    ).as_dict()
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_user_account(
+    user_id: int,
+    current_admin: Annotated[
+        User,
+        Depends(require_admin),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+    discard_unbilled: bool = False,
+) -> Response:
+    """
+    Löscht die Abrechnungsdaten und danach den Benutzer. Rechnungen
+    bleiben im Archiv. Mit discard_unbilled werden auch noch nicht
+    abgerechnete Ladevorgänge und Grundgebühren gelöscht.
+    """
+    get_user_or_404(
+        db,
+        user_id,
+    )
+
+    try:
+        delete_user(
+            db,
+            user_id=user_id,
+            acting_user_id=current_admin.id,
+            discard_unbilled=discard_unbilled,
+        )
+    except UserDeletionBlockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     return Response(
         status_code=status.HTTP_204_NO_CONTENT,

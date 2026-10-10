@@ -19,6 +19,7 @@ import {
   type InvoiceDeliveryMethod,
 } from '../api/users'
 import { getAccessToken } from '../auth/tokenStorage'
+import UserDeletionPanel from '../components/UserDeletionPanel'
 import { useAuth } from '../auth/useAuth'
 import {
   getGlobalSettings,
@@ -442,6 +443,34 @@ function AdminUsersPage() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  function handleUserDeleted(deletedUser: User): void {
+    const remainingUsers = users.filter(
+      (candidate) => candidate.id !== deletedUser.id,
+    )
+
+    setUsers(remainingUsers)
+    setSelectedUserId(
+      remainingUsers.find(
+        (candidate) =>
+          !hideInactiveUsers || candidate.active,
+      )?.id ?? null,
+    )
+    setErrorMessage(null)
+    setSuccessMessage(
+      t('users.deleted', {
+        name: `${deletedUser.first_name} ${deletedUser.last_name}`,
+      }),
+    )
+  }
+
+  function handleDeletionError(
+    error: unknown,
+    fallbackMessage: string,
+  ): void {
+    setSuccessMessage(null)
+    handleRequestError(error, fallbackMessage)
   }
 
   async function handlePasswordReset(
@@ -947,6 +976,19 @@ function AdminUsersPage() {
                        </button>
                      </div>
                    </form>
+
+                   {!isOwnAccount && (
+                     <>
+                       <div className="admin-divider" />
+
+                       <UserDeletionPanel
+                         key={selectedUser.id}
+                         user={selectedUser}
+                         onDeleted={handleUserDeleted}
+                         onError={handleDeletionError}
+                       />
+                     </>
+                   )}
                 </>
               )}
             </section>

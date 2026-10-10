@@ -328,3 +328,69 @@ export async function resetUserPassword(
     )
   }
 }
+
+export interface UserDeletionBlocker {
+  code: string
+  count: number
+  message: string
+  discardable: boolean
+}
+
+export interface UserDeletionCheck {
+  user_id: number
+  can_delete: boolean
+  can_delete_with_discard: boolean
+  blockers: UserDeletionBlocker[]
+  charging_sessions: number
+  base_fees: number
+  rfid_assignments: number
+  invoices_kept: number
+}
+
+export async function getUserDeletionCheck(
+  accessToken: string,
+  userId: number,
+  signal?: AbortSignal,
+): Promise<UserDeletionCheck> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}/deletion-check`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as UserDeletionCheck
+}
+
+export async function deleteUser(
+  accessToken: string,
+  userId: number,
+  discardUnbilled: boolean,
+): Promise<void> {
+  const query = discardUnbilled
+    ? '?discard_unbilled=true'
+    : ''
+
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}${query}`,
+    {
+      method: 'DELETE',
+      headers: createHeaders(accessToken),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await getErrorMessage(response),
+      response.status,
+    )
+  }
+}

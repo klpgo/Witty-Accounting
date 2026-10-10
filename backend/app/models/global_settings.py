@@ -425,6 +425,22 @@ class GlobalSettings(Base):
         nullable=True,
     )
 
+    # Aufbewahrung: Rechnungen werden frühestens so viele Jahre nach Ende
+    # des Ausstellungsjahres gelöscht (nur auf Anforderung im Admin-Bereich)
+    invoice_retention_years: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=10,
+        server_default="10",
+    )
+
+    # Letztes Jahr, dessen Rechnungen und Abrechnungsdaten gelöscht wurden;
+    # Ladevorgänge bis Ende dieses Jahres werden nicht mehr importiert
+    retention_purged_through_year: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
     # Import: Ladevorgänge ohne Energie (0 kWh) nicht übernehmen
     import_skip_empty_sessions: Mapped[bool] = mapped_column(
         Boolean,

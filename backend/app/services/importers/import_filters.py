@@ -2,7 +2,9 @@
 Gemeinsame Regeln, welche Ladevorgänge beim Import übernommen werden –
 für alle Importwege (Hager Cloud, JSON, XLSX).
 
-- Ladevorgänge vor dem Abrechnungsbeginn werden nie importiert.
+- Ladevorgänge vor dem Abrechnungsbeginn werden nie importiert, ebenso
+  Ladevorgänge aus Jahren, deren Daten nach Ablauf der Aufbewahrungsfrist
+  gelöscht wurden.
 - Optional (Einstellung): Ladevorgänge ohne Energie (0 kWh) werden
   nicht importiert, z. B. abgebrochene oder nicht autorisierte Vorgänge.
 """
@@ -32,8 +34,17 @@ def load_import_filters(db: Session) -> ImportFilters:
     if settings is None:
         return ImportFilters()
 
+    not_before = settings.billing_start_date
+    purged_through = getattr(settings, "retention_purged_through_year", None)
+
+    if purged_through is not None:
+        purged_boundary = date(purged_through + 1, 1, 1)
+
+        if not_before is None or not_before < purged_boundary:
+            not_before = purged_boundary
+
     return ImportFilters(
-        not_before=settings.billing_start_date,
+        not_before=not_before,
         skip_empty=bool(settings.import_skip_empty_sessions),
     )
 

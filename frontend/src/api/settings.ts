@@ -748,3 +748,112 @@ export async function testHagerSettings(
     await response.json()
   ) as HagerConnectionTestResponse
 }
+
+// Aufbewahrung: Rechnungen nach Ablauf der Frist jahrweise löschen
+
+export interface RetentionBlocker {
+  code: string
+  count: number
+  message: string
+}
+
+export interface RetentionYear {
+  year: number
+  invoices: number
+  cancellations: number
+  pdf_files: number
+  first_invoice_number: string | null
+  last_invoice_number: string | null
+  purgeable: boolean
+  blockers: RetentionBlocker[]
+}
+
+export interface RetentionProtocolEntry {
+  id: number
+  year: number
+  retention_years: number
+  invoices: number
+  cancellations: number
+  first_invoice_number: string | null
+  last_invoice_number: string | null
+  pdf_files: number
+  charging_sessions: number
+  base_fees: number
+  pdf_errors: string[]
+  purged_by: string | null
+  purged_at: string
+}
+
+export interface RetentionOverview {
+  retention_years: number
+  min_retention_years: number
+  max_retention_years: number
+  last_purgeable_year: number
+  purged_through_year: number | null
+  years: RetentionYear[]
+  protocol: RetentionProtocolEntry[]
+}
+
+export interface RetentionPurgeResult {
+  year: number
+  invoices: number
+  cancellations: number
+  pdf_files: number
+  charging_sessions: number
+  base_fees: number
+  pdf_errors: string[]
+  protocol_id: number
+}
+
+export async function getRetentionOverview(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<RetentionOverview> {
+  return readEnergyResponse<RetentionOverview>(
+    await fetch(`${API_BASE_URL}/retention`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+}
+
+export async function getRetentionDueYear(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<number | null> {
+  const result = await readEnergyResponse<{ year: number | null }>(
+    await fetch(`${API_BASE_URL}/retention/due`, {
+      headers: createHeaders(accessToken),
+      signal,
+    }),
+  )
+
+  return result.year
+}
+
+export async function updateRetentionYears(
+  accessToken: string,
+  retentionYears: number,
+): Promise<RetentionOverview> {
+  return readEnergyResponse<RetentionOverview>(
+    await fetch(`${API_BASE_URL}/retention/settings`, {
+      method: 'PATCH',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify({ retention_years: retentionYears }),
+    }),
+  )
+}
+
+export async function purgeRetentionYear(
+  accessToken: string,
+  year: number,
+  confirmYear: number,
+): Promise<RetentionPurgeResult> {
+  return readEnergyResponse<RetentionPurgeResult>(
+    await fetch(`${API_BASE_URL}/retention/years/${year}/purge`, {
+      method: 'POST',
+      headers: createHeaders(accessToken, true),
+      body: JSON.stringify({ confirm_year: confirmYear }),
+    }),
+  )
+}

@@ -162,7 +162,7 @@ function InvoiceDetailPage() {
         )
         setInvoice(loadedInvoice)
 
-        if (isAdmin) {
+        if (isAdmin && loadedInvoice.user_id !== null) {
           const loadedRecipient = await getUser(
             token,
             loadedInvoice.user_id,
@@ -1073,6 +1073,12 @@ function InvoiceDetailPage() {
           <p className="invoice-address">
             {invoice.recipient_address}
           </p>
+
+          {invoice.user_id === null && (
+            <p className="muted">
+              {t('invoiceDetail.recipient.deleted')}
+            </p>
+          )}
         </article>
 
         <article className="card summary-card">
@@ -1275,7 +1281,8 @@ function InvoiceDetailPage() {
       {isAdmin &&
         invoice.status === 'finalized' &&
         invoice.document_type === 'invoice' &&
-        invoice.cancelled_at === null && (
+        invoice.cancelled_at === null &&
+        invoice.user_id !== null && (
           <InvoiceCancellationCreateForm
             invoiceId={invoice.id}
           />

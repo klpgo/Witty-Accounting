@@ -1,5 +1,40 @@
 # Release notes
 
+## Unreleased
+
+### New features
+
+- **Delete users** (e.g. on request under the GDPR): under **Users**, an
+  administrator can check and delete a user. Charging sessions, base fees,
+  card assignments and the account are deleted; invoices and cancellation
+  invoices stay in the archive with the stored recipient. Deleted charging
+  sessions are not imported again from the Hager Cloud or an XLSX upload.
+  See the administrator guide, section 2.10.
+- **Retention and deletion**: under **Settings → Retention and deletion**,
+  the retention period for invoices is configurable (default 10 years).
+  Years whose period has expired can be deleted on request, oldest first:
+  invoices, cancellation invoices, PDFs and the charging sessions and base
+  fees billed in them. Every run is recorded in a deletion log, the dashboard
+  shows a note to administrators when a year has expired, and charging
+  sessions from deleted years are no longer imported. See the administrator
+  guide, section 2.13.
+
+### Changes
+
+- In multi-tenant operation (`TENANCY_ENABLED=true`), a plain `alembic`
+  command now stops with a message pointing to `scripts.migrate_tenants`.
+  Before, `alembic upgrade head` silently migrated only the database from
+  `DATABASE_URL` and left the tenant databases on the old schema.
+
+### Database
+
+- Migration `b8c0d2e4f6a3`: invoices keep working without a user account,
+  invoice line items no longer block deleting charging sessions and base
+  fees, new table `deleted_charging_sessions`.
+- Migration `c9d1e3f5a7b4`: retention settings and table `retention_purges`
+  (deletion log).
+- Apply both as described in the administrator guide, section 8.
+
 ## 2.0.1 2026-10-02
 
 ### Fixes

@@ -36,7 +36,8 @@ export interface Invoice {
   original_invoice_id: number | null
   cancellation_reason: string | null
   cancelled_at: string | null
-  user_id: number
+  // null, wenn das Kundenkonto gelöscht wurde
+  user_id: number | null
   recipient_name: string
   recipient_address: string
   status: string

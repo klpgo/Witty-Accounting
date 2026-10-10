@@ -913,6 +913,25 @@ html {
   background: #e7eaf0;
 }
 
+.user-deletion {
+  display: grid;
+  gap: 16px;
+}
+
+.user-deletion p {
+  margin: 0;
+}
+
+.user-deletion ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+
+.user-deletion .form-error ul {
+  margin-top: 6px;
+}
+
 .data-table-row-selected td {
   background: #eef2ff;
 }
@@ -1476,4 +1495,52 @@ select {
 .data-table input[type="text"]:focus {
   border-color: #3659d9;
   box-shadow: 0 0 0 3px rgb(54 89 217 / 14%);
+}
+
+/* Aufbewahrung und Löschung */
+.retention-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.retention-period .form-field {
+  flex: 1 1 280px;
+}
+
+.retention-period input {
+  max-width: 120px;
+}
+
+.retention-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.retention-confirm input {
+  width: 90px;
+}
+
+.retention-blockers {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+
+.retention-warning {
+  color: #b42318;
+}
+
+.retention-notice {
+  margin-bottom: 24px;
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.retention-notice p {
+  margin: 0;
 }

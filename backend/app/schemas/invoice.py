@@ -68,7 +68,7 @@ class InvoiceResponse(BaseModel):
     original_invoice_id: int | None
     cancellation_reason: str | None
     cancelled_at: datetime | None
-    user_id: int
+    user_id: int | None
     recipient_name: str
     recipient_address: str
     status: str

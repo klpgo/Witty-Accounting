@@ -69,6 +69,12 @@ def create_cancellation_draft(
             "Only a finalized invoice can be cancelled."
         )
 
+    if original_invoice.user_id is None:
+        raise InvoiceCancellationStateError(
+            "The customer account of this invoice has been deleted, so it "
+            "can no longer be cancelled in Witty."
+        )
+
     existing_cancellation = db.scalar(
         select(Invoice.id).where(
             Invoice.original_invoice_id

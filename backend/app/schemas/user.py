@@ -203,3 +203,21 @@ class UserPasswordReset(BaseModel):
         min_length=8,
         max_length=1024,
     )
+
+
+class UserDeletionBlockerResponse(BaseModel):
+    code: str
+    count: int
+    message: str
+    discardable: bool
+
+
+class UserDeletionCheckResponse(BaseModel):
+    user_id: int
+    can_delete: bool
+    can_delete_with_discard: bool
+    blockers: list[UserDeletionBlockerResponse]
+    charging_sessions: int
+    base_fees: int
+    rfid_assignments: int
+    invoices_kept: int

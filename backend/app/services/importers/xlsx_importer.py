@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models.charging_session import ChargingSession
 from app.services.data_timezone import ensure_data_timezone
+from app.services.deleted_sessions import find_deleted_session
 from app.services.importers.import_filters import (
     ExclusionCounter,
     exclusion_reason,
@@ -362,6 +363,15 @@ def import_xlsx_to_db(
             continue
 
         import_hash = session_data["import_hash"]
+
+        # Ladevorgang eines gelöschten Benutzers: nicht erneut anlegen
+        if find_deleted_session(
+            db,
+            start_time=session_data["start_time"],
+            import_hash=import_hash,
+        ) is not None:
+            skipped += 1
+            continue
 
         existing_session = db.scalar(
             select(ChargingSession).where(

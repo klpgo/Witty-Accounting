@@ -168,3 +168,60 @@ def test_control_migration_backfills_archive_namespace(
         ]["nullable"]
     finally:
         engine.dispose()
+
+
+def test_plain_alembic_is_refused_in_multi_tenant_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from alembic import command
+    from alembic.config import Config
+    from alembic.util import CommandError
+
+    from app.config import settings
+    from app.tenancy.migrations import APPLICATION_ALEMBIC_CONFIG
+
+    monkeypatch.setattr(settings, "tenancy_enabled", True)
+
+    config = Config(str(APPLICATION_ALEMBIC_CONFIG))
+    config.set_main_option(
+        "sqlalchemy.url",
+        f"sqlite:///{tmp_path / 'default.db'}",
+    )
+
+    with pytest.raises(CommandError, match="migrate_tenants"):
+        command.upgrade(config, "head")
+
+    # Die Standard-Datenbank wurde nicht angefasst
+    assert not (tmp_path / "default.db").exists()
+
+
+def test_plain_alembic_override_reaches_the_database(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    from app.config import settings
+    from app.tenancy.migrations import APPLICATION_ALEMBIC_CONFIG
+
+    monkeypatch.setattr(settings, "tenancy_enabled", True)
+
+    config = Config(
+        str(APPLICATION_ALEMBIC_CONFIG),
+        cmd_opts=type(
+            "Options",
+            (),
+            {"x": ["allow_default_database=true"]},
+        )(),
+    )
+    config.set_main_option(
+        "sqlalchemy.url",
+        f"sqlite:///{tmp_path / 'default.db'}",
+    )
+
+    # "current" liest nur den Stand und geht am Abbruch vorbei
+    command.current(config)
+
+    assert (tmp_path / "default.db").exists()

@@ -2,13 +2,14 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import {
   DashboardApiError,
   getDashboard,
   type DashboardData,
 } from '../api/dashboard'
+import { getRetentionDueYear } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { getDisplayLocale } from '../utils/dateFormat'
@@ -124,6 +125,31 @@ function DashboardPage() {
     }
   }, [navigate, signOut])
 
+  // Hinweis für Administratoren: Aufbewahrungsfrist abgelaufen
+  const [retentionDueYear, setRetentionDueYear] =
+    useState<number | null>(null)
+  const isAdmin = user?.is_admin === true
+
+  useEffect(() => {
+    const accessToken = getAccessToken()
+
+    if (!isAdmin || accessToken === null) {
+      return
+    }
+
+    const controller = new AbortController()
+
+    getRetentionDueYear(accessToken, controller.signal)
+      .then(setRetentionDueYear)
+      .catch(() => {
+        // Hinweis ist optional; Fehler werden hier nicht angezeigt
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [isAdmin])
+
   const isMaintenance =
     dashboard?.server_status === 'maintenance'
 
@@ -158,6 +184,17 @@ function DashboardPage() {
           </p>
         </div>
       </header>
+
+      {retentionDueYear !== null && (
+        <section className="card retention-notice" role="status">
+          <p>
+            {t('dashboard.retentionDue', { year: retentionDueYear })}{' '}
+            <Link to="/admin/settings#retention">
+              {t('dashboard.retentionDueLink')}
+            </Link>
+          </p>
+        </section>
+      )}
 
       <section className="dashboard-grid">
         <article className="card dashboard-status-card">

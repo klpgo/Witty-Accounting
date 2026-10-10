@@ -46,12 +46,14 @@ class Invoice(Base):
         nullable=True,
     )
 
-    user_id: Mapped[int] = mapped_column(
+    # Leer, wenn das Kundenkonto gelöscht wurde; die Rechnung bleibt mit
+    # dem gespeicherten Empfänger (recipient_*) im Archiv
+    user_id: Mapped[int | None] = mapped_column(
         ForeignKey(
             "users.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
@@ -314,9 +316,11 @@ class InvoiceItem(Base):
     monthly_base_fee_charge_id: Mapped[
         int | None
     ] = mapped_column(
+        # Positionen enthalten alle Rechnungsangaben selbst; der Verweis
+        # wird leer, wenn die Abrechnungsdaten gelöscht werden
         ForeignKey(
             "monthly_base_fee_charges.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
         nullable=True,
         index=True,
@@ -325,9 +329,11 @@ class InvoiceItem(Base):
     charging_session_id: Mapped[
         int | None
     ] = mapped_column(
+        # Positionen enthalten alle Rechnungsangaben selbst; der Verweis
+        # wird leer, wenn die Abrechnungsdaten gelöscht werden
         ForeignKey(
             "charging_sessions.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
         nullable=True,
     )
