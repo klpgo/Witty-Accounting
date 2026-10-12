@@ -157,6 +157,9 @@ h2 {
 
 .form-field {
   display: grid;
+  /* in Rasterzeilen nicht strecken: Eingabefeld bleibt direkt unter der
+     Beschriftung, auch wenn das Nachbarfeld einen Hinweis hat */
+  align-content: start;
   gap: 8px;
   color: #344054;
   font-size: 0.92rem;
@@ -393,8 +396,19 @@ html {
 
 .dashboard-status-card,
 .dashboard-note-card,
-.dashboard-version-card {
+.dashboard-version-card,
+.dashboard-runs-card {
   grid-column: 1 / -1;
+}
+
+.dashboard-automation-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.dashboard-automation-card > p {
+  margin: 0;
 }
 
 .dashboard-status-card {

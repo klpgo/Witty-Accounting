@@ -14,6 +14,7 @@ import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { getDisplayLocale } from '../utils/dateFormat'
 import { useTranslation } from '../i18n/useTranslation'
+import AdminAutomationStatus from '../components/AdminAutomationStatus'
 
 function formatDateTime(
   value: string | null | undefined,
@@ -287,6 +288,8 @@ function DashboardPage() {
             {t('dashboard.billing.text')}
           </p>
         </article>
+
+        {isAdmin && <AdminAutomationStatus />}
 
         <article className="card dashboard-version-card">
           <p className="eyebrow">

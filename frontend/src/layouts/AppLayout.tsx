@@ -138,6 +138,19 @@ function AppLayout() {
             >
               {t('layout.nav.invoices')}
             </NavLink>
+            {/* Admins erreichen ihr Konto über den Namen oben rechts */}
+            {!user?.is_admin && (
+              <NavLink
+                to="/profile"
+                className={({ isActive }) =>
+                  isActive
+                    ? 'nav-link nav-link-active'
+                    : 'nav-link'
+                }
+              >
+                {t('layout.nav.profile')}
+              </NavLink>
+            )}
 
             {user?.is_admin && (
               <>

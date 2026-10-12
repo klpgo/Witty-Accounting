@@ -13,6 +13,9 @@
   it manually, optionally notifying the customer in the same step. Drafts
   can be downloaded as a PDF with a "DRAFT" watermark. See the administrator
   guide, section 5.1.
+- **Email address of the invoice issuer** in the invoice issuer data, with a
+  checkbox to show it on the invoice below the phone number. Until now the
+  sender address of the emails always appeared on the invoice.
 - **Pro-rata base fee**: automatic billing charges the monthly base fee for
   the days of the service period, so weekly invoices contain the matching
   share. Manual drafts offer the same as an option. Days already charged are
@@ -35,6 +38,12 @@
 
 ### Changes
 
+- The status of the automatic Hager fetch and of automatic billing (including
+  the billing runs) moved from the settings page to the administrators'
+  dashboard.
+- New menu item **User settings** for users without administrator rights,
+  leading to the own account page (as the name at the top right).
+
 - In multi-tenant operation (`TENANCY_ENABLED=true`), a plain `alembic`
   command now stops with a message pointing to `scripts.migrate_tenants`.
   Before, `alembic upgrade head` silently migrated only the database from
@@ -52,7 +61,11 @@
 - Migration `e1f3a5b7c9d2`: base fee entries store the billed part of the
   month (`slice_start`, `slice_end`) for pro-rata base fees; existing entries
   are set to the whole month.
-- Apply all four as described in the administrator guide, section 8.
+- Migration `f2a4c6e8b0d3`: email address of the invoice issuer
+  (`invoice_issuer_email`, `invoice_issuer_email_on_invoice`) and
+  `invoices.issuer_email`. The sender address stored in the database is taken
+  over and shown on invoices, as before, if no own address was set.
+- Apply all five as described in the administrator guide, section 8.
 
 ## 2.0.1 2026-10-02
 

@@ -14,14 +14,12 @@ import {
   type AutoBillingPreview,
   type AutoBillingSettings,
   type BillingInterval,
-  type BillingRun,
 } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import type { MessageKey } from '../i18n/de'
 import { useTranslation } from '../i18n/useTranslation'
 import {
-  formatDate,
   formatServicePeriod,
   formatUtcDateTime,
 } from '../utils/dateFormat'
@@ -30,12 +28,6 @@ const INTERVAL_KEYS: Record<BillingInterval, MessageKey> = {
   weekly: 'autoBilling.interval.weekly',
   monthly: 'autoBilling.interval.monthly',
   quarterly: 'autoBilling.interval.quarterly',
-}
-
-const RUN_STATUS_KEYS: Record<BillingRun['status'], MessageKey> = {
-  waiting_for_data: 'autoBilling.run.status.waiting_for_data',
-  in_review: 'autoBilling.run.status.in_review',
-  completed: 'autoBilling.run.status.completed',
 }
 
 const WEEKDAY_KEYS: MessageKey[] = [
@@ -71,7 +63,6 @@ function AdminAutoBillingForm() {
   const [graceDays, setGraceDays] = useState('2')
   const [reviewDays, setReviewDays] = useState('7')
   const [runTime, setRunTime] = useState('06:00')
-  const [notificationEmail, setNotificationEmail] = useState('')
 
   const [preview, setPreview] = useState<AutoBillingPreview | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -93,7 +84,6 @@ function AdminAutoBillingForm() {
     setGraceDays(String(loaded.grace_days))
     setReviewDays(String(loaded.review_days))
     setRunTime(loaded.run_time)
-    setNotificationEmail(loaded.notification_email ?? '')
   }, [])
 
   useEffect(() => {
@@ -174,7 +164,6 @@ function AdminAutoBillingForm() {
           grace_days: Number(graceDays),
           review_days: Number(reviewDays),
           run_time: runTime,
-          notification_email: notificationEmail.trim(),
         }),
       )
       setPreview(null)
@@ -218,36 +207,6 @@ function AdminAutoBillingForm() {
     } finally {
       setIsPreviewing(false)
     }
-  }
-
-  function runNotes(run: BillingRun): string {
-    const notes: string[] = []
-
-    if (run.on_hold > 0) {
-      notes.push(t('autoBilling.runs.onHold', { count: run.on_hold }))
-    }
-
-    if (run.skipped.length > 0) {
-      notes.push(t('autoBilling.runs.skipped', { count: run.skipped.length }))
-    }
-
-    return notes.length > 0 ? notes.join(', ') : '–'
-  }
-
-  function skippedTitle(run: BillingRun): string | undefined {
-    if (run.skipped.length === 0) {
-      return undefined
-    }
-
-    return run.skipped
-      .map((entry) =>
-        entry.reason === 'existing_draft' && entry.invoice_id !== null
-          ? `${entry.name}: ${t('autoBilling.runs.existingDraft', {
-              id: entry.invoice_id,
-            })}`
-          : `${entry.name}: ${entry.message ?? ''}`,
-      )
-      .join('\n')
   }
 
   if (isLoading) {
@@ -388,27 +347,21 @@ function AdminAutoBillingForm() {
             />
           </label>
 
-          <label className="form-field">
-            <span>{t('autoBilling.notificationEmail')}</span>
-            <input
-              type="email"
-              value={notificationEmail}
-              maxLength={320}
-              placeholder="rechnung@example.org"
-              onChange={(event) => {
-                setNotificationEmail(event.target.value)
-              }}
-            />
-            <small className="muted">
-              {settings?.effective_notification_email &&
-              !settings.notification_email
-                ? t('autoBilling.notificationHint', {
-                    email: settings.effective_notification_email,
-                  })
-                : t('autoBilling.notificationHintNoSender')}
-            </small>
-          </label>
         </div>
+
+        {settings && (
+          <p
+            className={
+              settings.notification_email ? 'muted' : 'form-error'
+            }
+          >
+            {settings.notification_email
+              ? t('autoBilling.notificationInfo', {
+                  email: settings.notification_email,
+                })
+              : t('autoBilling.notificationMissing')}
+          </p>
+        )}
 
         {settings && (
           <p className="muted">
@@ -418,50 +371,6 @@ function AdminAutoBillingForm() {
           </p>
         )}
 
-        {settings && (
-          <dl className="settings-status-list">
-            {settings.enabled && settings.next_period_start && (
-              <div>
-                <dt>{t('autoBilling.status.nextPeriod')}</dt>
-                <dd>
-                  {formatServicePeriod(
-                    settings.next_period_start,
-                    settings.next_period_end,
-                  )}
-                </dd>
-              </div>
-            )}
-
-            {settings.enabled && settings.next_run_at && (
-              <div>
-                <dt>{t('autoBilling.status.nextRun')}</dt>
-                <dd>{formatUtcDateTime(settings.next_run_at)}</dd>
-              </div>
-            )}
-
-            <div>
-              <dt>{t('autoBilling.status.open')}</dt>
-              <dd>
-                {t('autoBilling.status.openValue', {
-                  inReview: settings.open_in_review,
-                  onHold: settings.open_on_hold,
-                  failed: settings.open_failed,
-                })}
-              </dd>
-            </div>
-
-            {settings.delivery_failed > 0 && (
-              <div>
-                <dt>{t('autoBilling.status.deliveryFailed')}</dt>
-                <dd className="form-error">
-                  {t('autoBilling.status.deliveryFailedValue', {
-                    count: settings.delivery_failed,
-                  })}
-                </dd>
-              </div>
-            )}
-          </dl>
-        )}
       </section>
 
       <div className="settings-actions">
@@ -553,48 +462,6 @@ function AdminAutoBillingForm() {
         </section>
       )}
 
-      {settings && (
-        <section className="settings-section">
-          <h3>{t('autoBilling.runs.title')}</h3>
-
-          {settings.runs.length === 0 ? (
-            <p className="muted">{t('autoBilling.runs.empty')}</p>
-          ) : (
-            <div className="table-scroll">
-              <table className="data-table compact-table">
-                <thead>
-                  <tr>
-                    <th>{t('autoBilling.runs.col.period')}</th>
-                    <th>{t('autoBilling.runs.col.status')}</th>
-                    <th className="table-number">
-                      {t('autoBilling.runs.col.drafts')}
-                    </th>
-                    <th className="table-number">
-                      {t('autoBilling.runs.col.open')}
-                    </th>
-                    <th>{t('autoBilling.runs.col.reviewUntil')}</th>
-                    <th>{t('autoBilling.runs.col.notes')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {settings.runs.map((run) => (
-                    <tr key={run.id}>
-                      <td>
-                        {formatServicePeriod(run.period_start, run.period_end)}
-                      </td>
-                      <td>{t(RUN_STATUS_KEYS[run.status])}</td>
-                      <td className="table-number">{run.drafts_created}</td>
-                      <td className="table-number">{run.open_drafts}</td>
-                      <td>{formatDate(run.review_due_date)}</td>
-                      <td title={skippedTitle(run)}>{runNotes(run)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
     </form>
   )
 }

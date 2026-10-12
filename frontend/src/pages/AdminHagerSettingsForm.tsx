@@ -8,7 +8,6 @@ import { useNavigate } from 'react-router-dom'
 
 import {
   getHagerSettings,
-  type HagerAutoImportStatus,
   type HagerSettings,
   type HagerSettingsUpdate,
   SettingsApiError,
@@ -16,12 +15,7 @@ import {
   updateHagerSettings,
 } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
-import {
-  getDisplayLocale,
-  getDisplayTimeZone,
-} from '../utils/dateFormat'
 import { useAuth } from '../auth/useAuth'
-import type { MessageKey } from '../i18n/de'
 import { useTranslation } from '../i18n/useTranslation'
 
 
@@ -40,40 +34,6 @@ function formatLocalDateTime(
   const [, year, month, day, hour, minute] = match
 
   return `${day}.${month}.${year} ${hour}:${minute} Uhr`
-}
-
-
-function formatTimestamp(
-  value: string | null,
-  timeSuffix: string,
-): string | null {
-  if (!value) {
-    return null
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
-  return (
-    date.toLocaleString(getDisplayLocale(), {
-      timeZone: getDisplayTimeZone(),
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }) + timeSuffix
-  )
-}
-
-
-const STATUS_KEYS: Record<HagerAutoImportStatus, MessageKey> = {
-  running: 'settings.autoImport.status.running',
-  success: 'settings.autoImport.status.success',
-  error: 'settings.autoImport.status.error',
 }
 
 
@@ -98,8 +58,6 @@ function AdminHagerSettingsForm() {
   const [autoEnabled, setAutoEnabled] = useState(false)
   const [autoInterval, setAutoInterval] = useState('24')
   const [autoStartTime, setAutoStartTime] = useState('03:00')
-  const [autoStatus, setAutoStatus] =
-    useState<HagerSettings | null>(null)
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null)
   const [successMessage, setSuccessMessage] =
@@ -128,7 +86,6 @@ function AdminHagerSettingsForm() {
       setAutoEnabled(settings.auto_import_enabled)
       setAutoInterval(String(settings.auto_import_interval_hours))
       setAutoStartTime(settings.auto_import_start_time)
-      setAutoStatus(settings)
     },
     [],
   )
@@ -543,69 +500,6 @@ function AdminHagerSettingsForm() {
           </label>
         </div>
 
-        {autoStatus && (
-          <dl className="settings-status-list">
-            {autoStatus.auto_import_enabled &&
-              autoStatus.auto_import_next_run_at && (
-                <div>
-                  <dt>{t('settings.autoImport.nextRun')}</dt>
-                  <dd>
-                    {formatTimestamp(
-                      autoStatus.auto_import_next_run_at,
-                    t('settings.timeSuffix'),
-)}
-                  </dd>
-                </div>
-              )}
-
-            {autoStatus.last_successful_fetch_at && (
-              <div>
-                <dt>{t('settings.autoImport.lastSuccess')}</dt>
-                <dd>
-                  {formatTimestamp(
-                    autoStatus.last_successful_fetch_at,
-                  t('settings.timeSuffix'),
-)}
-                  {' '}
-                  {t('settings.autoImport.lastSuccessHint')}
-                </dd>
-              </div>
-            )}
-
-            <div>
-              <dt>{t('settings.autoImport.lastRun')}</dt>
-              <dd>
-                {autoStatus.auto_import_last_started_at
-                  ? `${formatTimestamp(
-                      autoStatus.auto_import_last_started_at,
-                    t('settings.timeSuffix'),
-)} – ${
-                      autoStatus.auto_import_last_status
-                        ? t(STATUS_KEYS[
-                            autoStatus.auto_import_last_status
-                          ])
-                        : t('settings.autoImport.unknown')
-                    }`
-                  : t('settings.autoImport.notYet')}
-              </dd>
-            </div>
-
-            {autoStatus.auto_import_last_message && (
-              <div>
-                <dt>{t('settings.autoImport.result')}</dt>
-                <dd
-                  className={
-                    autoStatus.auto_import_last_status === 'error'
-                      ? 'form-error'
-                      : undefined
-                  }
-                >
-                  {autoStatus.auto_import_last_message}
-                </dd>
-              </div>
-            )}
-          </dl>
-        )}
       </section>
 
       <div className="settings-actions">

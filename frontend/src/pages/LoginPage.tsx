@@ -5,6 +5,7 @@ import {
 import {
   Link,
   Navigate,
+  useLocation,
   useNavigate,
   useSearchParams,
 } from 'react-router-dom'
@@ -13,8 +14,33 @@ import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
 import { useTranslation } from '../i18n/useTranslation'
 
+/*
+ * Ziel nach der Anmeldung: die ursprünglich aufgerufene Seite (z. B. der
+ * Link auf einen Rechnungsentwurf aus der Prüf-E-Mail), sonst das
+ * Dashboard. Nur interne Pfade, keine Weiterleitung auf fremde Adressen.
+ */
+function redirectTarget(state: unknown): string {
+  const from =
+    typeof state === 'object' && state !== null && 'from' in state
+      ? (state as { from: unknown }).from
+      : null
+
+  if (
+    typeof from !== 'string' ||
+    !from.startsWith('/') ||
+    from.startsWith('//') ||
+    from.startsWith('/login')
+  ) {
+    return '/'
+  }
+
+  return from
+}
+
 function LoginPage() {
   const { t } = useTranslation()
+  const location = useLocation()
+  const target = redirectTarget(location.state)
   const { tenantName } = useAppSettings()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -40,7 +66,7 @@ function LoginPage() {
   if (status === 'authenticated') {
     return (
       <Navigate
-        to="/"
+        to={target}
         replace
       />
     )
@@ -78,7 +104,7 @@ function LoginPage() {
         password,
       )
 
-      navigate('/', {
+      navigate(target, {
         replace: true,
       })
     } catch (error) {

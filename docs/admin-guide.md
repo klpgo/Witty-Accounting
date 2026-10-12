@@ -143,9 +143,14 @@ Work through the settings in the following order. All settings are under
 
 ### 2.2 Invoice issuer and bank details
 
-Enter name, address, phone (optional), tax number and/or VAT ID, bank name,
-IBAN and BIC. These values are copied into every new invoice draft; later
-changes do not affect invoices that already exist.
+Enter name, address, phone (optional), email address, tax number and/or VAT
+ID, bank name, IBAN and BIC. These values are copied into every new invoice
+draft; later changes do not affect invoices that already exist.
+
+The email address is the contact for customers and receives the notices of
+automatic billing ([section 5.1](#51-automatic-billing-optional)); it is
+required while automatic billing is enabled. With **Show the email address on
+the invoice** it appears on the invoice below the phone number.
 
 ### 2.3 Billing
 
@@ -399,7 +404,7 @@ fetch waits until the automatic fetch has finished.
 ### 3.2 Automatic fetch
 
 When enabled (see [2.9](#29-hager-cloud)), the fetch runs on the configured
-schedule. **Settings → Hager Cloud** shows the **Next fetch**, the
+schedule. The administrators' dashboard shows the **Next fetch**, the
 **Last successful fetch**, the **Last automatic fetch** and its **Result**,
 e.g. `3 new, 12 skipped (fetched from 2026-09-26)`.
 
@@ -518,9 +523,9 @@ customers review them and finalize them on its own.
 - **Customer review period**: days between sending the drafts and
   finalizing them.
 - **Time for creating and finalizing**: local time of both steps.
-- **Email address of the invoice issuer**: receives notices and customer
-  questions; customers are asked to contact this address. Empty: the sender
-  address of the mail server settings.
+
+Notices and customer questions go to the email address in the invoice issuer
+data (section 2.2); automatic billing can only be enabled once it is set.
 
 **Base fee:** automatic billing charges the monthly base fee pro rata for
 the days of the service period (monthly fee × days / days of the month). A
@@ -567,8 +572,9 @@ the next service period and the customers who would get a draft.
 
 Drafts whose review email could not be delivered are not finalized
 automatically. Failed emails are retried up to five times; the remaining
-problems are shown on the invoice page and under **Settings → Automatic
-billing**. Every service period is billed only once, even after restarts.
+problems are shown on the invoice page and on the administrators' dashboard,
+together with the next service period, the creation time, the open drafts and
+the list of billing runs. Every service period is billed only once, even after restarts.
 While automatic billing is disabled, nothing is created or finalized
 automatically.
 
