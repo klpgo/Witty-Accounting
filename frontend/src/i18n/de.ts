@@ -906,6 +906,18 @@ export const de = {
   'autoBilling.runs.onHold': '{count} zurückgestellt',
   'autoBilling.runs.skipped': '{count} nicht abgerechnet',
   'autoBilling.runs.existingDraft': 'Entwurf #{id} vorhanden',
+  // Umsatzsteuer optional
+  'settings.vat.enabled': 'Umsatzsteuer ausweisen',
+  'settings.vat.enabledHint': 'Ausschalten bei Kleinunternehmern (§ 19 UStG): Rechnungen enthalten dann keine Umsatzsteuer, und die USt-Sätze entfallen. Preise und Gebühren sind dann Endpreise und müssen gegebenenfalls von Hand angepasst werden. Umschalten ist nur ohne offene Entwürfe möglich.',
+  'settings.vat.note': 'Hinweis auf der Rechnung',
+  'settings.vat.noteHint': 'Erscheint unter dem Rechnungsbetrag. Wird der Text gelöscht, erscheint kein Hinweis. Wortlaut bitte mit der Steuerberatung abstimmen.',
+  'settings.baseFeeNoVat': 'Monatliche Grundgebühr',
+  'settings.postalFeeNoVat': 'Briefporto',
+  'settings.energy.introNoVat': 'Preise je Kilowattstunde mit Gültigkeitsdatum verwalten.',
+  'settings.energy.gridPriceNoVat': 'Netzpreis je kWh',
+  'settings.energy.pvPriceNoVat': 'PV-Preis je kWh',
+  'sessions.col.cost': 'Kosten',
+  'invoiceDetail.items.amount': 'Betrag',
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof de

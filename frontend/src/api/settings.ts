@@ -9,6 +9,7 @@ export interface PublicSettings {
   locale?: string
   currency?: string
   default_language?: string
+  vat_enabled?: boolean
 }
 
 export interface GlobalSettings {
@@ -28,6 +29,10 @@ export interface GlobalSettings {
   invoice_iban: string | null
   invoice_bic: string | null
   invoice_issuer_phone: string | null
+  invoice_issuer_email: string | null
+  invoice_issuer_email_on_invoice: boolean
+  vat_enabled: boolean
+  vat_exemption_note: string | null
   invoice_number_prefix: string
   invoice_pdf_format: 'standard' | 'pdfa-2b'
   invoice_girocode_enabled: boolean
@@ -60,6 +65,10 @@ export interface GlobalSettingsUpdate {
   invoice_iban?: string | null
   invoice_bic?: string | null
   invoice_issuer_phone?: string | null
+  invoice_issuer_email?: string | null
+  invoice_issuer_email_on_invoice?: boolean
+  vat_enabled?: boolean
+  vat_exemption_note?: string
   invoice_number_prefix?: string
   invoice_pdf_format?: 'standard' | 'pdfa-2b'
   invoice_girocode_enabled?: boolean
@@ -896,8 +905,8 @@ export interface AutoBillingSettings {
   grace_days: number
   review_days: number
   run_time: string
+  // E-Mail-Adresse des Rechnungsstellers (Daten des Rechnungsstellers)
   notification_email: string | null
-  effective_notification_email: string | null
   active_since: string | null
   next_period_start: string | null
   next_period_end: string | null
@@ -918,7 +927,6 @@ export interface AutoBillingSettingsUpdate {
   grace_days?: number
   review_days?: number
   run_time?: string
-  notification_email?: string
 }
 
 export interface AutoBillingPreviewCustomer {

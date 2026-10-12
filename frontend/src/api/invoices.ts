@@ -59,6 +59,9 @@ export interface Invoice {
   pdf_exported_at: string | null
   pdf_exported_by_user_id: number | null
   pdf_export_remote_path: string | null
+  // ohne Umsatzsteuer erstellt (Kleinunternehmer) und Hinweis dazu
+  vat_exempt: boolean
+  vat_exemption_note: string | null
   // Automatische Abrechnung
   billing_run_id: number | null
   // in_review, on_hold, failed; null bei manuell erstellten Entwürfen

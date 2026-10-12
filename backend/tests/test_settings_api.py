@@ -225,6 +225,7 @@ def test_reads_public_application_name(
         "locale": "de-DE",
         "currency": "EUR",
         "default_language": "de",
+        "vat_enabled": True,
     }
 
 
@@ -358,6 +359,7 @@ def test_public_settings_uses_configuration_fallback(
         "locale": "de-DE",
         "currency": "EUR",
         "default_language": "de",
+        "vat_enabled": True,
     }
 
 
@@ -395,6 +397,12 @@ def test_reads_admin_settings(
         "invoice_iban": None,
         "invoice_bic": None,
         "invoice_issuer_phone": None,
+        "invoice_issuer_email": None,
+        "invoice_issuer_email_on_invoice": False,
+        "vat_enabled": True,
+        "vat_exemption_note": (
+            "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."
+        ),
         "invoice_number_prefix": "RE",
         "invoice_pdf_format": "standard",
         "invoice_girocode_enabled": False,
@@ -410,6 +418,7 @@ def test_reads_admin_settings(
         "locale": "de-DE",
         "currency": "EUR",
         "default_language": "de",
+        "vat_enabled": True,
     }
 
 
@@ -456,6 +465,12 @@ def test_updates_admin_settings(
         "invoice_iban": None,
         "invoice_bic": None,
         "invoice_issuer_phone": None,
+        "invoice_issuer_email": None,
+        "invoice_issuer_email_on_invoice": False,
+        "vat_enabled": True,
+        "vat_exemption_note": (
+            "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."
+        ),
         "invoice_number_prefix": "RE",
         "invoice_pdf_format": "standard",
         "invoice_girocode_enabled": False,
@@ -471,6 +486,7 @@ def test_updates_admin_settings(
         "locale": "de-DE",
         "currency": "EUR",
         "default_language": "de",
+        "vat_enabled": True,
     }
 
     database_session.refresh(global_settings)

@@ -1168,25 +1168,29 @@ function InvoiceDetailPage() {
           </p>
 
           <dl className="detail-list">
-            <div>
-              <dt>{t('invoiceDetail.totals.net')}</dt>
-              <dd>
-                {formatCurrency(
-                  invoice.total_net,
-                  invoice.currency,
-                )}
-              </dd>
-            </div>
+            {!invoice.vat_exempt && (
+              <>
+                <div>
+                  <dt>{t('invoiceDetail.totals.net')}</dt>
+                  <dd>
+                    {formatCurrency(
+                      invoice.total_net,
+                      invoice.currency,
+                    )}
+                  </dd>
+                </div>
 
-            <div>
-              <dt>{t('invoiceDetail.totals.vat')}</dt>
-              <dd>
-                {formatCurrency(
-                  invoice.vat_amount,
-                  invoice.currency,
-                )}
-              </dd>
-            </div>
+                <div>
+                  <dt>{t('invoiceDetail.totals.vat')}</dt>
+                  <dd>
+                    {formatCurrency(
+                      invoice.vat_amount,
+                      invoice.currency,
+                    )}
+                  </dd>
+                </div>
+              </>
+            )}
 
             <div className="invoice-total-row">
               <dt>{t('invoiceDetail.totals.total')}</dt>
@@ -1198,6 +1202,10 @@ function InvoiceDetailPage() {
               </dd>
             </div>
           </dl>
+
+          {invoice.vat_exempt && invoice.vat_exemption_note && (
+            <p className="muted">{invoice.vat_exemption_note}</p>
+          )}
         </article>
       </section>
 
@@ -1278,14 +1286,20 @@ function InvoiceDetailPage() {
                 <th className="table-number">
                   {t('invoiceDetail.items.energy')}
                 </th>
+                {!invoice.vat_exempt && (
+                  <>
+                    <th className="table-number">
+                      {t('invoiceDetail.items.net')}
+                    </th>
+                    <th className="table-number">
+                      {t('invoiceDetail.items.vat')}
+                    </th>
+                  </>
+                )}
                 <th className="table-number">
-                  {t('invoiceDetail.items.net')}
-                </th>
-                <th className="table-number">
-                  {t('invoiceDetail.items.vat')}
-                </th>
-                <th className="table-number">
-                  {t('invoiceDetail.items.gross')}
+                  {invoice.vat_exempt
+                    ? t('invoiceDetail.items.amount')
+                    : t('invoiceDetail.items.gross')}
                 </th>
               </tr>
             </thead>
@@ -1333,19 +1347,23 @@ function InvoiceDetailPage() {
                         )} kWh`}
                   </td>
 
-                  <td className="table-number">
-                    {formatCurrency(
-                      item.net_amount,
-                      invoice.currency,
-                    )}
-                  </td>
+                  {!invoice.vat_exempt && (
+                    <>
+                      <td className="table-number">
+                        {formatCurrency(
+                          item.net_amount,
+                          invoice.currency,
+                        )}
+                      </td>
 
-                  <td className="table-number">
-                    {formatCurrency(
-                      item.vat_amount,
-                      invoice.currency,
-                    )}
-                  </td>
+                      <td className="table-number">
+                        {formatCurrency(
+                          item.vat_amount,
+                          invoice.currency,
+                        )}
+                      </td>
+                    </>
+                  )}
 
                   <td className="table-number">
                     <strong>

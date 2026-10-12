@@ -145,8 +145,7 @@ def build_response(
         grace_days=global_settings.auto_billing_grace_days,
         review_days=global_settings.auto_billing_review_days,
         run_time=global_settings.auto_billing_run_time,
-        notification_email=global_settings.auto_billing_notification_email,
-        effective_notification_email=notification_address(db),
+        notification_email=notification_address(db),
         active_since=global_settings.auto_billing_active_since,
         waits_for_hager_fetch=global_settings.hager_auto_import_enabled,
         open_in_review=_count(
@@ -261,11 +260,6 @@ def update_auto_billing_settings(
     if data.run_time is not None:
         global_settings.auto_billing_run_time = data.run_time
 
-    if data.notification_email is not None:
-        global_settings.auto_billing_notification_email = (
-            data.notification_email or None
-        )
-
     if data.enabled is not None:
         global_settings.auto_billing_enabled = data.enabled
 
@@ -281,8 +275,8 @@ def update_auto_billing_settings(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Automatic billing needs a notification address or a "
-                "configured sender address."
+                "Automatic billing needs the email address of the invoice "
+                "issuer (Settings, invoice issuer)."
             ),
         )
 

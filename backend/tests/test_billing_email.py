@@ -11,7 +11,7 @@ from app.services.billing_email import SummaryEntry
 class FakeDb:
     def __init__(self, **settings) -> None:
         defaults = {
-            "auto_billing_notification_email": None,
+            "invoice_issuer_email": None,
             "smtp_use_database_settings": True,
             "mail_from_address": "absender@example.com",
             "frontend_base_url": "https://witty.example.com/",
@@ -51,14 +51,12 @@ def outbox(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     return sent
 
 
-def test_notification_address_falls_back_to_sender() -> None:
-    assert (
-        billing_email.notification_address(FakeDb())
-        == "absender@example.com"
-    )
+def test_notification_address_is_the_issuer_email() -> None:
+    # keine Ersatzadresse: ohne Angabe gibt es keinen Empfänger
+    assert billing_email.notification_address(FakeDb()) is None
     assert (
         billing_email.notification_address(
-            FakeDb(auto_billing_notification_email=" rechnung@example.com ")
+            FakeDb(invoice_issuer_email=" rechnung@example.com ")
         )
         == "rechnung@example.com"
     )
@@ -101,7 +99,7 @@ def test_inquiry_email_goes_to_issuer(outbox: list[dict]) -> None:
     )
 
     billing_email.send_inquiry_email(
-        FakeDb(auto_billing_notification_email="rechnung@example.com"),
+        FakeDb(invoice_issuer_email="rechnung@example.com"),
         invoice=make_invoice(),
         user=user,
         contact_email="rechnung@example.com",
@@ -117,7 +115,7 @@ def test_inquiry_email_goes_to_issuer(outbox: list[dict]) -> None:
 
 def test_finalized_summary_lists_sections(outbox: list[dict]) -> None:
     billing_email.send_finalized_email(
-        FakeDb(),
+        FakeDb(invoice_issuer_email="rechnung@example.com"),
         sent=[SummaryEntry("RE-2026-000001 Kunde A")],
         postal=[SummaryEntry("RE-2026-000002 Kunde B")],
         failed=[SummaryEntry("#3 Kunde C", "SMTP down")],

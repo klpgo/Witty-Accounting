@@ -17,6 +17,7 @@ import {
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { useTranslation } from '../i18n/useTranslation'
+import { useAppSettings } from '../settings/useAppSettings'
 import { formatDate } from '../utils/dateFormat'
 import { formatNumber } from '../utils/numberFormat'
 
@@ -48,6 +49,8 @@ function isDecimal(value: string): boolean {
  * nicht abgerechneten Ladevorgänge ab dem betroffenen Tag neu.
  */
 function AdminEnergyPricesForm() {
+  // ohne Umsatzsteuer (Kleinunternehmer): kein USt-Satz, keine "netto"-Angaben
+  const { vatEnabled } = useAppSettings()
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
@@ -238,7 +241,7 @@ function AdminEnergyPricesForm() {
       <section className="settings-section">
         <div>
           <h2>{t('settings.energy.title')}</h2>
-          <p className="muted">{t('settings.energy.intro')}</p>
+          <p className="muted">{t(vatEnabled ? 'settings.energy.intro' : 'settings.energy.introNoVat')}</p>
         </div>
 
         {lockedUntil !== null && (
@@ -259,9 +262,11 @@ function AdminEnergyPricesForm() {
               <thead>
                 <tr>
                   <th>{t('settings.energy.validFrom')}</th>
-                  <th className="table-number">{t('settings.energy.gridPrice')}</th>
-                  <th className="table-number">{t('settings.energy.pvPrice')}</th>
-                  <th className="table-number">{t('settings.energy.vat')}</th>
+                  <th className="table-number">{t(vatEnabled ? 'settings.energy.gridPrice' : 'settings.energy.gridPriceNoVat')}</th>
+                  <th className="table-number">{t(vatEnabled ? 'settings.energy.pvPrice' : 'settings.energy.pvPriceNoVat')}</th>
+                  {vatEnabled && (
+                    <th className="table-number">{t('settings.energy.vat')}</th>
+                  )}
                   <th />
                 </tr>
               </thead>
@@ -285,9 +290,11 @@ function AdminEnergyPricesForm() {
                     <td className="table-number">
                       {formatNumber(price.pv_price_net, 4)}
                     </td>
-                    <td className="table-number">
-                      {formatNumber(price.vat_rate, 2)}
-                    </td>
+                    {vatEnabled && (
+                      <td className="table-number">
+                        {formatNumber(price.vat_rate, 2)}
+                      </td>
+                    )}
                     <td>
                       {isEditable(price) ? (
                         <button
@@ -351,7 +358,7 @@ function AdminEnergyPricesForm() {
           </label>
 
           <label className="form-field">
-            <span>{t('settings.energy.gridPrice')}</span>
+            <span>{t(vatEnabled ? 'settings.energy.gridPrice' : 'settings.energy.gridPriceNoVat')}</span>
             <input
               type="text"
               inputMode="decimal"
@@ -364,7 +371,7 @@ function AdminEnergyPricesForm() {
           </label>
 
           <label className="form-field">
-            <span>{t('settings.energy.pvPrice')}</span>
+            <span>{t(vatEnabled ? 'settings.energy.pvPrice' : 'settings.energy.pvPriceNoVat')}</span>
             <input
               type="text"
               inputMode="decimal"
@@ -376,18 +383,20 @@ function AdminEnergyPricesForm() {
             />
           </label>
 
-          <label className="form-field">
-            <span>{t('settings.energy.vat')}</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={vatRate}
-              required
-              onChange={(event) => {
-                setVatRate(event.target.value)
-              }}
-            />
-          </label>
+          {vatEnabled && (
+            <label className="form-field">
+              <span>{t('settings.energy.vat')}</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={vatRate}
+                required
+                onChange={(event) => {
+                  setVatRate(event.target.value)
+                }}
+              />
+            </label>
+          )}
         </div>
       </section>
 

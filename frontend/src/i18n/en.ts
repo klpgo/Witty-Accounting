@@ -893,4 +893,16 @@ export const en: Record<MessageKey, string> = {
   'autoBilling.runs.onHold': '{count} on hold',
   'autoBilling.runs.skipped': '{count} not billed',
   'autoBilling.runs.existingDraft': 'Draft #{id} exists',
+  // Umsatzsteuer optional
+  'settings.vat.enabled': 'Show VAT',
+  'settings.vat.enabledHint': 'Turn off for small businesses (§ 19 UStG): invoices then contain no VAT and the VAT rates are omitted. Prices and fees are then final prices and may need to be adjusted manually. Switching is only possible while no drafts are open.',
+  'settings.vat.note': 'Note on the invoice',
+  'settings.vat.noteHint': 'Appears below the invoice amount. If the text is deleted, no note appears. Please agree the wording with your tax advisor.',
+  'settings.baseFeeNoVat': 'Monthly base fee',
+  'settings.postalFeeNoVat': 'Postage',
+  'settings.energy.introNoVat': 'Manage prices per kilowatt hour with a validity date.',
+  'settings.energy.gridPriceNoVat': 'Grid price per kWh',
+  'settings.energy.pvPriceNoVat': 'PV price per kWh',
+  'sessions.col.cost': 'Cost',
+  'invoiceDetail.items.amount': 'Amount',
 }

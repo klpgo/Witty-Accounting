@@ -995,6 +995,7 @@ def create_invoice_draft(
                 global_settings.invoice_iban,
                 global_settings.invoice_bic,
                 global_settings.invoice_issuer_phone,
+                global_settings.invoice_issuer_email,
             )
         )
     )
@@ -1024,6 +1025,11 @@ def create_invoice_draft(
         issuer_phone = normalize_optional_text(
             global_settings.invoice_issuer_phone
         )
+        issuer_email = (
+            normalize_optional_text(global_settings.invoice_issuer_email)
+            if global_settings.invoice_issuer_email_on_invoice
+            else None
+        )
     else:
         issuer_name = normalize_optional_text(
             settings.invoice_issuer_name
@@ -1041,6 +1047,7 @@ def create_invoice_draft(
         issuer_iban = None
         issuer_bic = None
         issuer_phone = None
+        issuer_email = None
 
     if issuer_name is None:
         raise InvoiceDraftError(
@@ -1058,6 +1065,18 @@ def create_invoice_draft(
             "issuer."
         )
 
+    # Kleinunternehmer (§ 19 UStG): keine Umsatzsteuer berechnen und
+    # ausweisen; die Einstellung wird mit der Rechnung festgehalten
+    vat_exempt = (
+        global_settings is not None
+        and not global_settings.vat_enabled
+    )
+    vat_exemption_note = (
+        (global_settings.vat_exemption_note or "").strip() or None
+        if vat_exempt
+        else None
+    )
+
     invoice = Invoice(
         invoice_number=None,
         document_type="invoice",
@@ -1073,6 +1092,9 @@ def create_invoice_draft(
         issuer_iban=issuer_iban,
         issuer_bic=issuer_bic,
         issuer_phone=issuer_phone,
+        issuer_email=issuer_email,
+        vat_exempt=vat_exempt,
+        vat_exemption_note=vat_exemption_note,
         recipient_name=recipient_name,
         recipient_address=user.address,
         status="draft",
@@ -1191,11 +1213,15 @@ def create_invoice_draft(
                 rounding=ROUND_HALF_UP,
             )
 
-            vat_rate = to_decimal(
-                charging_session.vat_rate
-            ).quantize(
-                CENT,
-                rounding=ROUND_HALF_UP,
+            vat_rate = (
+                Decimal("0.00")
+                if vat_exempt
+                else to_decimal(
+                    charging_session.vat_rate
+                ).quantize(
+                    CENT,
+                    rounding=ROUND_HALF_UP,
+                )
             )
 
             net_amount_cents = net_amount.quantize(
@@ -1314,9 +1340,12 @@ def create_invoice_draft(
                 CENT,
                 rounding=ROUND_HALF_UP,
             )
+            fee_vat_rate = (
+                Decimal("0.00") if vat_exempt else candidate.vat_rate
+            )
             vat_amount = (
                 net_amount
-                * candidate.vat_rate
+                * fee_vat_rate
                 / HUNDRED
             ).quantize(
                 CENT,
@@ -1385,7 +1414,7 @@ def create_invoice_draft(
                     cost_grid_net=None,
                     cost_pv_net=None,
                     net_amount=net_amount,
-                    vat_rate=candidate.vat_rate,
+                    vat_rate=fee_vat_rate,
                     vat_amount=vat_amount,
                     gross_amount=gross_amount,
                 )
@@ -1411,12 +1440,16 @@ def create_invoice_draft(
         )
 
         if postal_delivery_fee_net > 0:
-            shared_fee_vat_rate = to_decimal(
-                global_settings
-                .monthly_base_fee_vat_rate
-            ).quantize(
-                CENT,
-                rounding=ROUND_HALF_UP,
+            shared_fee_vat_rate = (
+                Decimal("0.00")
+                if vat_exempt
+                else to_decimal(
+                    global_settings
+                    .monthly_base_fee_vat_rate
+                ).quantize(
+                    CENT,
+                    rounding=ROUND_HALF_UP,
+                )
             )
             postal_delivery_fee_net_cents = (
                 postal_delivery_fee_net.quantize(

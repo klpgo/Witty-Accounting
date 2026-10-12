@@ -94,6 +94,10 @@ class InvoiceResponse(BaseModel):
     pdf_exported_by_user_id: int | None
     pdf_export_remote_path: str | None
 
+    # ohne Umsatzsteuer erstellt (Kleinunternehmer) und Hinweis dazu
+    vat_exempt: bool = False
+    vat_exemption_note: str | None = None
+
     # Automatische Abrechnung
     billing_run_id: int | None = None
     # in_review, on_hold, failed oder None (manueller Entwurf)

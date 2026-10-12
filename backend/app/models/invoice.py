@@ -2,6 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -9,6 +10,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -116,6 +118,28 @@ class Invoice(Base):
         str | None
     ] = mapped_column(
         String(50),
+        nullable=True,
+    )
+
+    # E-Mail-Adresse des Rechnungsstellers auf der Rechnung (nur gesetzt,
+    # wenn sie laut Einstellungen auf der Rechnung erscheinen soll)
+    issuer_email: Mapped[
+        str | None
+    ] = mapped_column(
+        String(320),
+        nullable=True,
+    )
+
+    # Ohne Umsatzsteuer erstellt (Kleinunternehmer) und Hinweis dazu
+    vat_exempt: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    vat_exemption_note: Mapped[str | None] = mapped_column(
+        String(500),
         nullable=True,
     )
 

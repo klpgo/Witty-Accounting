@@ -159,6 +159,7 @@ the invoice** it appears on the invoice below the phone number.
 | **Number and date format** | Format of numbers, dates and amounts in the interface and on new invoices |
 | **Currency** | Cannot be changed after the first invoice has been created |
 | **Billing start date** | Charging sessions before this date are never imported or billed |
+| **Show VAT** | Turn off for small businesses (§ 19 UStG), see below |
 | Monthly base fee (net) | Per assigned charging card and month, charged pro rata for partial months |
 | VAT on base fee and postage | In percent |
 | Postage (net) | Charged only for users with postal delivery and only if greater than 0 |
@@ -167,6 +168,16 @@ the invoice** it appears on the invoice below the phone number.
 | Invoice format | Standard PDF or PDF/A-2b |
 
 Click **Save settings**.
+
+**Without VAT (small business):** with **Show VAT** turned off, new invoices
+contain no VAT: no VAT column, no VAT line, the invoice amount is the sum of
+the items. The VAT rates disappear from the settings and from the energy
+prices, and prices and fees are final prices – adjust them manually if
+needed. **Note on the invoice** appears below the invoice amount (default
+"Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."); delete the text to
+show no note. Each invoice keeps the setting it was created with, so existing
+invoices and their cancellations stay unchanged. The setting can only be
+switched while no invoice or cancellation drafts are open.
 
 ### 2.4 Energy prices
 

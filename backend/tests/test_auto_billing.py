@@ -74,7 +74,7 @@ def db() -> Generator[Session, None, None]:
                 auto_billing_grace_days=2,
                 auto_billing_review_days=7,
                 auto_billing_run_time="06:00",
-                auto_billing_notification_email="rechnung@example.com",
+                invoice_issuer_email="rechnung@example.com",
                 auto_billing_active_since=date(2026, 10, 10),
             )
         )

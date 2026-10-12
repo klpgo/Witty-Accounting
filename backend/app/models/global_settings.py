@@ -11,10 +11,15 @@ from sqlalchemy import (
     Boolean,
     Text,
     false,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+
+DEFAULT_VAT_EXEMPTION_NOTE = (
+    "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."
+)
 from app.utils.utc import utc_now
 
 
@@ -125,6 +130,37 @@ class GlobalSettings(Base):
     ] = mapped_column(
         String(11),
         nullable=True,
+    )
+
+    # E-Mail-Adresse des Rechnungsstellers: Kontakt für Kunden, Empfänger
+    # der Hinweise der automatischen Abrechnung (dort Pflicht)
+    invoice_issuer_email: Mapped[str | None] = mapped_column(
+        String(320),
+        nullable=True,
+    )
+
+    # E-Mail-Adresse auf der Rechnung angeben (unter der Telefonnummer)
+    invoice_issuer_email_on_invoice: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    # Umsatzsteuer ausweisen; aus bei Kleinunternehmern (§ 19 UStG)
+    vat_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
+
+    # Hinweis auf der Rechnung, wenn keine Umsatzsteuer ausgewiesen wird
+    # (frei editierbar, darf leer sein)
+    vat_exemption_note: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        default=DEFAULT_VAT_EXEMPTION_NOTE,
     )
 
     invoice_issuer_phone: Mapped[
@@ -568,13 +604,6 @@ class GlobalSettings(Base):
         nullable=False,
         default="06:00",
         server_default="06:00",
-    )
-
-    # E-Mail-Adresse des Rechnungsstellers für Hinweise und Nachfragen;
-    # leer = Absenderadresse der E-Mails
-    auto_billing_notification_email: Mapped[str | None] = mapped_column(
-        String(320),
-        nullable=True,
     )
 
     # Tag des (letzten) Einschaltens: abgerechnet werden Zeiträume, deren

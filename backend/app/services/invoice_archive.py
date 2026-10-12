@@ -360,22 +360,6 @@ def archive_invoice_pdf(
             "The configured invoice format is invalid."
         )
 
-    if (
-        global_settings is not None
-        and global_settings.smtp_use_database_settings
-    ):
-        raw_issuer_email = (
-            global_settings.mail_from_address
-        )
-    else:
-        raw_issuer_email = settings.mail_from_address
-
-    issuer_email = (
-        raw_issuer_email.strip()
-        if raw_issuer_email
-        else None
-    ) or None
-
     pdf_bytes = build_invoice_pdf(
         invoice,
         girocode_enabled=(
@@ -383,7 +367,8 @@ def archive_invoice_pdf(
             if global_settings is not None
             else False
         ),
-        issuer_email=issuer_email,
+        # E-Mail-Adresse aus der Rechnung (Daten des Rechnungsstellers)
+        issuer_email=invoice.issuer_email,
     )
 
     if pdf_format == PDF_FORMAT_PDFA_2B:

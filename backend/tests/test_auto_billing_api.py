@@ -56,7 +56,7 @@ def db() -> Generator[Session, None, None]:
                 invoice_issuer_address="Testweg 1, 12345 Teststadt",
                 invoice_tax_number="12345",
                 invoice_payment_term_days=14,
-                auto_billing_notification_email="rechnung@example.com",
+                invoice_issuer_email="rechnung@example.com",
             )
         )
         session.add(
@@ -282,7 +282,7 @@ def test_settings_enable_sets_activation_date(client: TestClient) -> None:
     assert body["run_time"] == "07:30"
     assert body["next_period_start"] is not None
     assert body["next_run_at"] is not None
-    assert body["effective_notification_email"] == "rechnung@example.com"
+    assert body["notification_email"] == "rechnung@example.com"
 
 
 def test_settings_validate_cutoff_day(client: TestClient) -> None:
@@ -306,28 +306,59 @@ def test_settings_validate_cutoff_day(client: TestClient) -> None:
     )
     assert response.status_code == 422
 
+    # die Adresse gehört zu den Daten des Rechnungsstellers
     response = client.patch(
         "/api/settings/auto-billing",
-        json={"notification_email": "keine-adresse"},
+        json={"notification_email": "rechnung@example.org"},
     )
     assert response.status_code == 422
 
 
-def test_settings_require_notification_address(
+def test_settings_require_issuer_email(
     client: TestClient,
     db: Session,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.config import settings
+    db.get(GlobalSettings, 1).invoice_issuer_email = None
+    db.commit()
 
-    monkeypatch.setattr(settings, "mail_from_address", "")
     response = client.patch(
         "/api/settings/auto-billing",
-        json={"enabled": True, "notification_email": ""},
+        json={"enabled": True},
     )
 
     assert response.status_code == 422
+    assert "invoice issuer" in response.json()["detail"]
     assert db.get(GlobalSettings, 1).auto_billing_enabled is False
+
+
+def test_issuer_email_cannot_be_cleared_while_enabled(
+    client: TestClient,
+    db: Session,
+) -> None:
+    db.get(GlobalSettings, 1).auto_billing_enabled = True
+    db.commit()
+
+    response = client.patch(
+        "/api/settings",
+        json={"invoice_issuer_email": ""},
+    )
+
+    assert response.status_code == 422
+    assert db.get(GlobalSettings, 1).invoice_issuer_email == (
+        "rechnung@example.com"
+    )
+
+    response = client.patch(
+        "/api/settings",
+        json={
+            "invoice_issuer_email": "neu@example.com",
+            "invoice_issuer_email_on_invoice": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["invoice_issuer_email"] == "neu@example.com"
+    assert response.json()["invoice_issuer_email_on_invoice"] is True
 
 
 def test_preview_lists_customers(client: TestClient, db: Session) -> None:

@@ -28,6 +28,7 @@ import {
 } from '../utils/numberFormat'
 import type { MessageKey } from '../i18n/de'
 import { useTranslation } from '../i18n/useTranslation'
+import { useAppSettings } from '../settings/useAppSettings'
 
 
 // Zeitraum in zwei Zeilen: Datum, darunter die Uhrzeiten.
@@ -136,6 +137,7 @@ function getStatusClassName(
 
 function ChargingSessionsPage() {
   const { t } = useTranslation()
+  const { vatEnabled } = useAppSettings()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
   const isAdmin = user?.is_admin === true
@@ -620,7 +622,7 @@ function ChargingSessionsPage() {
                     </th>
 
                     <th className="table-number">
-                      {t('sessions.col.costNet')}
+                      {vatEnabled ? t('sessions.col.costNet') : t('sessions.col.cost')}
                     </th>
 
                     <th>{t('sessions.col.status')}</th>

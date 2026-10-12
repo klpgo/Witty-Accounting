@@ -1,8 +1,7 @@
-import re
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.services.billing_schedule import (
     MAX_GRACE_DAYS,
@@ -14,8 +13,6 @@ from app.services.hager_schedule import parse_start_time
 
 
 BillingInterval = Literal["weekly", "monthly", "quarterly"]
-
-_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class BillingRunSkipped(BaseModel):
@@ -53,9 +50,9 @@ class AutoBillingSettingsResponse(BaseModel):
     grace_days: int
     review_days: int
     run_time: str
+    # E-Mail-Adresse des Rechnungsstellers (Daten des Rechnungsstellers);
+    # Pflicht, solange die automatische Abrechnung eingeschaltet ist
     notification_email: str | None
-    # tatsächlich verwendete Adresse (ersatzweise Absenderadresse)
-    effective_notification_email: str | None
     active_since: date | None
     # nächster Leistungszeitraum (Ortszeit, Ende exklusiv) und Zeitpunkt der
     # Entwurfserstellung (UTC); nur wenn eingeschaltet
@@ -73,6 +70,8 @@ class AutoBillingSettingsResponse(BaseModel):
 
 
 class AutoBillingSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool | None = None
     interval: BillingInterval | None = None
     cutoff_day: int | None = Field(default=None, ge=0, le=28)
@@ -87,8 +86,6 @@ class AutoBillingSettingsUpdate(BaseModel):
         le=MAX_REVIEW_DAYS,
     )
     run_time: str | None = None
-    # leer = Absenderadresse der E-Mails verwenden
-    notification_email: str | None = Field(default=None, max_length=320)
 
     @field_validator("run_time")
     @classmethod
@@ -98,19 +95,6 @@ class AutoBillingSettingsUpdate(BaseModel):
 
         value = value.strip()
         parse_start_time(value)
-
-        return value
-
-    @field_validator("notification_email")
-    @classmethod
-    def validate_email(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-
-        value = value.strip()
-
-        if value and not _EMAIL_PATTERN.match(value):
-            raise ValueError("The notification address is not a valid email address.")
 
         return value
 

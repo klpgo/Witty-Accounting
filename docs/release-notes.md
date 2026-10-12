@@ -13,6 +13,9 @@
   it manually, optionally notifying the customer in the same step. Drafts
   can be downloaded as a PDF with a "DRAFT" watermark. See the administrator
   guide, section 5.1.
+- **Optional VAT** for small businesses (§ 19 UStG): with **Show VAT** turned
+  off, invoices contain no VAT and show an editable note instead; VAT rates
+  disappear from the settings. See the administrator guide, section 2.3.
 - **Email address of the invoice issuer** in the invoice issuer data, with a
   checkbox to show it on the invoice below the phone number. Until now the
   sender address of the emails always appeared on the invoice.
@@ -65,7 +68,9 @@
   (`invoice_issuer_email`, `invoice_issuer_email_on_invoice`) and
   `invoices.issuer_email`. The sender address stored in the database is taken
   over and shown on invoices, as before, if no own address was set.
-- Apply all five as described in the administrator guide, section 8.
+- Migration `a3b5c7d9e1f4`: `global_settings.vat_enabled`,
+  `vat_exemption_note`, and `invoices.vat_exempt`, `vat_exemption_note`.
+- Apply all six as described in the administrator guide, section 8.
 
 ## 2.0.1 2026-10-02
 

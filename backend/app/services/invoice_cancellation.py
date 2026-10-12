@@ -109,6 +109,11 @@ def create_cancellation_draft(
         ),
         issuer_iban=original_invoice.issuer_iban,
         issuer_bic=original_invoice.issuer_bic,
+        issuer_phone=original_invoice.issuer_phone,
+        issuer_email=original_invoice.issuer_email,
+        # mit oder ohne Umsatzsteuer wie die ursprüngliche Rechnung
+        vat_exempt=original_invoice.vat_exempt,
+        vat_exemption_note=original_invoice.vat_exemption_note,
         recipient_name=(
             original_invoice.recipient_name
         ),

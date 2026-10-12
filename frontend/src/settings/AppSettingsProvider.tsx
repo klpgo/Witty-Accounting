@@ -34,6 +34,7 @@ export function AppSettingsProvider({
   )
   const [defaultLanguage, setDefaultLanguage] =
     useState('de')
+  const [vatEnabled, setVatEnabled] = useState(true)
 
   const [status, setStatus] =
     useState<AppSettingsStatus>('loading')
@@ -58,6 +59,7 @@ export function AppSettingsProvider({
         setDefaultLanguage(
           publicSettings.default_language ?? 'de',
         )
+        setVatEnabled(publicSettings.vat_enabled ?? true)
 
         if (publicSettings.timezone) {
           setDisplayTimeZone(publicSettings.timezone)
@@ -91,6 +93,7 @@ export function AppSettingsProvider({
       appName,
       tenantName,
       defaultLanguage,
+      vatEnabled,
       status,
       refreshSettings,
     }),
@@ -98,6 +101,7 @@ export function AppSettingsProvider({
       appName,
       tenantName,
       defaultLanguage,
+      vatEnabled,
       status,
       refreshSettings,
     ],

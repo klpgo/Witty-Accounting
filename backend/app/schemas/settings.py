@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -44,6 +45,13 @@ PaymentTermDays = Annotated[
         ge=0,
         le=3650,
     ),
+]
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+OptionalEmail = Annotated[
+    str,
+    Field(max_length=320),
 ]
 
 OptionalShortText = Annotated[
@@ -148,6 +156,8 @@ class PublicSettingsResponse(BaseModel):
     currency: str = "EUR"
     # Sprache für Benutzer ohne eigene Wahl und vor der Anmeldung
     default_language: str = "de"
+    # Umsatzsteuer ausweisen (aus bei Kleinunternehmern)
+    vat_enabled: bool = True
 
 
 class GlobalSettingsResponse(BaseModel):
@@ -171,6 +181,10 @@ class GlobalSettingsResponse(BaseModel):
     invoice_iban: str | None
     invoice_bic: str | None
     invoice_issuer_phone: str | None
+    invoice_issuer_email: str | None = None
+    invoice_issuer_email_on_invoice: bool = False
+    vat_enabled: bool = True
+    vat_exemption_note: str | None = None
     invoice_number_prefix: str
     invoice_pdf_format: InvoicePdfFormat
     invoice_girocode_enabled: bool
@@ -214,6 +228,14 @@ class GlobalSettingsUpdate(BaseModel):
     invoice_issuer_phone: (
         OptionalShortText | None
     ) = None
+    invoice_issuer_email: OptionalEmail | None = None
+    invoice_issuer_email_on_invoice: bool | None = None
+    vat_enabled: bool | None = None
+    # leer erlaubt (Hinweis bewusst entfernt)
+    vat_exemption_note: Annotated[
+        str,
+        Field(max_length=500),
+    ] | None = None
     invoice_number_prefix: (
         InvoiceNumberPrefix | None
     ) = None
@@ -240,6 +262,8 @@ class GlobalSettingsUpdate(BaseModel):
         "invoice_number_prefix",
         "invoice_pdf_format",
         "invoice_girocode_enabled",
+        "invoice_issuer_email_on_invoice",
+        "vat_enabled",
         "password_min_length",
         "password_require_uppercase",
         "password_require_lowercase",
@@ -309,6 +333,7 @@ class GlobalSettingsUpdate(BaseModel):
         "invoice_vat_id",
         "invoice_bank_name",
         "invoice_issuer_phone",
+        "invoice_issuer_email",
         mode="before",
     )
     @classmethod
@@ -325,6 +350,27 @@ class GlobalSettingsUpdate(BaseModel):
         normalized = value.strip()
 
         return normalized or None
+
+    @field_validator("vat_exemption_note", mode="before")
+    @classmethod
+    def normalize_vat_exemption_note(
+        cls,
+        value: object,
+    ) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("invoice_issuer_email")
+    @classmethod
+    def validate_issuer_email(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is not None and not _EMAIL_PATTERN.match(value):
+            raise ValueError(
+                "The email address of the invoice issuer is not valid."
+            )
+
+        return value
 
     @field_validator(
         "invoice_iban",

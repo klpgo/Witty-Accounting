@@ -336,6 +336,15 @@ def _build_invoice_pdf(
 ) -> bytes:
     validate_invoice(invoice, draft=draft)
 
+    # Kleinunternehmer (§ 19 UStG): keine Umsatzsteuer ausweisen, dafür den
+    # mit der Rechnung gespeicherten Hinweis auf die Steuerbefreiung
+    vat_exempt = bool(getattr(invoice, "vat_exempt", False))
+    vat_exemption_note = (
+        (getattr(invoice, "vat_exemption_note", None) or "").strip()
+        if vat_exempt
+        else ""
+    )
+
     girocode = None
     girocode_label = None
     if (
@@ -555,6 +564,11 @@ def _build_invoice_pdf(
     # falls konfiguriert), kleiner Absatz, Steuernummer/USt-IdNr.,
     # kleiner Absatz, IBAN/BIC (nur bei Rechnungen, nicht bei
     # Storno).
+    # Ohne ausdrückliche Angabe gilt die mit der Rechnung gespeicherte
+    # Adresse (nur gesetzt, wenn sie auf der Rechnung erscheinen soll)
+    if issuer_email is None:
+        issuer_email = getattr(invoice, "issuer_email", None)
+
     normalized_issuer_email = (
         issuer_email.strip()
         if issuer_email
@@ -573,7 +587,7 @@ def _build_invoice_pdf(
                     else ""
                 )
                 + (
-                    "<br/>"
+                    "<br/>" + _t("pdf.email") + ": "
                     + escape(normalized_issuer_email)
                     if normalized_issuer_email
                     else ""
@@ -977,20 +991,42 @@ def _build_invoice_pdf(
                 _t("pdf.col.pvPrice", currency=_pdf_currency.get()),
                 table_header_style,
             ),
-            Paragraph(
-                _t("pdf.col.net", currency=_pdf_currency.get()),
-                table_header_style,
-            ),
-            Paragraph(
-                _t("pdf.col.vat"),
-                table_header_style,
-            ),
-            Paragraph(
-                _t("pdf.col.gross", currency=_pdf_currency.get()),
-                table_header_style,
-            ),
         ]
+        + (
+            # ohne Umsatzsteuer (Kleinunternehmer): nur der Betrag
+            [
+                Paragraph(
+                    _t("pdf.col.amount", currency=_pdf_currency.get()),
+                    table_header_style,
+                ),
+            ]
+            if vat_exempt
+            else [
+                Paragraph(
+                    _t("pdf.col.net", currency=_pdf_currency.get()),
+                    table_header_style,
+                ),
+                Paragraph(
+                    _t("pdf.col.vat"),
+                    table_header_style,
+                ),
+                Paragraph(
+                    _t("pdf.col.gross", currency=_pdf_currency.get()),
+                    table_header_style,
+                ),
+            ]
+        )
     ]
+
+    def amount_cells(item: object) -> list[str]:
+        if vat_exempt:
+            return [format_decimal(item.gross_amount, 2)]
+
+        return [
+            format_decimal(item.net_amount, 2),
+            format_decimal(item.vat_rate, 2),
+            format_decimal(item.gross_amount, 2),
+        ]
 
     flat_fee_row_indices: list[int] = []
 
@@ -1018,19 +1054,8 @@ def _build_invoice_pdf(
                     "",
                     "",
                     "",
-                    format_decimal(
-                        item.net_amount,
-                        2,
-                    ),
-                    format_decimal(
-                        item.vat_rate,
-                        2,
-                    ),
-                    format_decimal(
-                        item.gross_amount,
-                        2,
-                    ),
                 ]
+                + amount_cells(item)
             )
             continue
 
@@ -1082,37 +1107,40 @@ def _build_invoice_pdf(
                 format_unit_price(
                     item.pv_price_net
                 ),
-                format_decimal(
-                    item.net_amount,
-                    2,
-                ),
-                format_decimal(
-                    item.vat_rate,
-                    2,
-                ),
-                format_decimal(
-                    item.gross_amount,
-                    2,
-                ),
             ]
+            + amount_cells(item)
         )
 
     items_table = LongTable(
         item_rows,
         repeatRows=1,
-        colWidths=[
-            8 * mm,
-            17 * mm,
-            15 * mm,
-            14 * mm,
-            14 * mm,
-            14 * mm,
-            20 * mm,
-            20 * mm,
-            18 * mm,
-            14 * mm,
-            20 * mm,
-        ],
+        colWidths=(
+            [
+                8 * mm,
+                17 * mm,
+                17 * mm,
+                17 * mm,
+                17 * mm,
+                17 * mm,
+                25 * mm,
+                25 * mm,
+                31 * mm,
+            ]
+            if vat_exempt
+            else [
+                8 * mm,
+                17 * mm,
+                15 * mm,
+                14 * mm,
+                14 * mm,
+                14 * mm,
+                20 * mm,
+                20 * mm,
+                18 * mm,
+                14 * mm,
+                20 * mm,
+            ]
+        ),
         hAlign="LEFT",
     )
 
@@ -1239,8 +1267,15 @@ def _build_invoice_pdf(
     story.append(items_table)
     story.append(Spacer(1, 8 * mm))
 
-    totals_table = Table(
+    totals_rows = (
         [
+            [
+                total_label,
+                format_money(invoice.total_gross),
+            ],
+        ]
+        if vat_exempt
+        else [
             [
                 _t("pdf.totals.net"),
                 format_money(invoice.total_net),
@@ -1253,7 +1288,12 @@ def _build_invoice_pdf(
                 total_label,
                 format_money(invoice.total_gross),
             ],
-        ],
+        ]
+    )
+    total_row = len(totals_rows) - 1
+
+    totals_table = Table(
+        totals_rows,
         colWidths=[
             45 * mm,
             35 * mm,
@@ -1267,13 +1307,13 @@ def _build_invoice_pdf(
                 (
                     "FONTNAME",
                     (0, 0),
-                    (-1, 1),
+                    (-1, -1),
                     "Helvetica",
                 ),
                 (
                     "FONTNAME",
-                    (0, 2),
-                    (-1, 2),
+                    (0, total_row),
+                    (-1, total_row),
                     "Helvetica-Bold",
                 ),
                 (
@@ -1290,8 +1330,8 @@ def _build_invoice_pdf(
                 ),
                 (
                     "LINEABOVE",
-                    (0, 2),
-                    (-1, 2),
+                    (0, total_row),
+                    (-1, total_row),
                     1,
                     colors.HexColor("#333333"),
                 ),
@@ -1310,6 +1350,14 @@ def _build_invoice_pdf(
             ]
         )
     )
+
+    totals_block: list[object] = [totals_table]
+
+    if vat_exemption_note:
+        totals_block.extend([
+            Spacer(1, 4 * mm),
+            Paragraph(multiline_text(vat_exemption_note), body_style),
+        ])
 
     if draft:
         draft_term_days = max(payment_term_days or 0, 0)
@@ -1414,12 +1462,12 @@ def _build_invoice_pdf(
             ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
         ]))
         story.append(KeepTogether([
-            totals_table,
+            *totals_block,
             Spacer(1, 7 * mm),
             payment_table,
         ]))
     else:
-        story.append(totals_table)
+        story.extend(totals_block)
         story.append(Spacer(1, 7 * mm))
         story.extend(payment_details)
 

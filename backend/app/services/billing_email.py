@@ -42,23 +42,16 @@ class SummaryEntry:
 
 
 def notification_address(db: Session) -> str | None:
-    """Adresse des Rechnungsstellers für Hinweise und Nachfragen."""
+    """
+    E-Mail-Adresse des Rechnungsstellers (Daten des Rechnungsstellers):
+    Empfänger der Hinweise und Kontakt für Nachfragen der Kunden.
+    """
     global_settings = db.get(GlobalSettings, 1)
 
-    if global_settings is not None:
-        configured = normalize_optional_text(
-            global_settings.auto_billing_notification_email
-        )
+    if global_settings is None:
+        return None
 
-        if configured is not None:
-            return configured
-
-        if global_settings.smtp_use_database_settings:
-            return normalize_optional_text(
-                global_settings.mail_from_address
-            )
-
-    return normalize_optional_text(settings.mail_from_address)
+    return normalize_optional_text(global_settings.invoice_issuer_email)
 
 
 def portal_invoice_url(db: Session, invoice_id: int) -> str:

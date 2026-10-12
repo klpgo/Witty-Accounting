@@ -330,6 +330,7 @@ def read_public_settings(
                 locale=global_settings.locale,
                 currency=global_settings.currency,
                 default_language=global_settings.default_language,
+                vat_enabled=global_settings.vat_enabled,
             )
 
     return PublicSettingsResponse(
@@ -350,6 +351,11 @@ def read_public_settings(
             global_settings.default_language
             if global_settings is not None
             else "de"
+        ),
+        vat_enabled=(
+            global_settings.vat_enabled
+            if global_settings is not None
+            else True
         ),
     )
 
@@ -1013,6 +1019,40 @@ def update_global_settings(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(exc),
             ) from exc
+
+    # Umsatzsteuer ein-/ausschalten nur ohne offene Entwürfe: sonst
+    # entstünden im selben Zeitraum Rechnungen mit und ohne Umsatzsteuer
+    if (
+        "vat_enabled" in updates
+        and updates["vat_enabled"] != global_settings.vat_enabled
+        and db.scalar(
+            select(Invoice.id).where(Invoice.status == "draft").limit(1)
+        )
+        is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "VAT can only be switched on or off while no invoice or "
+                "cancellation drafts exist. Please finalize or delete the "
+                "open drafts first."
+            ),
+        )
+
+    # Die automatische Abrechnung braucht die E-Mail-Adresse des
+    # Rechnungsstellers (Hinweise, Nachfragen der Kunden)
+    if (
+        "invoice_issuer_email" in updates
+        and not updates["invoice_issuer_email"]
+        and global_settings.auto_billing_enabled
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "The email address of the invoice issuer is required while "
+                "automatic billing is enabled."
+            ),
+        )
 
     for field_name, value in updates.items():
         setattr(

@@ -102,6 +102,20 @@ function AdminSettingsPage() {
   ] = useState('')
 
   const [
+    invoiceIssuerEmail,
+    setInvoiceIssuerEmail,
+  ] = useState('')
+
+  const [
+    invoiceIssuerEmailOnInvoice,
+    setInvoiceIssuerEmailOnInvoice,
+  ] = useState(false)
+
+  // Umsatzsteuer ausweisen; aus bei Kleinunternehmern (§ 19 UStG)
+  const [vatEnabled, setVatEnabled] = useState(true)
+  const [vatExemptionNote, setVatExemptionNote] = useState('')
+
+  const [
     invoiceNumberPrefix,
     setInvoiceNumberPrefix,
   ] = useState('RE')
@@ -234,6 +248,16 @@ function AdminSettingsPage() {
           loadedSettings.invoice_issuer_phone ??
             '',
         )
+        setInvoiceIssuerEmail(
+          loadedSettings.invoice_issuer_email ?? '',
+        )
+        setInvoiceIssuerEmailOnInvoice(
+          loadedSettings.invoice_issuer_email_on_invoice,
+        )
+        setVatEnabled(loadedSettings.vat_enabled)
+        setVatExemptionNote(
+          loadedSettings.vat_exemption_note ?? '',
+        )
         setInvoiceNumberPrefix(
           loadedSettings.invoice_number_prefix,
         )
@@ -306,6 +330,8 @@ function AdminSettingsPage() {
       .toUpperCase()
     const normalizedIssuerPhone =
       invoiceIssuerPhone.trim()
+    const normalizedIssuerEmail =
+      invoiceIssuerEmail.trim()
     const normalizedNumberPrefix =
       invoiceNumberPrefix
         .trim()
@@ -504,6 +530,12 @@ function AdminSettingsPage() {
               normalizedBic || null,
             invoice_issuer_phone:
               normalizedIssuerPhone || null,
+            invoice_issuer_email:
+              normalizedIssuerEmail || null,
+            invoice_issuer_email_on_invoice:
+              invoiceIssuerEmailOnInvoice,
+            vat_enabled: vatEnabled,
+            vat_exemption_note: vatExemptionNote.trim(),
             invoice_number_prefix:
               normalizedNumberPrefix,
             invoice_pdf_format:
@@ -560,6 +592,16 @@ function AdminSettingsPage() {
       setInvoiceIssuerPhone(
         updatedSettings.invoice_issuer_phone ??
           '',
+      )
+      setInvoiceIssuerEmail(
+        updatedSettings.invoice_issuer_email ?? '',
+      )
+      setInvoiceIssuerEmailOnInvoice(
+        updatedSettings.invoice_issuer_email_on_invoice,
+      )
+      setVatEnabled(updatedSettings.vat_enabled)
+      setVatExemptionNote(
+        updatedSettings.vat_exemption_note ?? '',
       )
       setInvoiceNumberPrefix(
         updatedSettings.invoice_number_prefix,
@@ -756,6 +798,42 @@ function AdminSettingsPage() {
                 </small>
               </label>
 
+              <div className="form-field">
+                <label htmlFor="invoice-issuer-email">
+                  {t('settings.issuer.email')}
+                </label>
+
+                <input
+                  id="invoice-issuer-email"
+                  type="email"
+                  value={invoiceIssuerEmail}
+                  maxLength={320}
+                  placeholder="rechnung@example.org"
+                  onChange={(event) => {
+                    setInvoiceIssuerEmail(
+                      event.target.value,
+                    )
+                  }}
+                />
+
+                <small className="muted">
+                  {t('settings.issuer.emailHint')}
+                </small>
+
+                <label className="settings-checkbox-control">
+                  <input
+                    type="checkbox"
+                    checked={invoiceIssuerEmailOnInvoice}
+                    onChange={(event) => {
+                      setInvoiceIssuerEmailOnInvoice(
+                        event.target.checked,
+                      )
+                    }}
+                  />
+                  {t('settings.issuer.emailOnInvoice')}
+                </label>
+              </div>
+
               <label className="form-field">
                 <span>{t('settings.issuer.taxNumber')}</span>
 
@@ -913,9 +991,48 @@ function AdminSettingsPage() {
               </small>
             </label>
 
+            <div className="form-field settings-vat-field">
+              <label className="settings-checkbox-control">
+                <input
+                  type="checkbox"
+                  checked={vatEnabled}
+                  onChange={(event) => {
+                    setVatEnabled(event.target.checked)
+                  }}
+                />
+                {t('settings.vat.enabled')}
+              </label>
+
+              <small className="muted">
+                {t('settings.vat.enabledHint')}
+              </small>
+
+              {!vatEnabled && (
+                <>
+                  <label htmlFor="vat-exemption-note">
+                    {t('settings.vat.note')}
+                  </label>
+                  <textarea
+                    id="vat-exemption-note"
+                    rows={2}
+                    maxLength={500}
+                    value={vatExemptionNote}
+                    onChange={(event) => {
+                      setVatExemptionNote(event.target.value)
+                    }}
+                  />
+                  <small className="muted">
+                    {t('settings.vat.noteHint')}
+                  </small>
+                </>
+              )}
+            </div>
+
               <label className="form-field">
               <span>
-                {t('settings.baseFee')}
+                {vatEnabled
+                  ? t('settings.baseFee')
+                  : t('settings.baseFeeNoVat')}
               </span>
 
               <input
@@ -935,6 +1052,7 @@ function AdminSettingsPage() {
               </small>
               </label>
 
+            {vatEnabled && (
             <label className="form-field">
               <span>
                 {t('settings.baseFeeVat')}
@@ -952,9 +1070,14 @@ function AdminSettingsPage() {
                 required
               />
             </label>
+            )}
 
             <label className="form-field">
-              <span>{t('settings.postalFee')}</span>
+              <span>
+                {vatEnabled
+                  ? t('settings.postalFee')
+                  : t('settings.postalFeeNoVat')}
+              </span>
 
               <input
                 type="text"
