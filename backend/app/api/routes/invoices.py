@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import (
@@ -9,7 +10,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import (
     Session,
     selectinload,
@@ -20,6 +21,7 @@ from app.auth import (
     get_current_user,
     require_admin,
 )
+from app.models.global_settings import GlobalSettings
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.models.monthly_base_fee_charge import (
@@ -39,6 +41,7 @@ from app.schemas.invoice import (
     InvoiceDraftCreate,
     InvoiceEmailResponse,
     InvoiceFinalizeRequest,
+    InvoiceInquiryResponse,
     InvoiceResponse,
 )
 from app.schemas.invoice_export import (
@@ -83,7 +86,14 @@ from app.services.invoice_archive import (
 from app.services.invoice_pdf import (
     InvoiceNotFinalizedError,
     InvoicePdfError,
+    build_invoice_pdf,
 )
+from app.services.auto_billing import (
+    InquiryNotFoundError,
+    InquiryStateError,
+    request_review_hold,
+)
+from app.services.billing_email import notification_address
 
 from app.services.invoice_email import (
     InvoiceEmailConfigurationError,
@@ -102,10 +112,45 @@ from app.services.invoice_export import (
     export_invoice_pdf,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/invoices",
     tags=["invoices"],
 )
+
+
+def customer_visibility():
+    """
+    Kunden sehen ihre finalisierten Rechnungen und Entwürfe der
+    automatischen Abrechnung, die ihnen zur Prüfung gesendet wurden.
+    Manuell erstellte Entwürfe bleiben verborgen.
+    """
+    return or_(
+        Invoice.status == "finalized",
+        and_(
+            Invoice.status == "draft",
+            Invoice.review_status.is_not(None),
+        ),
+    )
+
+
+def to_invoice_response(
+    db: Session,
+    invoice: Invoice,
+    current_user: User,
+) -> InvoiceResponse:
+    response = InvoiceResponse.model_validate(invoice)
+    updates: dict[str, object] = {}
+
+    if invoice.status == "draft" and invoice.review_status is not None:
+        updates["review_contact_email"] = notification_address(db)
+
+    if not current_user.is_admin:
+        # technische Fehlermeldungen nur für Administratoren
+        updates["notification_error"] = None
+
+    return response.model_copy(update=updates) if updates else response
 
 
 def get_readable_invoice_or_404(
@@ -127,7 +172,7 @@ def get_readable_invoice_or_404(
     if not current_user.is_admin:
         statement = statement.where(
             Invoice.user_id == current_user.id,
-            Invoice.status == "finalized",
+            customer_visibility(),
         )
 
     invoice = db.scalar(statement)
@@ -136,8 +181,7 @@ def get_readable_invoice_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Rechnung {invoice_id} "
-                "wurde nicht gefunden."
+                f"Invoice {invoice_id} was not found."
             ),
         )
 
@@ -157,13 +201,18 @@ def list_invoices(
         Session,
         Depends(get_db),
     ],
-) -> list[Invoice]:
+) -> list[InvoiceResponse]:
     statement = (
         select(Invoice)
         .options(
             selectinload(Invoice.items)
         )
+        # Neueste oben: Entwürfe (noch ohne Rechnungsdatum) zuerst,
+        # dann nach Rechnungsdatum absteigend. "IS NULL DESC" statt
+        # NULLS FIRST, weil MariaDB das nicht unterstützt.
         .order_by(
+            Invoice.issue_date.is_(None).desc(),
+            Invoice.issue_date.desc(),
             Invoice.created_at.desc(),
             Invoice.id.desc(),
         )
@@ -172,12 +221,13 @@ def list_invoices(
     if not current_user.is_admin:
         statement = statement.where(
             Invoice.user_id == current_user.id,
-            Invoice.status == "finalized",
+            customer_visibility(),
         )
 
-    return list(
-        db.scalars(statement).all()
-    )
+    return [
+        to_invoice_response(db, invoice, current_user)
+        for invoice in db.scalars(statement).all()
+    ]
 
 
 @router.post(
@@ -203,6 +253,7 @@ def create_draft(
             service_period_end=(
                 payload.service_period_end
             ),
+            prorate_base_fee=payload.prorate_base_fee,
         )
 
     except InvoiceUserNotFoundError as exc:
@@ -290,14 +341,18 @@ def finalize_draft(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "Invoice %s finalized, PDF archiving failed (%s): %s",
+            invoice_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             ),
             detail=(
-                "Die Rechnung wurde finalisiert, "
-                "aber die PDF-Archivierung ist "
-                f"fehlgeschlagen: {exc}"
+                f"The invoice was finalized, but PDF archiving failed: {exc}"
             ),
         ) from exc
 
@@ -337,6 +392,12 @@ def archive_invoice(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "PDF archiving for invoice %s failed (%s): %s",
+            invoice_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -356,8 +417,7 @@ def archive_invoice(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Rechnung {invoice_id} "
-                "wurde nicht gefunden."
+                f"Invoice {invoice_id} was not found."
             ),
         )
 
@@ -385,8 +445,7 @@ def delete_invoice_draft(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Rechnung {invoice_id} "
-                "wurde nicht gefunden."
+                f"Invoice {invoice_id} was not found."
             ),
         )
 
@@ -394,8 +453,7 @@ def delete_invoice_draft(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Nur ein Entwurf kann gelöscht "
-                "werden."
+                "Only a draft can be deleted."
             ),
         )
 
@@ -466,8 +524,7 @@ def download_invoice_pdf(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Für diese Rechnung wurde noch "
-                "keine PDF archiviert."
+                "No PDF has been archived for this invoice yet."
             ),
         ) from exc
 
@@ -483,6 +540,120 @@ def download_invoice_pdf(
         path=archived_pdf.absolute_path,
         media_type="application/pdf",
         filename=archived_pdf.absolute_path.name,
+    )
+
+
+@router.get(
+    "/{invoice_id}/draft-pdf",
+)
+def download_invoice_draft_pdf(
+    invoice_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> Response:
+    """
+    Ansicht eines Rechnungsentwurfs als PDF (Wasserzeichen "ENTWURF", ohne
+    Rechnungsnummer und Girocode). Wird bei jedem Abruf neu erzeugt und
+    nicht archiviert.
+    """
+    invoice = get_readable_invoice_or_404(
+        db,
+        invoice_id=invoice_id,
+        current_user=current_user,
+        include_items=True,
+    )
+
+    if (
+        invoice.status != "draft"
+        or invoice.document_type != "invoice"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only invoice drafts can be shown as a draft PDF.",
+        )
+
+    global_settings = db.get(GlobalSettings, 1)
+
+    try:
+        pdf_bytes = build_invoice_pdf(
+            invoice,
+            draft=True,
+            payment_term_days=(
+                global_settings.invoice_payment_term_days
+                if global_settings is not None
+                else None
+            ),
+        )
+    except InvoicePdfError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="rechnungsentwurf-{invoice.id}.pdf"'
+            ),
+        },
+    )
+
+
+@router.post(
+    "/{invoice_id}/inquiry",
+    response_model=InvoiceInquiryResponse,
+)
+def create_invoice_inquiry(
+    invoice_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> InvoiceInquiryResponse:
+    """
+    "Nachfrage zum Rechnungsentwurf" durch den Kunden: der Entwurf wird
+    zurückgestellt und nicht automatisch finalisiert; der
+    Rechnungssteller wird per E-Mail benachrichtigt.
+    """
+    try:
+        invoice, contact_email = request_review_hold(
+            db,
+            invoice_id=invoice_id,
+            user=current_user,
+        )
+    except InquiryNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except InquiryStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    invoice = get_readable_invoice_or_404(
+        db,
+        invoice_id=invoice.id,
+        current_user=current_user,
+        include_items=True,
+    )
+
+    return InvoiceInquiryResponse(
+        invoice=to_invoice_response(db, invoice, current_user),
+        contact_email=contact_email,
     )
 
 
@@ -574,14 +745,18 @@ def finalize_invoice_cancellation(
         InvoiceArchiveError,
         InvoicePdfError,
     ) as exc:
+        logger.error(
+            "Cancellation %s finalized, PDF archiving failed (%s): %s",
+            cancellation_id,
+            type(exc).__name__,
+            exc,
+        )
         raise HTTPException(
             status_code=(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             ),
             detail=(
-                "Das Storno wurde finalisiert, "
-                "aber die PDF-Archivierung ist "
-                f"fehlgeschlagen: {exc}"
+                f"The cancellation was finalized, but PDF archiving failed: {exc}"
             ),
         ) from exc
 
@@ -716,11 +891,15 @@ def get_invoice(
         Session,
         Depends(get_db),
     ],
-) -> Invoice:
+) -> InvoiceResponse:
 
-    return get_readable_invoice_or_404(
+    return to_invoice_response(
         db,
-        invoice_id=invoice_id,
-        current_user=current_user,
-        include_items=True,
+        get_readable_invoice_or_404(
+            db,
+            invoice_id=invoice_id,
+            current_user=current_user,
+            include_items=True,
+        ),
+        current_user,
     )

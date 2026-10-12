@@ -225,7 +225,7 @@ def configure_mail_settings(
     monkeypatch.setattr(
         settings,
         "mail_from_name",
-        "Klaus Gottschalk",
+        "Erika Mustermann",
     )
     monkeypatch.setattr(
         settings,
@@ -463,7 +463,7 @@ def test_sends_archived_invoice_pdf(
 
     assert message is not None
     assert message["From"] == (
-        "Klaus Gottschalk "
+        "Erika Mustermann "
         "<rechnung@example.test>"
     )
     assert message["To"] == (
@@ -483,7 +483,7 @@ def test_sends_archived_invoice_pdf(
         "Ladestrom-Rechnung RE-2026-000001 "
         "als PDF-Datei.\n\n"
         "Mit freundlichen Grüßen\n"
-        "Klaus Gottschalk\n"
+        "Erika Mustermann\n"
     )
     assert (
         "RE-2026-000001"
@@ -608,7 +608,7 @@ def test_rejects_draft_invoice(
 
     with pytest.raises(
         InvoiceEmailStateError,
-        match="finalisierte",
+        match="finalized",
     ):
         send_invoice_email(
             database_session,
@@ -631,7 +631,7 @@ def test_rejects_disabled_email_delivery(
 
     with pytest.raises(
         InvoiceEmailRecipientError,
-        match="Briefzustellung",
+        match="Postal delivery",
     ):
         send_invoice_email(
             database_session,
@@ -703,7 +703,7 @@ def test_rejects_missing_sender_address(
 
     with pytest.raises(
         InvoiceEmailConfigurationError,
-        match="Absenderadresse",
+        match="sender address",
     ):
         send_invoice_email(
             database_session,
@@ -720,7 +720,7 @@ def test_reports_missing_archived_pdf(
 
     with pytest.raises(
         InvoiceEmailStateError,
-        match="archivierte",
+        match="archived",
     ):
         send_invoice_email(
             database_session,
@@ -749,7 +749,7 @@ def test_wraps_smtp_delivery_error(
 
     with pytest.raises(
         InvoiceEmailDeliveryError,
-        match="nicht per E-Mail",
+        match="not be sent by email",
     ):
         send_invoice_email(
             database_session,
@@ -1005,7 +1005,7 @@ def test_uses_uploaded_smime_material_for_invoice(
         (
             Path("/tmp/signing.p12"),
             None,
-            "Passwortdatei",
+            "password file",
         ),
     ],
 )
@@ -1170,7 +1170,7 @@ def test_wraps_signed_smtp_delivery_error(
 
     with pytest.raises(
         InvoiceEmailDeliveryError,
-        match="nicht per E-Mail",
+        match="not be sent by email",
     ):
         send_invoice_email(
             database_session,
@@ -1198,7 +1198,7 @@ def test_sends_smtp_test_email(
         "admin@example.test"
     )
     assert result.subject == (
-        "Witty-Accounting Mailserver-Test"
+        "Witty-Accounting Mailserver-Test / mail server test"
     )
 
     assert len(FakeSMTP.instances) == 1
@@ -1214,11 +1214,11 @@ def test_sends_smtp_test_email(
     assert message is not None
     assert message["To"] == "admin@example.test"
     assert message["From"] == (
-        "Klaus Gottschalk "
+        "Erika Mustermann "
         "<rechnung@example.test>"
     )
     assert message["Subject"] == (
-        "Witty-Accounting Mailserver-Test"
+        "Witty-Accounting Mailserver-Test / mail server test"
     )
 
     plain_body = message.get_body(
@@ -1230,6 +1230,10 @@ def test_sends_smtp_test_email(
         "Mailserver-Einstellungen funktionieren"
         in plain_body.get_content()
     )
+    # zweisprachig: Deutsch oben, Englisch darunter
+    content = plain_body.get_content()
+    assert content.index("Guten Tag,") < content.index("Hello,")
+    assert "mail server settings work" in content
 
 
 def test_sends_signed_smime_test_even_when_disabled(
@@ -1272,7 +1276,7 @@ def test_sends_signed_smime_test_even_when_disabled(
         password: bytes,
     ) -> bytes:
         assert message["Subject"] == (
-            "Witty-Accounting S/MIME-Test"
+            "Witty-Accounting S/MIME-Test / S/MIME test"
         )
         sign_calls.append(
             (
@@ -1298,7 +1302,7 @@ def test_sends_signed_smime_test_even_when_disabled(
     )
 
     assert result.subject == (
-        "Witty-Accounting S/MIME-Test"
+        "Witty-Accounting S/MIME-Test / S/MIME test"
     )
     assert sign_calls == [
         (

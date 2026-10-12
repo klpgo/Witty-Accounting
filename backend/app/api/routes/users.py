@@ -20,6 +20,7 @@ from app.models.user import User
 from app.schemas.user import (
     UserAdminUpdate,
     UserCreate,
+    UserDeletionCheckResponse,
     UserPasswordChange,
     UserPasswordReset,
     UserProfileUpdate,
@@ -40,6 +41,11 @@ from app.services.password_reset import (
     generate_temporary_password,
     issue_password_reset,
 )
+from app.services.user_deletion import (
+    UserDeletionBlockedError,
+    check_user_deletion,
+    delete_user,
+)
 
 router = APIRouter(
     prefix="/users",
@@ -58,9 +64,8 @@ def ensure_valid_delivery_method(
                 status.HTTP_422_UNPROCESSABLE_CONTENT
             ),
             detail=(
-                "Bitte wählen Sie genau eine "
-                "Rechnungszustellung: E-Mail, Brief "
-                "oder manueller Portal-Download."
+                "Please choose exactly one invoice delivery method: email, "
+                "post or manual portal download."
             ),
         )
 
@@ -89,8 +94,7 @@ def ensure_email_available(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese E-Mail-Adresse wird "
-                "bereits verwendet."
+                "This email address is already in use."
             ),
         )
 
@@ -108,8 +112,7 @@ def get_user_or_404(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"Benutzer {user_id} wurde "
-                "nicht gefunden."
+                f"User {user_id} was not found."
             ),
         )
 
@@ -214,6 +217,9 @@ def update_own_profile(
     if "phone" in payload.model_fields_set:
         current_user.phone = payload.phone
 
+    if "language" in payload.model_fields_set:
+        current_user.language = payload.language
+
     if (
         "invoice_delivery_email"
         in payload.model_fields_set
@@ -246,8 +252,7 @@ def update_own_profile(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese E-Mail-Adresse wird "
-                "bereits verwendet."
+                "This email address is already in use."
             ),
         ) from exc
 
@@ -278,8 +283,7 @@ def change_own_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Das aktuelle Passwort ist "
-                "nicht korrekt."
+                "The current password is incorrect."
             ),
         )
 
@@ -364,6 +368,7 @@ def create_new_user(
         last_name=payload.last_name,
         address=payload.address,
         phone=payload.phone,
+        language=payload.language,
         invoice_delivery_email=(
             payload.invoice_delivery_email
         ),
@@ -394,9 +399,8 @@ def create_new_user(
                 status.HTTP_503_SERVICE_UNAVAILABLE
             ),
             detail=(
-                "Der Benutzer konnte nicht angelegt "
-                "werden, weil die Einladungsmail "
-                "nicht versendet werden konnte."
+                "The user could not be created because the invitation email "
+                "could not be sent."
             ),
         ) from exc
     except IntegrityError as exc:
@@ -405,8 +409,7 @@ def create_new_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese E-Mail-Adresse wird "
-                "bereits verwendet."
+                "This email address is already in use."
             ),
         ) from exc
 
@@ -496,6 +499,9 @@ def update_user(
     if "phone" in payload.model_fields_set:
         user.phone = payload.phone
 
+    if "language" in payload.model_fields_set:
+        user.language = payload.language
+
     if (
         "invoice_delivery_email"
         in payload.model_fields_set
@@ -536,8 +542,7 @@ def update_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Diese E-Mail-Adresse wird "
-                "bereits verwendet."
+                "This email address is already in use."
             ),
         ) from exc
 
@@ -574,6 +579,77 @@ def reset_user_password(
     )
 
     db.commit()
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+
+
+@router.get(
+    "/{user_id}/deletion-check",
+    response_model=UserDeletionCheckResponse,
+)
+def get_user_deletion_check(
+    user_id: int,
+    current_admin: Annotated[
+        User,
+        Depends(require_admin),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> dict:
+    get_user_or_404(
+        db,
+        user_id,
+    )
+
+    return check_user_deletion(
+        db,
+        user_id=user_id,
+        acting_user_id=current_admin.id,
+    ).as_dict()
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_user_account(
+    user_id: int,
+    current_admin: Annotated[
+        User,
+        Depends(require_admin),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+    discard_unbilled: bool = False,
+) -> Response:
+    """
+    Löscht die Abrechnungsdaten und danach den Benutzer. Rechnungen
+    bleiben im Archiv. Mit discard_unbilled werden auch noch nicht
+    abgerechnete Ladevorgänge und Grundgebühren gelöscht.
+    """
+    get_user_or_404(
+        db,
+        user_id,
+    )
+
+    try:
+        delete_user(
+            db,
+            user_id=user_id,
+            acting_user_id=current_admin.id,
+            discard_unbilled=discard_unbilled,
+        )
+    except UserDeletionBlockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     return Response(
         status_code=status.HTTP_204_NO_CONTENT,

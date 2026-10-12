@@ -8,6 +8,8 @@ from collections.abc import Callable
 
 from pydantic import SecretStr
 
+from app.control.i18n import tr
+
 
 class ControlAuthenticationError(RuntimeError):
     pass
@@ -29,14 +31,14 @@ class ControlAuthenticator:
         clock: Callable[[], float] = time.time,
     ) -> None:
         if password is None or not password.get_secret_value():
-            raise ControlAuthenticationError("WITTY_CONTROL_PASSWORD fehlt.")
+            raise ControlAuthenticationError(tr("auth.passwordMissing"))
         if session_secret is None or len(session_secret.get_secret_value()) < 32:
             raise ControlAuthenticationError(
-                "WITTY_CONTROL_SESSION_SECRET fehlt oder ist kürzer als 32 Zeichen."
+                tr("auth.secretInvalid")
             )
         if session_minutes < 1:
             raise ControlAuthenticationError(
-                "WITTY_CONTROL_SESSION_MINUTES muss mindestens 1 sein."
+                tr("auth.minutesInvalid")
             )
 
         self._password = password.get_secret_value()
@@ -72,13 +74,13 @@ class ControlAuthenticator:
 
     def verify_session(self, token: str | None) -> ControlSession:
         if not token:
-            raise ControlAuthenticationError("Anmeldung erforderlich.")
+            raise ControlAuthenticationError(tr("auth.required"))
 
         try:
             issued_text, csrf_token, signature = token.split(".", 2)
             issued_at = int(issued_text)
         except (TypeError, ValueError) as exc:
-            raise ControlAuthenticationError("Die Sitzung ist ungültig.") from exc
+            raise ControlAuthenticationError(tr("auth.sessionInvalid")) from exc
 
         payload = f"{issued_at}.{csrf_token}"
         expected = base64.urlsafe_b64encode(
@@ -91,9 +93,9 @@ class ControlAuthenticator:
 
         now = int(self._clock())
         if not hmac.compare_digest(signature, expected):
-            raise ControlAuthenticationError("Die Sitzung ist ungültig.")
+            raise ControlAuthenticationError(tr("auth.sessionInvalid"))
         if issued_at > now + 30 or now - issued_at > self._lifetime:
-            raise ControlAuthenticationError("Die Sitzung ist abgelaufen.")
+            raise ControlAuthenticationError(tr("auth.sessionExpired"))
 
         return ControlSession(
             csrf_token=csrf_token,
@@ -105,4 +107,4 @@ class ControlAuthenticator:
         if not candidate or not hmac.compare_digest(
             candidate, session.csrf_token
         ):
-            raise ControlAuthenticationError("Die Sicherheitsprüfung ist fehlgeschlagen.")
+            raise ControlAuthenticationError(tr("auth.securityCheckFailed"))

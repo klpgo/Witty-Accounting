@@ -1,3 +1,5 @@
+import { type ApiErrorDescriptor, readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -36,7 +38,8 @@ export interface Invoice {
   original_invoice_id: number | null
   cancellation_reason: string | null
   cancelled_at: string | null
-  user_id: number
+  // null, wenn das Kundenkonto gelöscht wurde
+  user_id: number | null
   recipient_name: string
   recipient_address: string
   status: string
@@ -58,7 +61,31 @@ export interface Invoice {
   pdf_exported_at: string | null
   pdf_exported_by_user_id: number | null
   pdf_export_remote_path: string | null
+  // ohne Umsatzsteuer erstellt (Kleinunternehmer) und Hinweis dazu
+  vat_exempt: boolean
+  vat_exemption_note: string | null
+  // Automatische Abrechnung
+  billing_run_id: number | null
+  // in_review, on_hold, failed; null bei manuell erstellten Entwürfen
+  review_status: ReviewStatus | null
+  review_due_date: string | null
+  review_notified_at: string | null
+  inquiry_at: string | null
+  // pending, sent, postal, failed (nach automatischer Finalisierung)
+  delivery_status: string | null
+  // nur für Administratoren
+  notification_error: string | null
+  notification_error_code: ApiErrorDescriptor | null
+  // Kontaktadresse für Nachfragen (nur bei Entwürfen zur Prüfung)
+  review_contact_email: string | null
   items: InvoiceItem[]
+}
+
+export type ReviewStatus = 'in_review' | 'on_hold' | 'failed'
+
+export interface InvoiceInquiryResponse {
+  invoice: Invoice
+  contact_email: string | null
 }
 
 export interface InvoiceEmailResponse {
@@ -69,10 +96,6 @@ export interface InvoiceEmailResponse {
 export interface InvoiceExportResponse {
   remote_path: string
   exported_at: string
-}
-
-interface ApiErrorResponse {
-  detail?: string
 }
 
 export class InvoiceApiError extends Error {
@@ -86,23 +109,6 @@ export class InvoiceApiError extends Error {
     this.name = 'InvoiceApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (body.detail) {
-      return body.detail
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Anfrage fehlgeschlagen (${response.status}).`
 }
 
 export async function listInvoices(
@@ -121,7 +127,7 @@ export async function listInvoices(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -146,7 +152,33 @@ export async function getInvoice(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as Invoice
+}
+
+// Erzeugt und archiviert das PDF einer finalisierten Rechnung erneut,
+// z. B. wenn die Archivierung beim Finalisieren fehlgeschlagen ist
+export async function archiveInvoicePdf(
+  accessToken: string,
+  invoiceId: number,
+): Promise<Invoice> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/archive`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await readApiError(response),
       response.status,
     )
   }
@@ -169,7 +201,7 @@ export async function downloadInvoicePdf(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -193,7 +225,7 @@ export async function sendInvoiceEmail(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -219,7 +251,7 @@ export async function exportInvoiceSftp(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -233,6 +265,8 @@ export interface InvoiceDraftCreate {
   user_id: number
   service_period_start: string
   service_period_end: string
+  // Grundgebühr anteilig für die Tage im Zeitraum
+  prorate_base_fee?: boolean
 }
 
 export async function createInvoiceDraft(
@@ -253,7 +287,7 @@ export async function createInvoiceDraft(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -263,7 +297,9 @@ export async function createInvoiceDraft(
 
 export interface InvoiceFinalizeRequest {
   issue_date: string
-  due_date: string
+  // nur bei abweichendem Fälligkeitsdatum; sonst berechnet das Backend es
+  // aus dem Zahlungsziel der Einstellungen
+  due_date?: string
 }
 
 export async function finalizeInvoice(
@@ -285,7 +321,7 @@ export async function finalizeInvoice(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -316,7 +352,7 @@ export async function createInvoiceCancellation(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -347,7 +383,7 @@ export async function finalizeInvoiceCancellation(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -371,8 +407,57 @@ export async function deleteInvoiceDraft(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
+}
+
+// Ansicht eines Entwurfs als PDF (Wasserzeichen, ohne Nummer und Girocode)
+export async function downloadInvoiceDraftPdf(
+  accessToken: string,
+  invoiceId: number,
+): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/draft-pdf`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await readApiError(response),
+      response.status,
+    )
+  }
+
+  return response.blob()
+}
+
+// "Nachfrage zum Rechnungsentwurf": Entwurf zurückstellen
+export async function requestInvoiceInquiry(
+  accessToken: string,
+  invoiceId: number,
+): Promise<InvoiceInquiryResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/invoices/${invoiceId}/inquiry`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await readApiError(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as InvoiceInquiryResponse
 }

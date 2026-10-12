@@ -23,7 +23,7 @@ def build_registry() -> DatabaseTenantRegistry:
 
     if encryption_key is None:
         raise TenantRegistryError(
-            "TENANT_DB_ENCRYPTION_KEY fehlt."
+            "TENANT_DB_ENCRYPTION_KEY is missing."
         )
 
     control_engine = create_engine(
@@ -41,15 +41,13 @@ def build_registry() -> DatabaseTenantRegistry:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Führt die Witty-Alembic-Migrationen "
-            "für alle aktiven Mandanten aus."
+            "Runs the Witty Alembic migrations for all active tenants."
         )
     )
     parser.add_argument(
         "--tenant",
         help=(
-            "Optional nur den Mandanten mit diesem "
-            "Slug migrieren."
+            "Optionally migrate only the tenant with this code."
         ),
     )
     return parser.parse_args()
@@ -73,8 +71,7 @@ def main() -> None:
 
     if not results:
         raise SystemExit(
-            "Es sind keine aktiven Mandanten "
-            "registriert."
+            "No active tenants are registered."
         )
 
     failed = False
@@ -82,22 +79,18 @@ def main() -> None:
     for result in results:
         if result.successful:
             print(
-                f"[OK] {result.tenant_slug} "
-                "wurde migriert."
+                f"[OK] {result.tenant_slug} has been migrated."
             )
             continue
 
         failed = True
         print(
-            f"[FEHLER] {result.tenant_slug}: "
-            f"{result.error_type}: "
-            f"{result.error_message}"
+            f"[ERROR] {result.tenant_slug}: {result.error_type}: {result.error_message}"
         )
 
     if failed:
         raise SystemExit(
-            "Mindestens eine Mandantendatenbank "
-            "konnte nicht migriert werden."
+            "At least one tenant database could not be migrated."
         )
 
 

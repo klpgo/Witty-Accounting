@@ -64,6 +64,13 @@ class User(Base):
         default=False
     )
 
+    # Sprache der Oberfläche (und später der Rechnungen);
+    # None = Standardsprache des Mandanten
+    language: Mapped[str | None] = mapped_column(
+        String(5),
+        nullable=True,
+    )
+
     active: Mapped[bool] = mapped_column(
         Boolean,
         default=True

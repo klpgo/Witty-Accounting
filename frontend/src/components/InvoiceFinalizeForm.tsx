@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useEffect,
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -8,14 +9,34 @@ import {
   finalizeInvoice,
   getInvoice,
   InvoiceApiError,
+  sendInvoiceEmail,
   type Invoice,
 } from '../api/invoices'
+import { getGlobalSettings } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from './SystemMessage'
 
 interface InvoiceFinalizeFormProps {
   invoiceId: number
-  onFinalized: (invoice: Invoice) => void
+  /*
+   * warning: Fehlermeldung, wenn die Rechnung finalisiert wurde,
+   * das PDF aber nicht archiviert werden konnte. Die Detailseite
+   * zeigt sie an, weil dieses Formular danach verschwindet.
+   */
+  onFinalized: (
+    invoice: Invoice,
+    warning?: string,
+    notice?: string,
+  ) => void
+  /*
+   * Kunde kann per E-Mail benachrichtigt werden (nicht bei reinem
+   * Postversand). notifyByDefault: Häkchen vorbelegt, z. B. bei
+   * zurückgestellten Entwürfen der automatischen Abrechnung.
+   */
+  canNotifyCustomer?: boolean
+  notifyByDefault?: boolean
 }
 
 function formatDateInput(date: Date): string {
@@ -34,28 +55,64 @@ function getDefaultIssueDate(): string {
   return formatDateInput(new Date())
 }
 
-function getDefaultDueDate(): string {
-  const dueDate = new Date()
+// Kalendertag JJJJ-MM-TT plus Anzahl Tage
+function addDays(day: string, days: number): string {
+  const [year, month, date] = day.split('-').map(Number)
 
-  dueDate.setDate(
-    dueDate.getDate() + 14,
-  )
-
-  return formatDateInput(dueDate)
+  return formatDateInput(new Date(year, month - 1, date + days))
 }
 
 function InvoiceFinalizeForm({
   invoiceId,
   onFinalized,
+  canNotifyCustomer = false,
+  notifyByDefault = false,
 }: InvoiceFinalizeFormProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
   const [issueDate, setIssueDate] =
     useState(getDefaultIssueDate)
 
-  const [dueDate, setDueDate] =
-    useState(getDefaultDueDate)
+  const [notifyCustomer, setNotifyCustomer] =
+    useState(notifyByDefault)
+
+  // Zahlungsziel aus den Einstellungen (null, solange nicht geladen)
+  const [paymentTermDays, setPaymentTermDays] =
+    useState<number | null>(null)
+
+  const [dueDate, setDueDate] = useState('')
+
+  // true, sobald das Fälligkeitsdatum von Hand geändert wurde
+  const [dueDateChanged, setDueDateChanged] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const accessToken = getAccessToken()
+
+    if (accessToken !== null) {
+      getGlobalSettings(accessToken, controller.signal)
+        .then((settings) => {
+          setPaymentTermDays(settings.invoice_payment_term_days)
+        })
+        .catch(() => {
+          // ohne Einstellungen berechnet das Backend das Datum
+        })
+    }
+
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
+  // Fälligkeitsdatum folgt dem Rechnungsdatum, solange es nicht von Hand
+  // geändert wurde
+  useEffect(() => {
+    if (!dueDateChanged && paymentTermDays !== null && issueDate) {
+      setDueDate(addDays(issueDate, paymentTermDays))
+    }
+  }, [dueDateChanged, issueDate, paymentTermDays])
 
   const [isSubmitting, setIsSubmitting] =
     useState(false)
@@ -70,9 +127,9 @@ function InvoiceFinalizeForm({
   ): Promise<void> {
     event.preventDefault()
 
-    if (dueDate < issueDate) {
+    if (dueDate && dueDate < issueDate) {
       setErrorMessage(
-        'Das Fälligkeitsdatum darf nicht vor dem Rechnungsdatum liegen.',
+        t('invoiceFinalize.dueBeforeIssue'),
       )
       return
     }
@@ -99,9 +156,40 @@ function InvoiceFinalizeForm({
           invoiceId,
           {
             issue_date: issueDate,
-            due_date: dueDate,
+            ...(dueDateChanged && dueDate ? { due_date: dueDate } : {}),
           },
         )
+
+      if (
+        canNotifyCustomer &&
+        notifyCustomer &&
+        finalizedInvoice.pdf_storage_path !== null
+      ) {
+        try {
+          const result = await sendInvoiceEmail(
+            accessToken,
+            finalizedInvoice.id,
+          )
+
+          onFinalized(
+            finalizedInvoice,
+            undefined,
+            t('invoiceFinalize.notified', {
+              email: result.recipient_email,
+            }),
+          )
+        } catch (error) {
+          onFinalized(
+            finalizedInvoice,
+            t('invoiceFinalize.notifyFailed', {
+              message:
+                error instanceof Error ? error.message : '',
+            }),
+          )
+        }
+
+        return
+      }
 
       onFinalized(finalizedInvoice)
     } catch (error) {
@@ -121,7 +209,7 @@ function InvoiceFinalizeForm({
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Rechnung konnte nicht finalisiert werden.',
+          : t('invoiceFinalize.failed'),
       )
 
       /*
@@ -136,7 +224,13 @@ function InvoiceFinalizeForm({
             invoiceId,
           )
 
-        onFinalized(refreshedInvoice)
+        onFinalized(
+          refreshedInvoice,
+          refreshedInvoice.status === 'finalized' &&
+            error instanceof Error
+            ? error.message
+            : undefined,
+        )
       } catch {
         // Die ursprüngliche Fehlermeldung bleibt sichtbar.
       }
@@ -148,15 +242,13 @@ function InvoiceFinalizeForm({
   return (
     <section className="card detail-section">
       <p className="eyebrow">
-        Entwurf abschließen
+        {t('invoiceFinalize.eyebrow')}
       </p>
 
-      <h2>Rechnung finalisieren</h2>
+      <h2>{t('invoiceFinalize.title')}</h2>
 
       <p className="muted finalize-intro">
-        Nach der Finalisierung sind die
-        Rechnungsdaten unveränderlich. Das PDF
-        wird automatisch erstellt und archiviert.
+        {t('invoiceFinalize.intro')}
       </p>
 
       <form
@@ -165,7 +257,7 @@ function InvoiceFinalizeForm({
       >
         <div className="form-grid">
           <label className="form-field">
-            <span>Rechnungsdatum</span>
+            <span>{t('invoiceFinalize.issueDate')}</span>
 
             <input
               type="date"
@@ -181,7 +273,7 @@ function InvoiceFinalizeForm({
           </label>
 
           <label className="form-field">
-            <span>Fälligkeitsdatum</span>
+            <span>{t('invoiceFinalize.dueDate')}</span>
 
             <input
               type="date"
@@ -191,21 +283,47 @@ function InvoiceFinalizeForm({
                 setDueDate(
                   event.target.value,
                 )
+                setDueDateChanged(true)
               }}
               disabled={isSubmitting}
-              required
             />
+            {paymentTermDays !== null && (
+              <small className="muted">
+                {t('invoiceFinalize.paymentTermHint', {
+                  count: paymentTermDays,
+                })}
+              </small>
+            )}
           </label>
         </div>
 
-        {errorMessage && (
-          <p
-            className="form-error"
-            role="alert"
-          >
-            {errorMessage}
-          </p>
+        {canNotifyCustomer && (
+          <label className="settings-checkbox-control">
+            <input
+              type="checkbox"
+              checked={notifyCustomer}
+              disabled={isSubmitting}
+              onChange={(event) => {
+                setNotifyCustomer(event.target.checked)
+              }}
+            />
+            <span>
+              {t('invoiceFinalize.notifyCustomer')}
+              <br />
+              <small className="muted">
+                {t('invoiceFinalize.notifyCustomerHint')}
+              </small>
+            </span>
+          </label>
         )}
+
+        <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
         <div className="form-actions">
           <button
@@ -214,8 +332,8 @@ function InvoiceFinalizeForm({
             disabled={isSubmitting}
           >
             {isSubmitting
-              ? 'Rechnung wird finalisiert …'
-              : 'Rechnung verbindlich finalisieren'}
+              ? t('invoiceFinalize.submitting')
+              : t('invoiceFinalize.submit')}
           </button>
         </div>
       </form>

@@ -18,8 +18,13 @@ import {
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import PasswordFields from '../components/PasswordFields'
+import { useTranslation } from '../i18n/useTranslation'
+import { useAppSettings } from '../settings/useAppSettings'
+import SystemMessage from '../components/SystemMessage'
 
 function ProfilePage() {
+  const { t } = useTranslation()
+  const { defaultLanguage } = useAppSettings()
   const navigate = useNavigate()
   const {
     signOut,
@@ -34,6 +39,9 @@ function ProfilePage() {
   const [address, setAddress] =
     useState('')
   const [phone, setPhone] =
+    useState('')
+  // '' = Standardsprache des Mandanten
+  const [language, setLanguage] =
     useState('')
 
   const [invoiceDeliveryMethod, setInvoiceDeliveryMethod] =
@@ -112,6 +120,7 @@ function ProfilePage() {
         setLastName(profile.last_name)
         setAddress(profile.address ?? '')
         setPhone(profile.phone ?? '')
+        setLanguage(profile.language ?? '')
         setInvoiceDeliveryMethod(
           getInvoiceDeliveryMethod(profile),
         )
@@ -134,7 +143,7 @@ function ProfilePage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Profildaten konnten nicht geladen werden.',
+            : t('profile.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -178,6 +187,7 @@ function ProfilePage() {
               address.trim() || null,
             phone:
               phone.trim() || null,
+            language: language || null,
             ...getInvoiceDeliveryFlags(
               invoiceDeliveryMethod,
             ),
@@ -197,6 +207,7 @@ function ProfilePage() {
       setPhone(
         updatedProfile.phone ?? '',
       )
+      setLanguage(updatedProfile.language ?? '')
       setInvoiceDeliveryMethod(
         getInvoiceDeliveryMethod(updatedProfile),
       )
@@ -206,7 +217,7 @@ function ProfilePage() {
       )
 
       setSuccessMessage(
-        'Die persönlichen Daten wurden gespeichert.',
+        t('profile.saved'),
       )
     } catch (error) {
       if (
@@ -220,7 +231,7 @@ function ProfilePage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die persönlichen Daten konnten nicht gespeichert werden.',
+          : t('profile.saveFailed'),
       )
     } finally {
       setIsSaving(false)
@@ -234,7 +245,7 @@ function ProfilePage() {
 
     if (newPassword !== confirmPassword) {
       setPasswordErrorMessage(
-        'Die beiden neuen Passwörter stimmen nicht überein.',
+        t('profile.password.mismatch'),
       )
       setPasswordSuccessMessage(null)
       return
@@ -263,7 +274,7 @@ function ProfilePage() {
       setConfirmPassword('')
 
       setPasswordSuccessMessage(
-        'Das Passwort wurde geändert.',
+        t('profile.password.changed'),
       )
     } catch (error) {
       if (
@@ -277,7 +288,7 @@ function ProfilePage() {
       setPasswordErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Das Passwort konnte nicht geändert werden.',
+          : t('profile.password.failed'),
       )
     } finally {
       setIsChangingPassword(false)
@@ -289,14 +300,13 @@ function ProfilePage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Benutzerkonto
+            {t('profile.eyebrow')}
           </p>
 
-          <h1>Meine Daten</h1>
+          <h1>{t('profile.title')}</h1>
 
           <p className="muted">
-            Persönliche Daten und Einstellungen
-            für den Rechnungsversand verwalten.
+            {t('profile.intro')}
           </p>
         </div>
       </header>
@@ -304,7 +314,7 @@ function ProfilePage() {
       {isLoading ? (
         <section className="card">
           <p className="muted">
-            Profildaten werden geladen …
+            {t('profile.loading')}
           </p>
         </section>
       ) : (
@@ -314,35 +324,32 @@ function ProfilePage() {
             onSubmit={handleSubmit}
           >
             <div>
-              <h2>Persönliche Daten</h2>
+              <h2>{t('profile.personal.title')}</h2>
 
               <p className="muted">
-                Änderungen gelten ausschließlich
-                für das eigene Benutzerkonto.
+                {t('profile.personal.intro')}
               </p>
             </div>
 
-            {errorMessage && (
-              <div
-                className="form-error"
-                role="alert"
-              >
-                {errorMessage}
-              </div>
-            )}
+            <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-            {successMessage && (
-              <div
-                className="form-success"
-                role="status"
-              >
-                {successMessage}
-              </div>
-            )}
+            <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
             <div className="form-grid">
               <label className="form-field">
-                Vorname
+                {t('profile.firstName')}
                 <input
                   type="text"
                   value={firstName}
@@ -358,7 +365,7 @@ function ProfilePage() {
               </label>
 
               <label className="form-field">
-                Nachname
+                {t('profile.lastName')}
                 <input
                   type="text"
                   value={lastName}
@@ -374,7 +381,7 @@ function ProfilePage() {
               </label>
 
               <label className="form-field">
-                E-Mail-Adresse
+                {t('common.email')}
                 <input
                   type="email"
                   value={email}
@@ -390,7 +397,7 @@ function ProfilePage() {
               </label>
 
               <label className="form-field">
-                Telefonnummer
+                {t('profile.phone')}
                 <input
                   type="tel"
                   value={phone}
@@ -406,7 +413,7 @@ function ProfilePage() {
             </div>
 
             <label className="form-field">
-              Anschrift
+              {t('profile.address')}
               <textarea
                 value={address}
                 rows={4}
@@ -420,11 +427,36 @@ function ProfilePage() {
               />
             </label>
 
+            <label className="form-field">
+              {t('common.language')}
+              <select
+                value={language}
+                onChange={(event) =>
+                  setLanguage(event.target.value)
+                }
+              >
+                <option value="">
+                  {t('common.language.systemDefault', {
+                    language: t(
+                      defaultLanguage === 'en'
+                        ? 'language.en'
+                        : 'language.de',
+                    ),
+                  })}
+                </option>
+                <option value="de">{t('language.de')}</option>
+                <option value="en">{t('language.en')}</option>
+              </select>
+              <small className="muted">
+                {t('profile.language.hint')}
+              </small>
+            </label>
+
             <div>
-              <h2>Rechnungsversand</h2>
+              <h2>{t('profile.delivery.title')}</h2>
 
               <p className="muted">
-                Wählen Sie genau eine Zustellart.
+                {t('profile.delivery.intro')}
               </p>
             </div>
 
@@ -440,7 +472,7 @@ function ProfilePage() {
                   }
                 />
 
-                Per E-Mail
+                {t('profile.delivery.email')}
               </label>
 
               <label className="checkbox-field">
@@ -454,7 +486,7 @@ function ProfilePage() {
                   }
                 />
 
-                Per Brief (Porto wird berechnet)
+                {t('profile.delivery.post')}
               </label>
 
               <label className="checkbox-field">
@@ -468,8 +500,7 @@ function ProfilePage() {
                   }
                 />
 
-                Manueller Download aus dem Portal nach
-                Benachrichtigung per E-Mail
+                {t('profile.delivery.portal')}
               </label>
             </div>
 
@@ -480,8 +511,8 @@ function ProfilePage() {
                 disabled={isSaving}
               >
                 {isSaving
-                  ? 'Daten werden gespeichert …'
-                  : 'Daten speichern'}
+                  ? t('profile.saving')
+                  : t('profile.save')}
               </button>
             </div>
           </form>
@@ -491,34 +522,31 @@ function ProfilePage() {
             onSubmit={handlePasswordChange}
           >
             <div>
-              <h2>Passwort ändern</h2>
+              <h2>{t('profile.password.title')}</h2>
 
               <p className="muted">
-                Geben Sie zuerst das aktuelle Passwort
-                und anschließend das neue Passwort ein.
+                {t('profile.password.intro')}
               </p>
             </div>
 
-            {passwordErrorMessage && (
-              <div
-                className="form-error"
-                role="alert"
-              >
-                {passwordErrorMessage}
-              </div>
-            )}
+            <SystemMessage
+        kind="error"
+        message={passwordErrorMessage}
+        onClose={() => {
+          setPasswordErrorMessage(null)
+        }}
+      />
 
-            {passwordSuccessMessage && (
-              <div
-                className="form-success"
-                role="status"
-              >
-                {passwordSuccessMessage}
-              </div>
-            )}
+            <SystemMessage
+        kind="success"
+        message={passwordSuccessMessage}
+        onClose={() => {
+          setPasswordSuccessMessage(null)
+        }}
+      />
 
             <label className="form-field">
-              Aktuelles Passwort
+              {t('profile.password.current')}
               <input
                 type="password"
                 value={currentPassword}
@@ -549,8 +577,8 @@ function ProfilePage() {
                 disabled={isChangingPassword}
               >
                 {isChangingPassword
-                  ? 'Passwort wird geändert …'
-                  : 'Passwort ändern'}
+                  ? t('profile.password.submitting')
+                  : t('profile.password.submit')}
               </button>
             </div>
           </form>

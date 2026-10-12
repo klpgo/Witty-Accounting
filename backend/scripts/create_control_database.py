@@ -21,8 +21,8 @@ def validate_identifier(
 ) -> str:
     if not SAFE_IDENTIFIER.fullmatch(value):
         raise ControlDatabaseCreationError(
-            f"{field_name} darf nur Buchstaben, "
-            "Ziffern und Unterstriche enthalten."
+            f"{field_name} may only contain letters, digits and "
+            "underscores."
         )
 
     return value
@@ -38,17 +38,16 @@ def create_control_database(
 ) -> None:
     database_name = validate_identifier(
         database_name,
-        field_name="Datenbankname",
+        field_name="Database name",
     )
     control_user = validate_identifier(
         control_user,
-        field_name="Datenbankbenutzer",
+        field_name="Database user",
     )
 
     if not control_password:
         raise ControlDatabaseCreationError(
-            "Das Passwort des Kontroll-DB-Benutzers "
-            "darf nicht leer sein."
+            "The password of the control database user must not be empty."
         )
 
     if not allowed_host or any(
@@ -56,7 +55,7 @@ def create_control_database(
         for character in "'\"`\\"
     ):
         raise ControlDatabaseCreationError(
-            "Der erlaubte DB-Host ist ungültig."
+            "The allowed database host is invalid."
         )
 
     quoted_database = f"`{database_name}`"
@@ -95,9 +94,8 @@ def create_control_database(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Legt die zentrale Witty-Kontrolldatenbank "
-            "und ihren eingeschränkten MariaDB-Benutzer "
-            "an."
+            "Creates the central Witty control database and its "
+            "restricted MariaDB user."
         )
     )
     parser.add_argument(
@@ -125,7 +123,7 @@ def parse_args() -> argparse.Namespace:
         "--allowed-host",
         default="%",
         help=(
-            "MariaDB-Hostanteil des Kontrollbenutzers."
+            "MariaDB host part of the control user."
         ),
     )
     return parser.parse_args()
@@ -136,22 +134,22 @@ def main() -> None:
 
     if args.admin_port < 1 or args.admin_port > 65535:
         raise SystemExit(
-            "Der MariaDB-Admin-Port ist ungültig."
+            "The MariaDB admin port is invalid."
         )
 
     admin_password = getpass(
-        "MariaDB-Admin-Passwort: "
+        "MariaDB admin password: "
     )
     control_password = getpass(
-        "Neues Passwort für die Kontroll-DB: "
+        "New password for the control database: "
     )
     confirmation = getpass(
-        "Passwort für die Kontroll-DB wiederholen: "
+        "Repeat the password for the control database: "
     )
 
     if control_password != confirmation:
         raise SystemExit(
-            "Die Passwörter stimmen nicht überein."
+            "The passwords do not match."
         )
 
     try:
@@ -164,8 +162,7 @@ def main() -> None:
         )
     except pymysql.MySQLError as exc:
         raise SystemExit(
-            "Die Verbindung als MariaDB-Administrator "
-            "ist fehlgeschlagen."
+            "The connection as MariaDB administrator failed."
         ) from exc
 
     try:
@@ -183,12 +180,11 @@ def main() -> None:
 
     print()
     print(
-        f"Kontroll-Datenbank {args.database_name} "
-        "wurde vorbereitet."
+        f"Control database {args.database_name} has been prepared."
     )
     print(
-        "Trage dasselbe Kontroll-DB-Passwort jetzt "
-        "als CONTROL_DB_PASSWORD in .env ein."
+        "Now enter the same control database password as "
+        "CONTROL_DB_PASSWORD in .env."
     )
 
 

@@ -9,10 +9,10 @@ def main() -> None:
             overwrite=False,
         )
 
-    print(f"Gelesen:                 {result['read']}")
-    print(f"Bepreist:                {result['priced']}")
-    print(f"Fehlender Tarif:         {result['missing_price']}")
-    print(f"Ungültige Energiemengen: {result['invalid_energy']}")
+    print(f"Read:                    {result['read']}")
+    print(f"Priced:                  {result['priced']}")
+    print(f"Missing tariff:          {result['missing_price']}")
+    print(f"Invalid energy values: {result['invalid_energy']}")
 
 
 if __name__ == "__main__":

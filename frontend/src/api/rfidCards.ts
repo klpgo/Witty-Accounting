@@ -1,3 +1,5 @@
+import { readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -48,10 +50,6 @@ export interface RFIDCardAssignmentUpdate {
   note?: string | null
 }
 
-interface ApiErrorResponse {
-  detail?: string
-}
-
 export class RFIDCardApiError extends Error {
   readonly status: number
 
@@ -63,23 +61,6 @@ export class RFIDCardApiError extends Error {
     this.name = 'RFIDCardApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (body.detail) {
-      return body.detail
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Anfrage fehlgeschlagen (${response.status}).`
 }
 
 function createHeaders(
@@ -101,7 +82,7 @@ async function requireSuccess(
 ): Promise<void> {
   if (!response.ok) {
     throw new RFIDCardApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }

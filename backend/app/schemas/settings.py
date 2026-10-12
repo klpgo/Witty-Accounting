@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -44,6 +45,13 @@ PaymentTermDays = Annotated[
         ge=0,
         le=3650,
     ),
+]
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+OptionalEmail = Annotated[
+    str,
+    Field(max_length=320),
 ]
 
 OptionalShortText = Annotated[
@@ -132,9 +140,24 @@ InvoicePdfFormat = Literal[
 ]
 
 
+# Unterstützte Gebietsschemata und Währungen (siehe app/utils/locale_format.py)
+LocaleCode = Literal["de-DE", "de-AT", "de-CH", "en-GB", "en-US"]
+LanguageCode = Literal["de", "en"]
+CurrencyCode = Literal["EUR", "CHF", "GBP", "USD"]
+
+
 class PublicSettingsResponse(BaseModel):
     app_name: str
     tenant_name: str
+    # Zeitzone der Installation für die Anzeige im Frontend
+    timezone: str
+    # Gebietsschema und Währung für Zahlen-, Datums- und Betragsformat
+    locale: str = "de-DE"
+    currency: str = "EUR"
+    # Sprache für Benutzer ohne eigene Wahl und vor der Anmeldung
+    default_language: str = "de"
+    # Umsatzsteuer ausweisen (aus bei Kleinunternehmern)
+    vat_enabled: bool = True
 
 
 class GlobalSettingsResponse(BaseModel):
@@ -158,6 +181,10 @@ class GlobalSettingsResponse(BaseModel):
     invoice_iban: str | None
     invoice_bic: str | None
     invoice_issuer_phone: str | None
+    invoice_issuer_email: str | None = None
+    invoice_issuer_email_on_invoice: bool = False
+    vat_enabled: bool = True
+    vat_exemption_note: str | None = None
     invoice_number_prefix: str
     invoice_pdf_format: InvoicePdfFormat
     invoice_girocode_enabled: bool
@@ -168,6 +195,9 @@ class GlobalSettingsResponse(BaseModel):
     password_require_special: bool
     frontend_base_url: str
     password_reset_token_expire_minutes: int
+    locale: str
+    currency: str
+    default_language: str
 
 
 class GlobalSettingsUpdate(BaseModel):
@@ -177,6 +207,9 @@ class GlobalSettingsUpdate(BaseModel):
 
     app_name: AppName | None = None
     maintenance_mode: bool | None = None
+    locale: LocaleCode | None = None
+    currency: CurrencyCode | None = None
+    default_language: LanguageCode | None = None
     dashboard_note: DashboardNote | None = None
     monthly_base_fee_net: BaseFeeDecimal | None = None
     monthly_base_fee_vat_rate: VatDecimal | None = None
@@ -195,6 +228,14 @@ class GlobalSettingsUpdate(BaseModel):
     invoice_issuer_phone: (
         OptionalShortText | None
     ) = None
+    invoice_issuer_email: OptionalEmail | None = None
+    invoice_issuer_email_on_invoice: bool | None = None
+    vat_enabled: bool | None = None
+    # leer erlaubt (Hinweis bewusst entfernt)
+    vat_exemption_note: Annotated[
+        str,
+        Field(max_length=500),
+    ] | None = None
     invoice_number_prefix: (
         InvoiceNumberPrefix | None
     ) = None
@@ -221,6 +262,8 @@ class GlobalSettingsUpdate(BaseModel):
         "invoice_number_prefix",
         "invoice_pdf_format",
         "invoice_girocode_enabled",
+        "invoice_issuer_email_on_invoice",
+        "vat_enabled",
         "password_min_length",
         "password_require_uppercase",
         "password_require_lowercase",
@@ -237,7 +280,7 @@ class GlobalSettingsUpdate(BaseModel):
     ) -> object:
         if value is None:
             raise ValueError(
-                "Der Einstellungswert darf nicht null sein."
+                "The setting value must not be null."
             )
 
         return value
@@ -252,7 +295,7 @@ class GlobalSettingsUpdate(BaseModel):
 
         if not normalized:
             raise ValueError(
-                "Der Anwendungsname darf nicht leer sein."
+                "The application name must not be empty."
             )
 
         return normalized
@@ -275,10 +318,8 @@ class GlobalSettingsUpdate(BaseModel):
             or parsed.fragment
         ):
             raise ValueError(
-                "Die öffentliche Frontend-Adresse muss "
-                "eine vollständige HTTP- oder HTTPS-URL "
-                "ohne Zugangsdaten, Parameter oder Fragment "
-                "sein."
+                "The public frontend address must be a complete HTTP or "
+                "HTTPS URL without credentials, parameters or fragment."
             )
 
         return normalized
@@ -292,6 +333,7 @@ class GlobalSettingsUpdate(BaseModel):
         "invoice_vat_id",
         "invoice_bank_name",
         "invoice_issuer_phone",
+        "invoice_issuer_email",
         mode="before",
     )
     @classmethod
@@ -308,6 +350,27 @@ class GlobalSettingsUpdate(BaseModel):
         normalized = value.strip()
 
         return normalized or None
+
+    @field_validator("vat_exemption_note", mode="before")
+    @classmethod
+    def normalize_vat_exemption_note(
+        cls,
+        value: object,
+    ) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("invoice_issuer_email")
+    @classmethod
+    def validate_issuer_email(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is not None and not _EMAIL_PATTERN.match(value):
+            raise ValueError(
+                "The email address of the invoice issuer is not valid."
+            )
+
+        return value
 
     @field_validator(
         "invoice_iban",

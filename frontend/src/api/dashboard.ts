@@ -1,3 +1,5 @@
+import { readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -14,10 +16,6 @@ export interface DashboardData {
   backend_version: string
 }
 
-interface ApiErrorResponse {
-  detail?: string
-}
-
 export class DashboardApiError extends Error {
   readonly status: number
 
@@ -29,23 +27,6 @@ export class DashboardApiError extends Error {
     this.name = 'DashboardApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (typeof body.detail === 'string') {
-      return body.detail
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Anfrage fehlgeschlagen (${response.status}).`
 }
 
 export async function getDashboard(
@@ -64,7 +45,7 @@ export async function getDashboard(
 
   if (!response.ok) {
     throw new DashboardApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }

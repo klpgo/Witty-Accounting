@@ -2,6 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -9,11 +10,26 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.billing_run import BillingRun  # noqa: F401 (FK-Ziel)
 from app.utils.utc import utc_now
+
+
+# Prüfstatus eines Entwurfs der automatischen Abrechnung (None: manuell
+# erstellter Entwurf ohne Prüfung durch den Kunden)
+REVIEW_IN_REVIEW = "in_review"
+REVIEW_ON_HOLD = "on_hold"
+REVIEW_FAILED = "failed"
+
+# Zustellung einer automatisch finalisierten Rechnung
+DELIVERY_PENDING = "pending"
+DELIVERY_SENT = "sent"
+DELIVERY_POSTAL = "postal"
+DELIVERY_FAILED = "failed"
 
 
 class Invoice(Base):
@@ -46,12 +62,14 @@ class Invoice(Base):
         nullable=True,
     )
 
-    user_id: Mapped[int] = mapped_column(
+    # Leer, wenn das Kundenkonto gelöscht wurde; die Rechnung bleibt mit
+    # dem gespeicherten Empfänger (recipient_*) im Archiv
+    user_id: Mapped[int | None] = mapped_column(
         ForeignKey(
             "users.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
@@ -103,6 +121,28 @@ class Invoice(Base):
         nullable=True,
     )
 
+    # E-Mail-Adresse des Rechnungsstellers auf der Rechnung (nur gesetzt,
+    # wenn sie laut Einstellungen auf der Rechnung erscheinen soll)
+    issuer_email: Mapped[
+        str | None
+    ] = mapped_column(
+        String(320),
+        nullable=True,
+    )
+
+    # Ohne Umsatzsteuer erstellt (Kleinunternehmer) und Hinweis dazu
+    vat_exempt: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    vat_exemption_note: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
     recipient_name: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -147,6 +187,20 @@ class Invoice(Base):
         server_default="EUR",
     )
 
+    # Sprache der Rechnung (PDF, E-Mail, Positionstexte), beim Anlegen
+    # festgehalten; ältere Rechnungen ohne Angabe sind deutsch
+    language: Mapped[str | None] = mapped_column(
+        String(5),
+        nullable=True,
+    )
+
+    # Gebietsschema beim Anlegen der Rechnung (Format im PDF); ältere
+    # Rechnungen ohne Angabe erscheinen in de-DE
+    locale: Mapped[str | None] = mapped_column(
+        String(10),
+        nullable=True,
+    )
+
     total_net: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
@@ -183,6 +237,63 @@ class Invoice(Base):
 
     finalized_at: Mapped[datetime | None] = mapped_column(
         DateTime,
+        nullable=True,
+    )
+
+    # Automatische Abrechnung: Lauf, in dem der Entwurf erstellt wurde
+    billing_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "billing_runs.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    # in_review: Kunde prüft; on_hold: Nachfrage des Kunden, wird nicht
+    # automatisch finalisiert; failed: automatische Finalisierung
+    # fehlgeschlagen. Bleibt nach der Finalisierung zur Nachvollziehbarkeit.
+    review_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        index=True,
+    )
+
+    # Ortsdatum, ab dem der Entwurf automatisch finalisiert wird
+    review_due_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+
+    # Versand der Prüf-E-Mail an den Kunden (UTC)
+    review_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    # Nachfrage des Kunden zum Entwurf (UTC)
+    inquiry_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    # Zustellung nach automatischer Finalisierung
+    delivery_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    # Versuche und letzter Fehler der jeweils anstehenden E-Mail
+    # (Prüf-E-Mail, danach Rechnungsversand)
+    notification_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    notification_error: Mapped[str | None] = mapped_column(
+        String(500),
         nullable=True,
     )
 
@@ -300,9 +411,11 @@ class InvoiceItem(Base):
     monthly_base_fee_charge_id: Mapped[
         int | None
     ] = mapped_column(
+        # Positionen enthalten alle Rechnungsangaben selbst; der Verweis
+        # wird leer, wenn die Abrechnungsdaten gelöscht werden
         ForeignKey(
             "monthly_base_fee_charges.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
         nullable=True,
         index=True,
@@ -311,9 +424,11 @@ class InvoiceItem(Base):
     charging_session_id: Mapped[
         int | None
     ] = mapped_column(
+        # Positionen enthalten alle Rechnungsangaben selbst; der Verweis
+        # wird leer, wenn die Abrechnungsdaten gelöscht werden
         ForeignKey(
             "charging_sessions.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
         nullable=True,
     )

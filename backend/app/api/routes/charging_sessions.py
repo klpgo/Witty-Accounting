@@ -1,11 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
-from app.auth import get_current_user
+from app.auth import get_current_user, require_admin
 from app.models.charging_session import ChargingSession
 from app.models.invoice import Invoice
 from app.models.rfid_card import RFIDCard
@@ -14,7 +14,16 @@ from app.models.rfid_card_assignment import (
 )
 from app.models.user import User
 from app.schemas.charging_session import (
+    ChargingSessionBulkResult,
+    ChargingSessionDiscardRequest,
+    ChargingSessionIdsRequest,
     ChargingSessionResponse,
+)
+from app.services.charging_session_discard import (
+    ChargingSessionNotFoundError,
+    DiscardNotAllowedError,
+    discard_sessions,
+    restore_sessions,
 )
 
 
@@ -37,6 +46,7 @@ def list_charging_sessions(
         Session,
         Depends(get_db),
     ],
+    include_discarded: bool = False,
 ) -> list[ChargingSessionResponse]:
     statement = (
         select(
@@ -80,6 +90,12 @@ def list_charging_sessions(
             == current_user.id
         )
 
+    # Verworfene nur für Admins und nur auf Wunsch
+    if not (current_user.is_admin and include_discarded):
+        statement = statement.where(
+            ChargingSession.discarded_at.is_(None)
+        )
+
     rows = db.execute(statement).all()
     result: list[ChargingSessionResponse] = []
     for (
@@ -106,7 +122,15 @@ def list_charging_sessions(
                     and last_name is not None
                     else None
                 ),
-                rfid_number=rfid_number,
+                # ohne Zuordnung: Nummer aus dem Import (nur für Admins)
+                rfid_number=(
+                    rfid_number
+                    or (
+                        charging_session.rfid_number
+                        if current_user.is_admin
+                        else None
+                    )
+                ),
                 station_id=charging_session.station_id,
                 start_time=charging_session.start_time,
                 end_time=charging_session.end_time,
@@ -143,7 +167,66 @@ def list_charging_sessions(
                     if invoice_is_readable
                     else None
                 ),
+                discarded=charging_session.discarded_at is not None,
+                discarded_at=charging_session.discarded_at,
+                discard_reason=(
+                    charging_session.discard_reason
+                    if current_user.is_admin
+                    else None
+                ),
             )
         )
 
     return result
+
+
+@router.post(
+    "/discard",
+    response_model=ChargingSessionBulkResult,
+)
+def discard_charging_sessions(
+    data: ChargingSessionDiscardRequest,
+    current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ChargingSessionBulkResult:
+    """Verwirft nicht abgerechnete Ladevorgänge (alle oder keiner)."""
+    try:
+        changed = discard_sessions(
+            db,
+            data.ids,
+            user_id=current_user.id,
+            reason=data.reason,
+        )
+    except ChargingSessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except DiscardNotAllowedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return ChargingSessionBulkResult(changed=changed)
+
+
+@router.post(
+    "/restore",
+    response_model=ChargingSessionBulkResult,
+)
+def restore_charging_sessions(
+    data: ChargingSessionIdsRequest,
+    _current_user: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ChargingSessionBulkResult:
+    """Hebt das Verwerfen auf."""
+    try:
+        changed = restore_sessions(db, data.ids)
+    except ChargingSessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return ChargingSessionBulkResult(changed=changed)

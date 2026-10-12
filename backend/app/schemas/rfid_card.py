@@ -62,8 +62,7 @@ class RFIDCardCreate(BaseModel):
 
         if not normalized:
             raise ValueError(
-                "Die RFID-Nummer darf nicht "
-                "leer sein."
+                "The RFID number must not be empty."
             )
 
         return normalized
@@ -105,16 +104,14 @@ class RFIDCardUpdate(BaseModel):
     ) -> str:
         if value is None:
             raise ValueError(
-                "Die RFID-Nummer darf nicht "
-                "leer sein."
+                "The RFID number must not be empty."
             )
 
         normalized = value.strip().upper()
 
         if not normalized:
             raise ValueError(
-                "Die RFID-Nummer darf nicht "
-                "leer sein."
+                "The RFID number must not be empty."
             )
 
         return normalized
@@ -140,8 +137,7 @@ class RFIDCardUpdate(BaseModel):
     ) -> bool:
         if value is None:
             raise ValueError(
-                "Der Aktiv-Status darf nicht "
-                "leer sein."
+                "The active status must not be empty."
             )
 
         return value
@@ -182,8 +178,7 @@ class RFIDCardAssignmentCreate(BaseModel):
             and self.valid_to <= self.valid_from
         ):
             raise ValueError(
-                "Das Ende der Zuordnung muss "
-                "nach ihrem Beginn liegen."
+                "The end of the assignment must be after its start."
             )
 
         return self
@@ -225,7 +220,7 @@ class RFIDCardAssignmentUpdate(BaseModel):
             and self.user_id is None
         ):
             raise ValueError(
-                "Der Benutzer darf nicht leer sein."
+                "The user must not be empty."
             )
 
         if (
@@ -233,8 +228,7 @@ class RFIDCardAssignmentUpdate(BaseModel):
             and self.valid_from is None
         ):
             raise ValueError(
-                "Der Beginn der Zuordnung darf "
-                "nicht leer sein."
+                "The start of the assignment must not be empty."
             )
 
         if (
@@ -244,8 +238,7 @@ class RFIDCardAssignmentUpdate(BaseModel):
             and self.valid_to <= self.valid_from
         ):
             raise ValueError(
-                "Das Ende der Zuordnung muss "
-                "nach ihrem Beginn liegen."
+                "The end of the assignment must be after its start."
             )
 
         return self

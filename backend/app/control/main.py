@@ -32,6 +32,7 @@ from app.control.service import (
     TenantCreateData,
 )
 from app.tenancy.registry import build_control_database_url
+from app.control.i18n import current_language, set_language, tr, ui_texts
 
 
 COOKIE_NAME = "witty_control_session"
@@ -81,7 +82,7 @@ class LoginLimiter:
         if len(attempts) >= 5:
             raise HTTPException(
                 status_code=429,
-                detail="Zu viele Anmeldeversuche. Bitte eine Minute warten.",
+                detail=tr("auth.tooManyAttempts"),
             )
 
     def failed(self, client: str) -> None:
@@ -97,6 +98,9 @@ def create_control_app(
     service: TenantControlService | None = None,
     authenticator: ControlAuthenticator | None = None,
 ) -> FastAPI:
+    # zuerst die Sprache setzen: auch Meldungen beim Aufbau sind übersetzt
+    set_language(app_settings.witty_control_language)
+
     auth = authenticator or ControlAuthenticator(
         password=app_settings.witty_control_password,
         session_secret=app_settings.witty_control_session_secret,
@@ -160,13 +164,18 @@ def create_control_app(
     async def tenant_error_handler(_request: Request, exc: TenantControlError):
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+    @app.get("/api/i18n")
+    def texts():
+        # ohne Anmeldung abrufbar: die Anmeldeseite braucht die Texte
+        return {"language": current_language(), "texts": ui_texts()}
+
     @app.post("/api/login")
     def login(payload: LoginRequest, request: Request, response: Response):
         client = request.client.host if request.client else "local"
         limiter.check(client)
         if not auth.check_password(payload.password):
             limiter.failed(client)
-            raise HTTPException(status_code=401, detail="Das Passwort ist falsch.")
+            raise HTTPException(status_code=401, detail=tr("auth.wrongPassword"))
 
         limiter.succeeded(client)
         token, session = auth.create_session()
@@ -237,7 +246,7 @@ def create_control_app(
         if not auth.check_password(payload.control_password):
             raise HTTPException(
                 status_code=403,
-                detail="Das Control-Passwort ist falsch.",
+                detail=tr("auth.wrongControlPassword"),
             )
 
         def deletion_events():
@@ -272,7 +281,7 @@ def create_control_app(
                         {
                             "type": "error",
                             "step": "error",
-                            "message": "Die Löschung ist unerwartet fehlgeschlagen.",
+                            "message": tr("delete.failedUnexpectedly"),
                         }
                     )
                 finally:

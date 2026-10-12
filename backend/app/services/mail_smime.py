@@ -17,7 +17,7 @@ from app.services.smtp_secret import (
 
 
 class MailSmimeConfigurationError(Exception):
-    """Die S/MIME-Konfiguration ist unvollständig."""
+    "The S/MIME configuration is incomplete."
 
 
 @dataclass(frozen=True)
@@ -65,22 +65,19 @@ def _read_environment_material() -> SmimeMaterial:
 
     if pkcs12_path is None:
         raise MailSmimeConfigurationError(
-            "Der Pfad zur S/MIME-PKCS#12-Datei "
-            "ist nicht konfiguriert."
+            "The path to the S/MIME PKCS#12 file is not configured."
         )
 
     if password_path is None:
         raise MailSmimeConfigurationError(
-            "Der Pfad zur S/MIME-Passwortdatei "
-            "ist nicht konfiguriert."
+            "The path to the S/MIME password file is not configured."
         )
 
     try:
         pkcs12_data = pkcs12_path.read_bytes()
     except OSError as exc:
         raise MailSmimeConfigurationError(
-            "Die konfigurierte S/MIME-PKCS#12-Datei "
-            "konnte nicht gelesen werden."
+            "The configured S/MIME PKCS#12 file could not be read."
         ) from exc
 
     try:
@@ -134,9 +131,8 @@ def load_smime_material(
     if stored_data is not None or stored_password is not None:
         if stored_data is None or stored_password is None:
             raise MailSmimeConfigurationError(
-                "Das gespeicherte S/MIME-Zertifikat "
-                "und das S/MIME-Passwort sind "
-                "unvollständig."
+                "The stored S/MIME certificate and S/MIME password are "
+                "incomplete."
             )
 
         try:
@@ -145,8 +141,7 @@ def load_smime_material(
             ).encode("utf-8")
         except SmtpSecretError as exc:
             raise MailSmimeConfigurationError(
-                "Das gespeicherte S/MIME-Passwort "
-                "konnte nicht verwendet werden."
+                "The saved S/MIME password could not be used."
             ) from exc
 
         return SmimeMaterial(

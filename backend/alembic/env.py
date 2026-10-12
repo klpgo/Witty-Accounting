@@ -1,3 +1,4 @@
+from app.config import settings
 from app.database import Base, DATABASE_URL
 from app.models import (
     import_state,
@@ -12,6 +13,7 @@ target_metadata = Base.metadata
 from sqlalchemy import create_engine, pool
 
 from alembic import context
+from alembic.util import CommandError
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -45,6 +47,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
+    ensure_single_database_mode()
+
     url = (
         config.get_main_option("sqlalchemy.url")
         or DATABASE_URL
@@ -71,6 +75,37 @@ def get_database_url():
     return DATABASE_URL
 
 
+def ensure_single_database_mode() -> None:
+    """
+    Im Mehrmandantenbetrieb hat jeder Mandant eine eigene Datenbank.
+    Ein direktes `alembic upgrade` würde nur die Datenbank aus
+    DATABASE_URL migrieren und die Mandanten auslassen – deshalb wird es
+    abgebrochen. Mandanten migriert scripts.migrate_tenants (übergibt die
+    Verbindung je Mandant). Ausnahme bei Bedarf:
+    alembic -x allow_default_database=true upgrade head
+    """
+    if not settings.tenancy_enabled:
+        return
+
+    x_arguments = context.get_x_argument(as_dictionary=True)
+
+    if str(x_arguments.get("allow_default_database", "")).lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        return
+
+    raise CommandError(
+        "Multi-tenant operation is enabled (TENANCY_ENABLED=true): "
+        "alembic would only work on the database from DATABASE_URL, "
+        "not on the tenant databases. To migrate the tenants, run "
+        "'python -m scripts.migrate_tenants' instead, e.g. "
+        "'docker compose run --rm --no-deps backend python -m "
+        "scripts.migrate_tenants'."
+    )
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -92,6 +127,8 @@ def run_migrations_online() -> None:
             context.run_migrations()
 
         return
+
+    ensure_single_database_mode()
 
     connectable = create_engine(
         get_database_url(),

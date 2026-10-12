@@ -59,25 +59,25 @@ def test_accepts_epc_amount_boundaries(amount: str) -> None:
     ["0", "-0.01", "0.001", "1.001", "1000000000", "NaN", "Infinity"],
 )
 def test_rejects_invalid_amounts(amount: str) -> None:
-    with pytest.raises(GirocodeError, match="Betrag"):
+    with pytest.raises(GirocodeError, match="amount"):
         build_girocode_payload(**payment_data(amount=Decimal(amount)))
 
 
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"beneficiary": None}, "Name"),
-        ({"beneficiary": "A" * 71}, "Name"),
-        ({"beneficiary": "Name\nEUR999.99"}, "einzeilig"),
-        ({"beneficiary": "Name\x00"}, "einzeilig"),
+        ({"beneficiary": None}, "name"),
+        ({"beneficiary": "A" * 71}, "name"),
+        ({"beneficiary": "Name\nEUR999.99"}, "single line"),
+        ({"beneficiary": "Name\x00"}, "single line"),
         ({"iban": None}, "IBAN"),
-        ({"iban": "DE89370400440532013001"}, "Prüfziffer"),
+        ({"iban": "DE89370400440532013001"}, "check digits"),
         ({"iban": "123456789012345"}, "IBAN"),
         ({"bic": "12345678"}, "BIC"),
         ({"currency": "USD"}, "EUR"),
-        ({"reference": ""}, "Rechnungsnummer"),
-        ({"reference": "A" * 141}, "Rechnungsnummer"),
-        ({"reference": "RE-1\r\nEUR999.99"}, "einzeilig"),
+        ({"reference": ""}, "invoice number"),
+        ({"reference": "A" * 141}, "invoice number"),
+        ({"reference": "RE-1\r\nEUR999.99"}, "single line"),
     ],
 )
 def test_rejects_invalid_payment_data(
@@ -90,7 +90,7 @@ def test_rejects_invalid_payment_data(
 
 def test_requires_bic_for_non_eea_account() -> None:
     data = payment_data(iban="CH9300762011623852957", bic=None)
-    with pytest.raises(GirocodeError, match="EWR"):
+    with pytest.raises(GirocodeError, match="EEA"):
         build_girocode_payload(**data)
 
     data["bic"] = "UBSWCHZH80A"
@@ -108,5 +108,5 @@ def test_limits_payload_by_utf8_bytes_instead_of_characters() -> None:
     assert len(payload) < 331
 
     data["reference"] += "R"
-    with pytest.raises(GirocodeError, match="331 UTF-8-Bytes"):
+    with pytest.raises(GirocodeError, match="331 UTF-8 bytes"):
         build_girocode_payload(**data)

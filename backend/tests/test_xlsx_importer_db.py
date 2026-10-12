@@ -42,7 +42,7 @@ def create_test_workbook(path: Path) -> None:
             "Ja",
             0.25,
             "20 %",
-            "RFID Nr.1 (6AA972EA)",
+            "RFID Nr.1 (D4E5F6A7)",
             "WB2",
         ]
     )
@@ -94,7 +94,7 @@ def create_user_with_rfid(
     db.flush()
 
     rfid_card = RFIDCard(
-        rfid_number="6AA972EA",
+        rfid_number="D4E5F6A7",
         description="RFID Nr.1",
         active=True,
     )
@@ -205,7 +205,7 @@ def test_import_xlsx_to_db_reports_unknown_rfid(
         assert result["skipped"] == 0
         assert result["unknown_rfid_sessions"] == 1
         assert result["unknown_rfid_numbers"] == [
-            "6AA972EA"
+            "D4E5F6A7"
         ]
 
         sessions = db.scalars(

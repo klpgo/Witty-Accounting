@@ -24,12 +24,16 @@ class MonthlyBaseFeeCharge(Base):
     __tablename__ = "monthly_base_fee_charges"
 
     __table_args__ = (
+        # je Zuordnung, Monat und abgerechnetem Teil des Monats ein Eintrag
+        # (ganzer Monat oder anteilig, z. B. bei wöchentlicher Abrechnung)
         UniqueConstraint(
             "rfid_assignment_id",
             "fee_month",
+            "slice_start",
+            "slice_end",
             name=(
                 "uq_monthly_base_fee_charges_"
-                "assignment_month"
+                "assignment_slice"
             ),
         ),
         Index(
@@ -71,6 +75,19 @@ class MonthlyBaseFeeCharge(Base):
     fee_month: Mapped[date] = mapped_column(
         Date,
         nullable=False,
+    )
+
+    # Abgerechneter Teil des Monats (Ende exklusiv). Ganzer Monat:
+    # Monatserster bis Erster des Folgemonats. Leer bei Einträgen aus der
+    # Zeit vor der anteiligen Abrechnung (gilt als ganzer Monat).
+    slice_start: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+
+    slice_end: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
     )
 
     net_amount: Mapped[Decimal] = mapped_column(

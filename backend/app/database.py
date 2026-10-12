@@ -58,8 +58,7 @@ class TenantSessionProvider:
     ) -> None:
         if max_cached_engines < 1:
             raise ValueError(
-                "max_cached_engines muss mindestens "
-                "1 sein."
+                "max_cached_engines must be at least 1."
             )
 
         self.max_cached_engines = (

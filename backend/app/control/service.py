@@ -18,6 +18,7 @@ from app.tenancy.context import TenantContext
 from app.tenancy.migrations import migrate_tenant_database
 from app.tenancy.models import Tenant, TenantDomain
 from app.tenancy.registry import TenantRegistryError, normalize_hostname
+from app.control.i18n import tr
 from scripts.create_admin import create_first_admin_with_values
 from scripts.register_tenant import register_tenant
 
@@ -47,8 +48,7 @@ def validate_tenant_code(value: str) -> str:
 
     if not SAFE_TENANT_CODE.fullmatch(code):
         raise TenantControlError(
-            "Das Kürzel muss mit einem Kleinbuchstaben beginnen und darf "
-            "höchstens 32 Kleinbuchstaben, Ziffern oder Unterstriche enthalten."
+            tr("tenant.codeInvalid")
         )
 
     return code
@@ -104,7 +104,7 @@ class TenantControlService:
         name = data.name.strip()
 
         if not name:
-            raise TenantControlError("Der Mandantenname darf nicht leer sein.")
+            raise TenantControlError(tr("tenant.nameEmpty"))
 
         db_user = tenant_database_user(code)
         db_password = secrets.token_urlsafe(36)
@@ -114,8 +114,7 @@ class TenantControlService:
 
         if archive_path.exists():
             raise TenantControlError(
-                "Das Rechnungsarchiv für dieses Kürzel existiert bereits. "
-                "Prüfe und sichere die vorhandenen Daten zuerst."
+                tr("tenant.archiveExists")
             )
 
         admin_connection = self._connect_admin()
@@ -178,7 +177,7 @@ class TenantControlService:
             if isinstance(exc, TenantControlError):
                 raise
             raise TenantControlError(
-                f"Der Mandant konnte nicht vollständig angelegt werden: {exc}"
+                tr("tenant.createFailed", error=exc)
             ) from exc
         finally:
             admin_connection.close()
@@ -196,7 +195,7 @@ class TenantControlService:
             tenant = db.get(Tenant, tenant_id)
 
             if tenant is None:
-                raise TenantControlError("Der Mandant wurde nicht gefunden.")
+                raise TenantControlError(tr("tenant.notFound"))
 
             tenant.active = active
             tenant.config_version += 1
@@ -206,17 +205,17 @@ class TenantControlService:
         normalized_name = name.strip()
 
         if not normalized_name:
-            raise TenantControlError("Der Mandantenname darf nicht leer sein.")
+            raise TenantControlError(tr("tenant.nameEmpty"))
         if len(normalized_name) > 200:
             raise TenantControlError(
-                "Der Mandantenname darf höchstens 200 Zeichen lang sein."
+                tr("tenant.nameTooLong")
             )
 
         with Session(self.control_engine) as db:
             tenant = db.get(Tenant, tenant_id)
 
             if tenant is None:
-                raise TenantControlError("Der Mandant wurde nicht gefunden.")
+                raise TenantControlError(tr("tenant.notFound"))
 
             tenant.name = normalized_name
             tenant.config_version += 1
@@ -236,7 +235,7 @@ class TenantControlService:
             )
 
             if tenant is None:
-                raise TenantControlError("Der Mandant wurde nicht gefunden.")
+                raise TenantControlError(tr("tenant.notFound"))
 
             canonical_domain = next(
                 (
@@ -248,7 +247,7 @@ class TenantControlService:
             )
             if canonical_domain is None:
                 raise TenantControlError(
-                    "Der Mandant hat keine kanonische Domain."
+                    tr("tenant.noCanonicalDomain")
                 )
 
             if canonical_domain.hostname == normalized_hostname:
@@ -262,7 +261,7 @@ class TenantControlService:
             )
             if conflict is not None:
                 raise TenantControlError(
-                    "Dieser Hostname ist bereits registriert."
+                    tr("tenant.hostnameTaken")
                 )
 
             canonical_domain.hostname = normalized_hostname
@@ -282,7 +281,7 @@ class TenantControlService:
             tenant = db.get(Tenant, tenant_id)
 
             if tenant is None:
-                raise TenantControlError("Der Mandant wurde nicht gefunden.")
+                raise TenantControlError(tr("tenant.notFound"))
 
             code = validate_tenant_code(tenant.slug)
 
@@ -291,7 +290,7 @@ class TenantControlService:
                 code.encode("utf-8"),
             ):
                 raise TenantControlError(
-                    "Das eingegebene Mandantenkürzel stimmt nicht überein."
+                    tr("delete.confirmationMismatch")
                 )
 
             database_name, database_user = self._deletion_database_values(
@@ -299,12 +298,12 @@ class TenantControlService:
                 tenant=tenant,
                 code=code,
             )
-            report("validated", "Bestätigung und Zuordnung wurden geprüft.")
+            report("validated", tr("delete.checked"))
 
             tenant.active = False
             tenant.config_version += 1
             db.commit()
-            report("blocked", "Der Mandant wurde gesperrt.")
+            report("blocked", tr("delete.locked"))
 
         # The application backend is a separate process and can still hold a
         # registry entry until its configured TTL expires. Wait before the
@@ -312,8 +311,7 @@ class TenantControlService:
         if self.settings.tenant_registry_cache_seconds > 0:
             report(
                 "waiting",
-                "Warte, bis keine zwischengespeicherte "
-                "Mandantenzuordnung mehr aktiv ist.",
+                tr("delete.waitForCache"),
             )
             self._sleep(self.settings.tenant_registry_cache_seconds + 1)
 
@@ -323,7 +321,7 @@ class TenantControlService:
             with self._provision_lock(admin_connection):
                 report(
                     "database",
-                    f"Lösche Datenbank {database_name} und Datenbankbenutzer.",
+                    tr("delete.dropDatabase", database=database_name),
                 )
                 self._drop_database_and_user(
                     admin_connection,
@@ -332,33 +330,32 @@ class TenantControlService:
                 )
                 report(
                     "database_done",
-                    "Datenbank und Datenbankbenutzer wurden gelöscht.",
+                    tr("delete.databaseDropped"),
                 )
                 archive_path = self._archive_path(code)
                 if archive_path.exists():
-                    report("archive", "Lösche das Rechnungsarchiv.")
+                    report("archive", tr("delete.removeArchive"))
                     shutil.rmtree(archive_path)
-                    report("archive_done", "Das Rechnungsarchiv wurde gelöscht.")
+                    report("archive_done", tr("delete.archiveRemoved"))
                 else:
                     report(
                         "archive_done",
-                        "Es war kein Rechnungsarchiv vorhanden.",
+                        tr("delete.noArchive"),
                     )
         except Exception as exc:
             raise TenantControlError(
-                "Die Bereinigung wurde nicht vollständig abgeschlossen. Der "
-                f"Mandant bleibt gesperrt und sichtbar: {exc}"
+                tr("delete.incomplete", error=exc)
             ) from exc
         finally:
             admin_connection.close()
 
-        report("registry", "Entferne die Mandantenregistrierung.")
+        report("registry", tr("delete.removeRegistration"))
         with Session(self.control_engine) as db:
             tenant = db.get(Tenant, tenant_id)
             if tenant is not None:
                 db.delete(tenant)
                 db.commit()
-        report("complete", "Der Mandant wurde vollständig gelöscht.")
+        report("complete", tr("delete.complete"))
 
     def _deletion_database_values(
         self,
@@ -372,8 +369,7 @@ class TenantControlService:
 
         if tenant.archive_namespace != code:
             raise TenantControlError(
-                "Der Archiv-Namespace entspricht nicht dem Mandantenkürzel. "
-                "Die automatische Löschung wurde abgebrochen."
+                tr("delete.namespaceMismatch")
             )
 
         regular_values = (
@@ -389,9 +385,7 @@ class TenantControlService:
 
         if not regular_values and not bootstrap_values:
             raise TenantControlError(
-                "Datenbankname oder Datenbankbenutzer entsprechen weder dem "
-                "Mandantenkürzel noch der registrierten Bootstrap-Datenbank. "
-                "Die automatische Löschung wurde abgebrochen."
+                tr("delete.databaseMismatch")
             )
 
         database_name = validate_tenant_code(database_name)
@@ -413,8 +407,7 @@ class TenantControlService:
             or database_user in protected_users
         ):
             raise TenantControlError(
-                "Die registrierte Datenbank oder der Datenbankbenutzer ist "
-                "geschützt. Die automatische Löschung wurde abgebrochen."
+                tr("delete.databaseProtected")
             )
 
         shared_registration = db.scalar(
@@ -426,8 +419,7 @@ class TenantControlService:
         )
         if shared_registration is not None:
             raise TenantControlError(
-                "Datenbank oder Datenbankbenutzer werden von einem weiteren "
-                "Mandanten verwendet. Die automatische Löschung wurde abgebrochen."
+                tr("delete.databaseShared")
             )
 
         return database_name, database_user
@@ -443,19 +435,19 @@ class TenantControlService:
             )
             if conflict is not None:
                 raise TenantControlError(
-                    "Kürzel, Datenbank oder Archiv-Namespace sind bereits registriert."
+                    tr("tenant.alreadyRegistered")
                 )
 
             domain_conflict = db.scalar(
                 select(TenantDomain.id).where(TenantDomain.hostname == hostname)
             )
             if domain_conflict is not None:
-                raise TenantControlError("Dieser Hostname ist bereits registriert.")
+                raise TenantControlError(tr("tenant.hostnameTaken"))
 
     def _connect_admin(self):
         password = self.settings.tenant_provision_db_password
         if password is None:
-            raise TenantControlError("TENANT_PROVISION_DB_PASSWORD fehlt.")
+            raise TenantControlError(tr("tenant.provisionPasswordMissing"))
 
         try:
             return pymysql.connect(
@@ -473,8 +465,7 @@ class TenantControlService:
             )
         except pymysql.MySQLError as exc:
             raise TenantControlError(
-                "Die Verbindung zum MariaDB-Provisionierungsbenutzer ist "
-                "fehlgeschlagen."
+                tr("tenant.provisionConnectionFailed")
             ) from exc
 
     @contextmanager
@@ -483,7 +474,7 @@ class TenantControlService:
             cursor.execute("SELECT GET_LOCK(%s, 10)", (PROVISION_LOCK_NAME,))
             if cursor.fetchone()[0] != 1:
                 raise TenantControlError(
-                    "Eine andere Mandantenoperation ist noch aktiv."
+                    tr("tenant.operationRunning")
                 )
         try:
             yield
@@ -502,7 +493,7 @@ class TenantControlService:
                 (database_name,),
             )
             if cursor.fetchone() is not None:
-                raise TenantControlError("Die Mandantendatenbank existiert bereits.")
+                raise TenantControlError(tr("tenant.databaseExists"))
 
             cursor.execute(
                 "SELECT User FROM mysql.user WHERE User = %s AND Host = %s",
@@ -510,7 +501,7 @@ class TenantControlService:
             )
             if cursor.fetchone() is not None:
                 raise TenantControlError(
-                    "Der Mandanten-Datenbankbenutzer existiert bereits."
+                    tr("tenant.databaseUserExists")
                 )
 
     def _create_database_and_user(
@@ -613,7 +604,7 @@ class TenantControlService:
     def _encryption_key(self) -> SecretStr:
         key = self.settings.tenant_db_encryption_key
         if key is None:
-            raise TenantControlError("TENANT_DB_ENCRYPTION_KEY fehlt.")
+            raise TenantControlError(tr("tenant.encryptionKeyMissing"))
         return key
 
     def _archive_path(self, code: str) -> Path:
@@ -621,6 +612,6 @@ class TenantControlService:
         path = (root / validate_tenant_code(code)).resolve()
 
         if path.parent != root:
-            raise TenantControlError("Der Archivpfad ist ungültig.")
+            raise TenantControlError(tr("tenant.archivePathInvalid"))
 
         return path

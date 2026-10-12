@@ -10,6 +10,8 @@ import {
 } from '../api/invoices'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from './SystemMessage'
 
 interface InvoiceCancellationCreateFormProps {
   invoiceId: number
@@ -18,6 +20,7 @@ interface InvoiceCancellationCreateFormProps {
 function InvoiceCancellationCreateForm({
   invoiceId,
 }: InvoiceCancellationCreateFormProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { signOut } = useAuth()
 
@@ -39,13 +42,13 @@ function InvoiceCancellationCreateForm({
 
     if (!normalizedReason) {
       setErrorMessage(
-        'Bitte gib einen Stornogrund an.',
+        t('cancellationCreate.reasonMissing'),
       )
       return
     }
 
     const confirmed = window.confirm(
-      'Soll für diese Rechnung wirklich ein Stornoentwurf erstellt werden?',
+      t('cancellationCreate.confirm'),
     )
 
     if (!confirmed) {
@@ -97,7 +100,7 @@ function InvoiceCancellationCreateForm({
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Der Stornoentwurf konnte nicht erstellt werden.',
+          : t('cancellationCreate.failed'),
       )
     } finally {
       setIsSubmitting(false)
@@ -107,16 +110,13 @@ function InvoiceCancellationCreateForm({
   return (
     <section className="card detail-section">
       <p className="eyebrow">
-        Rechnung korrigieren
+        {t('cancellationCreate.eyebrow')}
       </p>
 
-      <h2>Rechnung stornieren</h2>
+      <h2>{t('cancellationCreate.title')}</h2>
 
       <p className="muted finalize-intro">
-        Es wird zunächst ein Stornoentwurf mit
-        negativen Rechnungspositionen erstellt.
-        Anschließend muss dieser verbindlich
-        finalisiert werden.
+        {t('cancellationCreate.intro')}
       </p>
 
       <form
@@ -124,7 +124,7 @@ function InvoiceCancellationCreateForm({
         onSubmit={handleSubmit}
       >
         <label className="form-field">
-          <span>Stornogrund</span>
+          <span>{t('cancellationCreate.reason')}</span>
 
           <textarea
             value={reason}
@@ -134,19 +134,18 @@ function InvoiceCancellationCreateForm({
               setReason(event.target.value)
             }}
             disabled={isSubmitting}
-            placeholder="Zum Beispiel: Fehlerhafte Abrechnung"
+            placeholder={t('cancellationCreate.reasonPlaceholder')}
             required
           />
         </label>
 
-        {errorMessage && (
-          <p
-            className="form-error"
-            role="alert"
-          >
-            {errorMessage}
-          </p>
-        )}
+        <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
         <div className="form-actions">
           <button
@@ -155,8 +154,8 @@ function InvoiceCancellationCreateForm({
             disabled={isSubmitting}
           >
             {isSubmitting
-              ? 'Stornoentwurf wird erstellt …'
-              : 'Rechnung stornieren'}
+              ? t('cancellationCreate.submitting')
+              : t('cancellationCreate.submit')}
           </button>
         </div>
       </form>

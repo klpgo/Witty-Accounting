@@ -1,13 +1,19 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from app.errors import message_code
 
 
 class InvoiceDraftCreate(BaseModel):
     user_id: int = Field(gt=0)
     service_period_start: datetime
     service_period_end: datetime
+    # Grundgebühr anteilig für die Tage im Zeitraum statt ganzer Monate,
+    # deren Erster im Zeitraum liegt
+    prorate_base_fee: bool = False
 
 
 class InvoiceFinalizeRequest(BaseModel):
@@ -68,7 +74,7 @@ class InvoiceResponse(BaseModel):
     original_invoice_id: int | None
     cancellation_reason: str | None
     cancelled_at: datetime | None
-    user_id: int
+    user_id: int | None
     recipient_name: str
     recipient_address: str
     status: str
@@ -91,5 +97,34 @@ class InvoiceResponse(BaseModel):
     pdf_exported_by_user_id: int | None
     pdf_export_remote_path: str | None
 
+    # ohne Umsatzsteuer erstellt (Kleinunternehmer) und Hinweis dazu
+    vat_exempt: bool = False
+    vat_exemption_note: str | None = None
+
+    # Automatische Abrechnung
+    billing_run_id: int | None = None
+    # in_review, on_hold, failed oder None (manueller Entwurf)
+    review_status: str | None = None
+    review_due_date: date | None = None
+    review_notified_at: datetime | None = None
+    inquiry_at: datetime | None = None
+    # pending, sent, postal, failed (nach automatischer Finalisierung)
+    delivery_status: str | None = None
+    notification_error: str | None = None
+    # Kontaktadresse für Nachfragen zum Entwurf (nur bei Entwürfen zur
+    # Prüfung gesetzt)
+    review_contact_email: str | None = None
+
     items: list[InvoiceItemResponse]
+
+    @computed_field
+    @property
+    def notification_error_code(self) -> dict[str, Any] | None:
+        """Code zur Meldung, damit die Oberfläche sie übersetzen kann."""
+        return message_code(self.notification_error)
+
+
+class InvoiceInquiryResponse(BaseModel):
+    invoice: InvoiceResponse
+    contact_email: str | None
 

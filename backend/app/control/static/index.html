@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,35 +11,35 @@
       <header class="brand">
         <div class="brand-mark">W</div>
         <div>
-          <p class="eyebrow">Lokale Administration</p>
+          <p class="eyebrow" data-i18n="page.subtitle"></p>
           <h1>Witty Control</h1>
         </div>
       </header>
 
       <section id="login-view" class="panel login-panel">
         <div>
-          <p class="eyebrow">Geschützter Bereich</p>
-          <h2>Anmelden</h2>
-          <p class="muted">Verwende das Control-Passwort aus der Server-Konfiguration.</p>
+          <p class="eyebrow" data-i18n="login.eyebrow"></p>
+          <h2 data-i18n="login.title"></h2>
+          <p class="muted" data-i18n="login.hint"></p>
         </div>
         <form id="login-form" class="stack">
           <label>
-            Passwort
+            <span data-i18n="login.password"></span>
             <input id="login-password" name="password" type="password" required autofocus>
           </label>
-          <button type="submit">Anmelden</button>
+          <button type="submit" data-i18n="login.submit"></button>
         </form>
       </section>
 
       <section id="app-view" class="hidden">
         <div class="toolbar">
           <div>
-            <p class="eyebrow">Mandantenverwaltung</p>
-            <h2>Mandanten</h2>
+            <p class="eyebrow" data-i18n="app.eyebrow"></p>
+            <h2 data-i18n="app.title"></h2>
           </div>
           <div class="toolbar-actions">
-            <button id="refresh-button" class="secondary" type="button">Aktualisieren</button>
-            <button id="logout-button" class="secondary" type="button">Abmelden</button>
+            <button id="refresh-button" class="secondary" type="button" data-i18n="app.refresh"></button>
+            <button id="logout-button" class="secondary" type="button" data-i18n="app.signOut"></button>
           </div>
         </div>
 
@@ -48,10 +48,10 @@
         <section id="delete-progress" class="delete-progress hidden" aria-live="polite">
           <div class="delete-progress-heading">
             <div>
-              <p class="eyebrow danger-text">Mandant wird gelöscht</p>
-              <h3 id="delete-progress-title">Löschvorgang</h3>
+              <p class="eyebrow danger-text" data-i18n="progress.eyebrow"></p>
+              <h3 id="delete-progress-title" data-i18n="progress.title"></h3>
             </div>
-            <span id="delete-progress-state" class="progress-state">Läuft</span>
+            <span id="delete-progress-state" class="progress-state" data-i18n="progress.running"></span>
           </div>
           <ol id="delete-progress-steps" class="progress-steps"></ol>
         </section>
@@ -60,8 +60,8 @@
           <section class="panel">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">Übersicht</p>
-                <h3>Vorhandene Mandanten</h3>
+                <p class="eyebrow" data-i18n="list.eyebrow"></p>
+                <h3 data-i18n="list.title"></h3>
               </div>
               <span id="tenant-count" class="count">0</span>
             </div>
@@ -69,45 +69,45 @@
           </section>
 
           <section class="panel">
-            <p class="eyebrow">Provisionierung</p>
-            <h3>Mandant anlegen</h3>
-            <p class="muted">Datenbank, zufälliges DB-Passwort, Schema und erster Admin werden automatisch angelegt.</p>
+            <p class="eyebrow" data-i18n="create.eyebrow"></p>
+            <h3 data-i18n="create.title"></h3>
+            <p class="muted" data-i18n="create.hint"></p>
             <form id="create-form" class="form-grid" autocomplete="off">
               <label>
-                Kürzel
+                <span data-i18n="create.code"></span>
                 <input name="code" maxlength="32" pattern="[a-z][a-z0-9_]{0,31}" placeholder="witty" required>
-                <small>Wird zugleich der eindeutige Datenbankname.</small>
+                <small data-i18n="create.codeHint"></small>
               </label>
               <label>
-                Anzeigename
+                <span data-i18n="create.name"></span>
                 <input name="name" maxlength="200" required>
               </label>
               <label class="wide">
-                Hostname
-                <input name="hostname" maxlength="253" placeholder="witty.example.de" required>
+                <span data-i18n="create.hostname"></span>
+                <input name="hostname" maxlength="253" placeholder="witty.example.org" required>
               </label>
-              <div class="divider wide"><span>Erster Administrator</span></div>
+              <div class="divider wide"><span data-i18n="create.firstAdmin"></span></div>
               <label class="wide">
-                E-Mail-Adresse
+                <span data-i18n="create.email"></span>
                 <input name="admin_email" type="email" maxlength="255" required>
               </label>
               <label>
-                Vorname
+                <span data-i18n="create.firstName"></span>
                 <input name="admin_first_name" maxlength="100" required>
               </label>
               <label>
-                Nachname
+                <span data-i18n="create.lastName"></span>
                 <input name="admin_last_name" maxlength="100" required>
               </label>
               <label>
-                Initialpasswort
+                <span data-i18n="create.password"></span>
                 <input id="admin-password" name="admin_password" type="password" autocomplete="new-password" required>
               </label>
               <label>
-                Passwort wiederholen
+                <span data-i18n="create.passwordRepeat"></span>
                 <input id="admin-password-confirmation" type="password" autocomplete="new-password" required>
               </label>
-              <button class="wide" type="submit">Mandant vollständig anlegen</button>
+              <button class="wide" type="submit" data-i18n="create.submit"></button>
             </form>
           </section>
         </div>
@@ -116,59 +116,54 @@
 
     <dialog id="edit-dialog">
       <form id="edit-form" method="dialog" class="stack">
-        <p class="eyebrow">Mandant bearbeiten</p>
-        <h3>Anzeigename ändern</h3>
-        <p>Neuer Anzeigename für den Mandanten <strong id="edit-code"></strong>.</p>
+        <p class="eyebrow" data-i18n="edit.eyebrow"></p>
+        <h3 data-i18n="edit.title"></h3>
+        <p><span data-i18n="edit.text"></span> <strong id="edit-code"></strong>.</p>
         <label>
-          Anzeigename
+          <span data-i18n="create.name"></span>
           <input id="edit-name" name="name" maxlength="200" required autocomplete="off">
         </label>
         <div class="dialog-actions">
-          <button id="edit-cancel" class="secondary" type="button">Abbrechen</button>
-          <button type="submit">Speichern</button>
+          <button id="edit-cancel" class="secondary" type="button" data-i18n="common.cancel"></button>
+          <button type="submit" data-i18n="common.save"></button>
         </div>
       </form>
     </dialog>
 
     <dialog id="hostname-dialog">
       <form id="hostname-form" method="dialog" class="stack">
-        <p class="eyebrow">Mandant bearbeiten</p>
-        <h3>Hostname ändern</h3>
-        <p>Neuer Hostname für den Mandanten <strong id="hostname-code"></strong>.</p>
+        <p class="eyebrow" data-i18n="edit.eyebrow"></p>
+        <h3 data-i18n="hostname.title"></h3>
+        <p><span data-i18n="hostname.text"></span> <strong id="hostname-code"></strong>.</p>
         <label>
-          Hostname
+          <span data-i18n="create.hostname"></span>
           <input id="hostname-value" name="hostname" maxlength="253" required autocomplete="off">
         </label>
-        <p class="muted">
-          DNS und Reverse Proxy müssen separat auf den neuen Hostnamen eingestellt werden.
-        </p>
+        <p class="muted" data-i18n="hostname.hint"></p>
         <div class="dialog-actions">
-          <button id="hostname-cancel" class="secondary" type="button">Abbrechen</button>
-          <button type="submit">Speichern</button>
+          <button id="hostname-cancel" class="secondary" type="button" data-i18n="common.cancel"></button>
+          <button type="submit" data-i18n="common.save"></button>
         </div>
       </form>
     </dialog>
 
     <dialog id="delete-dialog">
       <form id="delete-form" method="dialog" class="stack">
-        <p class="eyebrow danger-text">Unwiderrufliche Löschung</p>
-        <h3 id="delete-title">Mandant löschen</h3>
-        <div class="warning">
-          Datenbank, Datenbankbenutzer und vollständiges Rechnungsarchiv werden gelöscht.
-          Stelle sicher, dass alle benötigten Daten vorher extern gesichert wurden.
-        </div>
-        <p>Gib zur Bestätigung das Kürzel <strong id="delete-code"></strong> ein.</p>
+        <p class="eyebrow danger-text" data-i18n="delete.eyebrow"></p>
+        <h3 id="delete-title" data-i18n="delete.title"></h3>
+        <div class="warning" data-i18n="delete.warning"></div>
+        <p><span data-i18n="delete.confirmText"></span> <strong id="delete-code"></strong></p>
         <label>
-          Mandantenkürzel
+          <span data-i18n="delete.code"></span>
           <input id="delete-confirmation" required autocomplete="off">
         </label>
         <label>
-          Control-Passwort erneut eingeben
+          <span data-i18n="delete.password"></span>
           <input id="delete-password" type="password" required>
         </label>
         <div class="dialog-actions">
-          <button id="delete-cancel" class="secondary" type="button">Abbrechen</button>
-          <button class="danger" type="submit">Endgültig löschen</button>
+          <button id="delete-cancel" class="secondary" type="button" data-i18n="common.cancel"></button>
+          <button class="danger" type="submit" data-i18n="delete.submit"></button>
         </div>
       </form>
     </dialog>

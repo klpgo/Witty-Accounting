@@ -8,6 +8,11 @@ import {
 
 import { getPublicSettings } from '../api/settings'
 import {
+  setDisplayLocale,
+  setDisplayTimeZone,
+} from '../utils/dateFormat'
+import { setNumberFormat } from '../utils/numberFormat'
+import {
   AppSettingsContext,
   type AppSettingsStatus,
 } from './appSettingsContext'
@@ -27,6 +32,9 @@ export function AppSettingsProvider({
   const [tenantName, setTenantName] = useState(
     DEFAULT_APP_NAME,
   )
+  const [defaultLanguage, setDefaultLanguage] =
+    useState('de')
+  const [vatEnabled, setVatEnabled] = useState(true)
 
   const [status, setStatus] =
     useState<AppSettingsStatus>('loading')
@@ -48,6 +56,22 @@ export function AppSettingsProvider({
         setTenantName(
           normalizedTenantName || DEFAULT_APP_NAME,
         )
+        setDefaultLanguage(
+          publicSettings.default_language ?? 'de',
+        )
+        setVatEnabled(publicSettings.vat_enabled ?? true)
+
+        if (publicSettings.timezone) {
+          setDisplayTimeZone(publicSettings.timezone)
+        }
+
+        if (publicSettings.locale) {
+          setDisplayLocale(publicSettings.locale)
+          setNumberFormat(
+            publicSettings.locale,
+            publicSettings.currency ?? 'EUR',
+          )
+        }
       } catch {
         setAppName(DEFAULT_APP_NAME)
         setTenantName(DEFAULT_APP_NAME)
@@ -68,12 +92,16 @@ export function AppSettingsProvider({
     () => ({
       appName,
       tenantName,
+      defaultLanguage,
+      vatEnabled,
       status,
       refreshSettings,
     }),
     [
       appName,
       tenantName,
+      defaultLanguage,
+      vatEnabled,
       status,
       refreshSettings,
     ],
@@ -83,7 +111,8 @@ export function AppSettingsProvider({
     <AppSettingsContext.Provider
       value={contextValue}
     >
-      {children}
+      {/* erst rendern, wenn Gebietsschema, Währung und Zeitzone feststehen */}
+      {status === 'ready' ? children : null}
     </AppSettingsContext.Provider>
   )
 }

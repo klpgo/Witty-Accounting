@@ -1,3 +1,5 @@
+import { readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -21,10 +23,9 @@ export interface ChargingSession {
   invoice_id: number | null
   invoice_number: string | null
   invoice_status: string | null
-}
-
-interface ApiErrorResponse {
-  detail?: string
+  discarded: boolean
+  discarded_at: string | null
+  discard_reason: string | null
 }
 
 export class ChargingSessionApiError extends Error {
@@ -40,29 +41,14 @@ export class ChargingSessionApiError extends Error {
   }
 }
 
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (body.detail) {
-      return body.detail
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Anfrage fehlgeschlagen (${response.status}).`
-}
-
 export async function listChargingSessions(
   accessToken: string,
   signal?: AbortSignal,
+  includeDiscarded = false,
 ): Promise<ChargingSession[]> {
+  const query = includeDiscarded ? '?include_discarded=true' : ''
   const response = await fetch(
-    `${API_BASE_URL}/charging-sessions`,
+    `${API_BASE_URL}/charging-sessions${query}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -73,7 +59,7 @@ export async function listChargingSessions(
 
   if (!response.ok) {
     throw new ChargingSessionApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -81,4 +67,50 @@ export async function listChargingSessions(
   return (
     await response.json()
   ) as ChargingSession[]
+}
+
+async function postSessionIds(
+  accessToken: string,
+  action: 'discard' | 'restore',
+  body: { ids: number[]; reason?: string },
+): Promise<number> {
+  const response = await fetch(
+    `${API_BASE_URL}/charging-sessions/${action}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+  )
+
+  if (!response.ok) {
+    throw new ChargingSessionApiError(
+      await readApiError(response),
+      response.status,
+    )
+  }
+
+  return ((await response.json()) as { changed: number }).changed
+}
+
+// Verwirft nicht abgerechnete Ladevorgänge (alle oder keiner)
+export function discardChargingSessions(
+  accessToken: string,
+  ids: number[],
+  reason?: string,
+): Promise<number> {
+  return postSessionIds(accessToken, 'discard', {
+    ids,
+    ...(reason ? { reason } : {}),
+  })
+}
+
+export function restoreChargingSessions(
+  accessToken: string,
+  ids: number[],
+): Promise<number> {
+  return postSessionIds(accessToken, 'restore', { ids })
 }

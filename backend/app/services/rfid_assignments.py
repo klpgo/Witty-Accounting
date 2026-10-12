@@ -51,10 +51,8 @@ def resolve_rfid_assignment(
 
     if len(assignments) > 1:
         raise RFIDAssignmentOverlapError(
-            "Für die RFID-Karte "
-            f"{rfid_number} gelten zum Zeitpunkt "
-            f"{at.isoformat()} mehrere "
-            "Benutzerzuordnungen."
+            f"Several user assignments apply to RFID card {rfid_number} "
+            f"at {at.isoformat()}."
         )
 
     if not assignments:
@@ -101,8 +99,6 @@ def ensure_rfid_assignment_period_available(
 
     if existing_assignment_id is not None:
         raise RFIDAssignmentOverlapError(
-            "Der Zuordnungszeitraum "
-            "überschneidet sich mit einer "
-            "bestehenden Zuordnung dieser "
-            "RFID-Karte."
+            "The assignment period overlaps with an existing assignment "
+            "of this RFID card."
         )

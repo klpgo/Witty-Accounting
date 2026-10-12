@@ -2,21 +2,26 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import {
   DashboardApiError,
   getDashboard,
   type DashboardData,
 } from '../api/dashboard'
+import { getRetentionDueYear } from '../api/settings'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
+import { getDisplayLocale } from '../utils/dateFormat'
+import { useTranslation } from '../i18n/useTranslation'
+import AdminAutomationStatus from '../components/AdminAutomationStatus'
 
 function formatDateTime(
   value: string | null | undefined,
+  emptyText: string,
 ): string {
   if (!value) {
-    return 'Noch kein Import'
+    return emptyText
   }
 
   const date = new Date(value)
@@ -25,7 +30,7 @@ function formatDateTime(
     return value
   }
 
-  return new Intl.DateTimeFormat('de-DE', {
+  return new Intl.DateTimeFormat(getDisplayLocale(), {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date)
@@ -33,9 +38,10 @@ function formatDateTime(
 
 function formatDate(
   value: string | null | undefined,
+  emptyText: string,
 ): string {
   if (!value) {
-    return 'Noch keine Abrechnung'
+    return emptyText
   }
 
   const date = new Date(value)
@@ -44,12 +50,13 @@ function formatDate(
     return value
   }
 
-  return new Intl.DateTimeFormat('de-DE', {
+  return new Intl.DateTimeFormat(getDisplayLocale(), {
     dateStyle: 'long',
   }).format(date)
 }
 
 function DashboardPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
 
@@ -119,16 +126,41 @@ function DashboardPage() {
     }
   }, [navigate, signOut])
 
+  // Hinweis für Administratoren: Aufbewahrungsfrist abgelaufen
+  const [retentionDueYear, setRetentionDueYear] =
+    useState<number | null>(null)
+  const isAdmin = user?.is_admin === true
+
+  useEffect(() => {
+    const accessToken = getAccessToken()
+
+    if (!isAdmin || accessToken === null) {
+      return
+    }
+
+    const controller = new AbortController()
+
+    getRetentionDueYear(accessToken, controller.signal)
+      .then(setRetentionDueYear)
+      .catch(() => {
+        // Hinweis ist optional; Fehler werden hier nicht angezeigt
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [isAdmin])
+
   const isMaintenance =
     dashboard?.server_status === 'maintenance'
 
   const statusLabel = isLoading
-    ? 'Status wird geprüft …'
+    ? t('dashboard.status.checking')
     : isOffline
-      ? 'Server offline'
+      ? t('dashboard.status.offline')
       : isMaintenance
-        ? 'Wartung'
-        : 'Server online'
+        ? t('dashboard.status.maintenance')
+        : t('dashboard.status.online')
 
   const statusClassName = isLoading
     ? 'dashboard-status-checking'
@@ -143,34 +175,45 @@ function DashboardPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            Übersicht
+            {t('dashboard.eyebrow')}
           </p>
 
-          <h1>Dashboard</h1>
+          <h1>{t('dashboard.title')}</h1>
 
           <p className="muted">
-            Willkommen, {user?.first_name}.
+            {t('dashboard.welcome', { name: user?.first_name ?? '' })}
           </p>
         </div>
       </header>
+
+      {retentionDueYear !== null && (
+        <section className="card retention-notice" role="status">
+          <p>
+            {t('dashboard.retentionDue', { year: retentionDueYear })}{' '}
+            <Link to="/admin/settings#retention">
+              {t('dashboard.retentionDueLink')}
+            </Link>
+          </p>
+        </section>
+      )}
 
       <section className="dashboard-grid">
         <article className="card dashboard-status-card">
           <div>
             <p className="eyebrow">
-              Systemstatus
+              {t('dashboard.status.eyebrow')}
             </p>
 
             <h2>{statusLabel}</h2>
 
             <p className="muted">
               {isLoading
-                ? 'Die Verbindung zum Backend wird geprüft.'
+                ? t('dashboard.status.checkingText')
                 : isOffline
-                  ? 'Das Backend ist derzeit nicht erreichbar.'
+                  ? t('dashboard.status.offlineText')
                   : isMaintenance
-                    ? 'Das System befindet sich im Wartungsmodus.'
-                    : 'Das System ist erreichbar und betriebsbereit.'}
+                    ? t('dashboard.status.maintenanceText')
+                    : t('dashboard.status.onlineText')}
             </p>
           </div>
 
@@ -182,16 +225,16 @@ function DashboardPage() {
 
         <article className="card dashboard-note-card">
           <p className="eyebrow">
-            Mitteilung der Administration
+            {t('dashboard.messages.eyebrow')}
           </p>
 
           {isLoading ? (
             <p className="muted">
-              Mitteilungen werden geladen …
+              {t('dashboard.messages.loading')}
             </p>
           ) : isOffline ? (
             <p className="muted">
-              Mitteilungen sind derzeit nicht verfügbar.
+              {t('dashboard.messages.unavailable')}
             </p>
           ) : dashboard?.admin_note ? (
             <p className="dashboard-note">
@@ -199,54 +242,58 @@ function DashboardPage() {
             </p>
           ) : (
             <p className="muted">
-              Derzeit liegen keine Mitteilungen vor.
+              {t('dashboard.messages.none')}
             </p>
           )}
         </article>
 
         <article className="card dashboard-metric-card">
           <p className="eyebrow">
-            Datenstand
+            {t('dashboard.dataStatus.eyebrow')}
           </p>
 
           <h2>
             {isLoading
-              ? 'Wird geladen …'
+              ? t('common.loading')
               : isOffline
-              ? 'Nicht verfügbar'
+              ? t('common.notAvailable')
               : formatDateTime(
                   dashboard?.latest_charging_session_at,
+                  t('dashboard.noImport'),
                 )}
           </h2>
 
           <p className="muted">
-            Neuester importierter Ladevorgang
+            {t('dashboard.dataStatus.text')}
           </p>
         </article>
 
         <article className="card dashboard-metric-card">
           <p className="eyebrow">
-            Abrechnungsstand
+            {t('dashboard.billing.eyebrow')}
           </p>
 
           <h2>
             {isLoading
-              ? 'Wird geladen …'
+              ? t('common.loading')
               : isOffline
-              ? 'Nicht verfügbar'
+              ? t('common.notAvailable')
               : formatDate(
                   dashboard?.invoiced_through,
+                  t('dashboard.noBilling'),
                 )}
           </h2>
 
           <p className="muted">
-            Ladevorgänge abgerechnet bis
+            {t('dashboard.billing.text')}
           </p>
         </article>
 
+        {isAdmin && <AdminAutomationStatus />}
+
         <article className="card dashboard-version-card">
           <p className="eyebrow">
-            Aktive Versionen
+            {t('dashboard.versions.eyebrow')}
           </p>
 
           <dl className="dashboard-version-list">
@@ -259,10 +306,10 @@ function DashboardPage() {
               <dt>Backend</dt>
               <dd>
                 {isLoading
-                  ? 'Wird geladen …'
+                  ? t('common.loading')
                   : dashboard?.backend_version
                   ? `v${dashboard.backend_version}`
-                  : 'Nicht verfügbar'}
+                  : t('common.notAvailable')}
               </dd>
             </div>
           </dl>

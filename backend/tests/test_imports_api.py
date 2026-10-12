@@ -115,6 +115,14 @@ def test_upload_xlsx_returns_import_result(
         "priced": 2,
         "missing_price": 0,
         "invalid_energy": 0,
+        "unknown_rfid_cards": [],
+        "inactive_rfid_cards": [],
+        "unassigned_rfid_numbers": [],
+        "backfilled_rfid_numbers": 0,
+        "reassigned_sessions": 0,
+        "fetched_from": None,
+        "skipped_before_billing_start": 0,
+        "skipped_empty": 0,
     }
 
 
@@ -133,11 +141,9 @@ def test_upload_rejects_non_xlsx_file(
     )
 
     assert response.status_code == 400
-    assert response.json() == {
-        "detail": (
-            "Es werden ausschließlich XLSX-Dateien unterstützt."
-        )
-    }
+    assert response.json()["detail"] == (
+        "Only XLSX files are supported."
+    )
 
 def test_upload_rejects_empty_xlsx(
     client: TestClient,
@@ -157,9 +163,7 @@ def test_upload_rejects_empty_xlsx(
     )
 
     assert response.status_code == 400
-    assert response.json() == {
-        "detail": "Die hochgeladene Datei ist leer."
-    }
+    assert response.json()["detail"] == "The uploaded file is empty."
 
 
 def test_upload_rejects_oversized_file(
@@ -186,12 +190,9 @@ def test_upload_rejects_oversized_file(
     )
 
     assert response.status_code == 413
-    assert response.json() == {
-        "detail": (
-            "Die XLSX-Datei ist zu groß. "
-            "Maximal erlaubt sind 10 MB."
-        )
-    }
+    assert response.json()["detail"] == (
+        "The XLSX file is too large. The maximum is 10 MB."
+    )
 
 
 def test_upload_rejects_corrupt_xlsx(
@@ -213,7 +214,7 @@ def test_upload_rejects_corrupt_xlsx(
 
     assert response.status_code == 400
     assert response.json()["detail"].startswith(
-        "Die XLSX-Datei konnte nicht importiert werden:"
+        "The XLSX file could not be imported:"
     )
 
 

@@ -381,3 +381,120 @@ def test_reports_invalid_invoice_bank_snapshot() -> None:
 
     # The optional feature must not prevent legacy PDF generation.
     assert build_invoice_pdf(invoice).startswith(b"%PDF-")
+
+
+def test_service_period_shows_last_day_of_service() -> None:
+    from app.services.invoice_pdf import format_service_period
+
+    # gespeichertes Ende ist exklusiv (Mitternacht des Folgetags)
+    assert format_service_period(
+        datetime(2026, 7, 1),
+        datetime(2026, 8, 1),
+    ) == "01.07.2026 – 31.07.2026"
+    # Ende mit Uhrzeit bleibt am selben Tag
+    assert format_service_period(
+        datetime(2026, 7, 1),
+        datetime(2026, 7, 15, 12, 0),
+    ) == "01.07.2026 – 15.07.2026"
+
+
+def test_invoice_pdf_contains_inclusive_service_period() -> None:
+    invoice = create_finalized_invoice()
+
+    extracted_text = (
+        PdfReader(BytesIO(build_invoice_pdf(invoice)))
+        .pages[0]
+        .extract_text()
+        or ""
+    )
+
+    # Leistungszeitraum Juni: 01.06. bis 30.06., nicht bis 01.07.
+    assert "30.06.2026" in extracted_text
+    assert "– 01.07.2026" not in extracted_text
+
+
+# --------------------------------------------------------------------------
+# Gebietsschema und Währung
+# --------------------------------------------------------------------------
+def extract_text(invoice, **kwargs) -> str:
+    return PdfReader(BytesIO(build_invoice_pdf(invoice, **kwargs))).pages[0].extract_text() or ""
+
+
+def test_invoice_without_locale_keeps_german_format() -> None:
+    invoice = create_finalized_invoice()
+    invoice.locale = None
+
+    text = extract_text(invoice)
+
+    assert "2,62 EUR" in text
+    assert "01.06.2026 – 30.06.2026" in text
+
+
+def test_invoice_in_english_format() -> None:
+    invoice = create_finalized_invoice()
+    invoice.locale = "en-GB"
+
+    text = extract_text(invoice)
+
+    assert "EUR 2.62" in text
+    assert "01/06/2026 – 30/06/2026" in text
+
+
+def test_invoice_in_swiss_francs_has_no_girocode() -> None:
+    invoice = create_finalized_invoice()
+    invoice.locale = "de-CH"
+    invoice.currency = "CHF"
+
+    text = extract_text(invoice, girocode_enabled=True)
+
+    assert "CHF 2.62" in text
+    assert "Girocode" not in text
+
+
+def test_pdf_locale_does_not_leak_into_next_pdf() -> None:
+    english = create_finalized_invoice()
+    english.locale = "en-US"
+    extract_text(english)
+
+    german = create_finalized_invoice()
+    german.locale = None
+
+    assert "2,62 EUR" in extract_text(german)
+
+
+def test_invoice_in_english_language() -> None:
+    invoice = create_finalized_invoice()
+    invoice.language = "en"
+    invoice.locale = "en-GB"
+
+    text = extract_text(invoice)
+
+    assert "Charging invoice" in text
+    assert "Invoice number" in text
+    assert "Service period" in text
+    assert "Net amount" in text
+    assert "Bank details" in text
+    assert "EUR 2.62" in text
+    assert "Rechnungsnummer" not in text
+
+
+def test_invoice_without_language_stays_german() -> None:
+    invoice = create_finalized_invoice()
+    invoice.language = None
+
+    text = extract_text(invoice)
+
+    assert "Ladestromrechnung" in text
+    assert "Rechnungsnummer" in text
+    assert "Nettobetrag" in text
+
+
+def test_column_headers_use_invoice_currency() -> None:
+    invoice = create_finalized_invoice()
+    invoice.currency = "CHF"
+    invoice.locale = "de-CH"
+
+    text = extract_text(invoice)
+
+    assert "CHF/kWh" in text
+    assert "EUR/kWh" not in text

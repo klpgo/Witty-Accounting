@@ -134,7 +134,7 @@ def test_refuses_when_admin_already_exists(
 
     with pytest.raises(
         create_admin.BootstrapRefusedError,
-        match="bereits mindestens ein Administrator",
+        match="At least one administrator already exists",
     ):
         create_admin.create_first_admin(
             database_session
@@ -167,7 +167,7 @@ def test_refuses_to_promote_existing_user(
 
     with pytest.raises(
         create_admin.BootstrapRefusedError,
-        match="ändert keine vorhandenen Konten",
+        match="does not change existing accounts",
     ):
         create_admin.create_first_admin(
             database_session
@@ -239,7 +239,7 @@ def test_second_bootstrap_is_refused(
 
     with pytest.raises(
         create_admin.BootstrapRefusedError,
-        match="ohne Änderung abgebrochen",
+        match="aborted without changes",
     ):
         create_admin.create_first_admin(
             database_session

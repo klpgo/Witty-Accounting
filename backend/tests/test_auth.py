@@ -161,18 +161,15 @@ def test_login_rejects_wrong_password(
         )
 
     assert response.status_code == 401
-    assert response.json() == {
-        "detail": (
-            "E-Mail-Adresse oder Passwort "
-            "ist falsch."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "Email address or password is incorrect."
+    )
+    assert response.json()["code"] == "auth.invalidCredentials"
     assert response.headers[
         "www-authenticate"
     ] == "Bearer"
     assert (
-        "Login fehlgeschlagen: Benutzername="
-        "'admin@example.com'."
+        "Login failed: username='admin@example.com'."
     ) in caplog.messages
 
     database_session.refresh(user)
@@ -205,12 +202,9 @@ def test_reprice_rejects_invalid_token(
     )
 
     assert response.status_code == 401
-    assert response.json() == {
-        "detail": (
-            "Anmeldedaten konnten nicht "
-            "validiert werden."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "Credentials could not be validated."
+    )
     assert response.headers[
         "www-authenticate"
     ] == "Bearer"
@@ -256,11 +250,10 @@ def test_reprice_rejects_non_admin_user(
     )
 
     assert response.status_code == 403
-    assert response.json() == {
-        "detail": (
-            "Administratorrechte erforderlich."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "Administrator rights required."
+    )
+    assert response.json()["code"] == "auth.adminRequired"
 
 
 def test_reprice_accepts_admin_user(
@@ -326,6 +319,7 @@ def test_me_returns_authenticated_user(
         "last_name": admin.last_name,
         "is_admin": True,
         "active": True,
+        "language": None,
     }
 
 
@@ -391,13 +385,10 @@ def test_maintenance_mode_rejects_normal_user_login(
     )
 
     assert response.status_code == 503
-    assert response.json() == {
-        "detail": (
-            "Der Wartungsmodus ist aktiv. "
-            "Die Anmeldung ist derzeit nur für "
-            "Administratoren möglich."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "Maintenance mode is active. Only administrators can sign in "
+        "at the moment."
+    )
 
     database_session.refresh(user)
     assert user.last_login is None

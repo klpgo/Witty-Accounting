@@ -2,8 +2,11 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path, PurePosixPath
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import (
     HTTPException as StarletteHTTPException,
@@ -13,6 +16,8 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.auto_billing import router as auto_billing_router
+from app.api.routes.wallboxes import router as wallboxes_router
 from app.api.routes.energy_prices import (
     router as energy_prices_router,
 )
@@ -27,6 +32,10 @@ from app.api.routes.dashboard import (
     router as dashboard_router,
 )
 from app.api.routes.imports import router as imports_router
+from app.api.routes.retention import router as retention_router
+from app.api.routes.hager_settings import (
+    router as hager_settings_router,
+)
 from app.api.routes.invoices import (
     router as invoices_router,
 )
@@ -37,6 +46,7 @@ from app.api.routes.settings import (
     router as settings_router,
 )
 from app.config import settings
+from app.errors import error_content, validation_error_code
 from app.database import (
     engine,
     tenant_session_provider,
@@ -147,6 +157,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request,
+    exc: StarletteHTTPException,
+) -> Response:
+    """Fehlermeldung mit Code, damit die Oberfläche sie übersetzen kann."""
+
+    if exc.status_code in (204, 304):
+        return Response(
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
+
+    content = (
+        error_content(exc.detail)
+        if isinstance(exc.detail, str)
+        else {"detail": exc.detail}
+    )
+
+    return JSONResponse(
+        content=jsonable_encoder(content),
+        status_code=exc.status_code,
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Eingabefehler wie bisher, je Fehler zusätzlich mit Code."""
+
+    errors = exc.errors()
+    detail = jsonable_encoder(errors)
+
+    for raw, encoded in zip(errors, detail):
+        if isinstance(encoded, dict):
+            encoded.update(validation_error_code(raw))
+
+    return JSONResponse(
+        content={"detail": detail},
+        status_code=422,
+    )
+
+
 api_router = APIRouter(prefix=API_PREFIX)
 api_router.include_router(imports_router)
 api_router.include_router(assignment_router)
@@ -155,9 +213,13 @@ api_router.include_router(auth_router)
 api_router.include_router(invoices_router)
 api_router.include_router(users_router)
 api_router.include_router(rfid_cards_router)
+api_router.include_router(hager_settings_router)
 api_router.include_router(settings_router)
 api_router.include_router(charging_sessions_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(wallboxes_router)
+api_router.include_router(retention_router)
+api_router.include_router(auto_billing_router)
 app.include_router(api_router)
 
 

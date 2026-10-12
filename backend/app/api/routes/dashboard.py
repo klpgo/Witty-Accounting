@@ -39,6 +39,8 @@ def read_dashboard(
     latest_charging_session_at = db.scalar(
         select(
             func.max(ChargingSession.end_time)
+        ).where(
+            ChargingSession.discarded_at.is_(None)
         )
     )
 

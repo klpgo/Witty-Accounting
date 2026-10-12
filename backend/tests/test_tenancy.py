@@ -203,7 +203,7 @@ def test_registry_reports_inactive_tenant(
 
     with pytest.raises(
         TenantInactiveError,
-        match="gesperrt",
+        match="locked",
     ):
         registry.resolve("kunde-a.witty.example")
 
@@ -215,7 +215,7 @@ def test_tenant_dependency_reports_blocked_tenant(
         def resolve(self, hostname: str) -> None:
             assert hostname == "kunde-a.witty.example"
             raise TenantInactiveError(
-                "Der Mandant ist gesperrt."
+                "The tenant is locked."
             )
 
     monkeypatch.setattr(
@@ -251,7 +251,7 @@ def test_tenant_dependency_reports_blocked_tenant(
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == (
-        "Dieser Mandant ist gesperrt."
+        "This tenant is locked."
     )
 
 
@@ -432,7 +432,7 @@ def test_tenant_mode_rejects_missing_archive_namespace(
 
     with pytest.raises(
         invoice_archive.InvoiceArchiveMetadataError,
-        match="Archiv-Namespace",
+        match="archive namespace",
     ):
         invoice_archive.get_archive_root(
             None,

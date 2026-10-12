@@ -6,6 +6,7 @@ import { AppSettingsProvider } from './settings/AppSettingsProvider'
 
 import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
+import { I18nProvider } from './i18n/I18nProvider'
 import './styles.css'
 
 const rootElement =
@@ -22,7 +23,9 @@ createRoot(rootElement).render(
     <BrowserRouter>
       <AppSettingsProvider>
         <AuthProvider>
-          <App />
+          <I18nProvider>
+            <App />
+          </I18nProvider>
         </AuthProvider>
       </AppSettingsProvider>
     </BrowserRouter>

@@ -39,7 +39,7 @@ def validate_pdfa_2b_structure(
 
         if not output_intents:
             raise InvoicePdfAError(
-                "Der PDF/A-Ausgabefarbraum fehlt."
+                "The PDF/A output intent is missing."
             )
 
         output_intent = output_intents[0].get_object()
@@ -52,14 +52,14 @@ def validate_pdfa_2b_structure(
             is None
         ):
             raise InvoicePdfAError(
-                "Der PDF/A-Ausgabefarbraum ist ungültig."
+                "The PDF/A output intent is invalid."
             )
 
         metadata = root.get("/Metadata")
 
         if metadata is None:
             raise InvoicePdfAError(
-                "Die PDF/A-Metadaten fehlen."
+                "The PDF/A metadata is missing."
             )
 
         xmp = metadata.get_object().get_data()
@@ -75,15 +75,14 @@ def validate_pdfa_2b_structure(
 
         if not has_part_2 or not has_conformance_b:
             raise InvoicePdfAError(
-                "Die PDF/A-2b-Kennzeichnung fehlt."
+                "The PDF/A-2b identification is missing."
             )
 
     except InvoicePdfAError:
         raise
     except Exception as exc:
         raise InvoicePdfAError(
-            "Die erzeugte PDF/A-Datei konnte nicht "
-            "geprüft werden."
+            "The generated PDF/A file could not be checked."
         ) from exc
 
 
@@ -92,7 +91,7 @@ def convert_to_pdfa_2b(
 ) -> bytes:
     if not pdf_bytes.startswith(b"%PDF-"):
         raise InvoicePdfAError(
-            "Das Ausgangsdokument ist keine PDF-Datei."
+            "The source document is not a PDF file."
         )
 
     executable = shutil.which(
@@ -101,7 +100,7 @@ def convert_to_pdfa_2b(
 
     if executable is None:
         raise InvoicePdfAError(
-            "Ghostscript wurde nicht gefunden."
+            "Ghostscript was not found."
         )
 
     icc_profile = Path(
@@ -110,8 +109,7 @@ def convert_to_pdfa_2b(
 
     if not icc_profile.is_file():
         raise InvoicePdfAError(
-            "Das sRGB-Farbprofil für PDF/A wurde "
-            "nicht gefunden."
+            "The sRGB colour profile for PDF/A was not found."
         )
 
     with TemporaryDirectory(
@@ -161,30 +159,26 @@ def convert_to_pdfa_2b(
             )
         except subprocess.TimeoutExpired as exc:
             raise InvoicePdfAError(
-                "Die PDF/A-Erzeugung hat das "
-                "Zeitlimit überschritten."
+                "PDF/A generation exceeded the time limit."
             ) from exc
         except OSError as exc:
             raise InvoicePdfAError(
-                "Ghostscript konnte nicht gestartet "
-                "werden."
+                "Ghostscript could not be started."
             ) from exc
 
         if result.returncode != 0:
             detail = (
                 result.stderr.strip()
                 or result.stdout.strip()
-                or "unbekannter Fehler"
+                or "unknown error"
             )
             raise InvoicePdfAError(
-                "Die PDF/A-Erzeugung ist "
-                f"fehlgeschlagen: {detail}"
+                f"PDF/A generation failed: {detail}"
             )
 
         if not target_path.is_file():
             raise InvoicePdfAError(
-                "Ghostscript hat keine PDF/A-Datei "
-                "erzeugt."
+                "Ghostscript did not create a PDF/A file."
             )
 
         converted_pdf = target_path.read_bytes()

@@ -33,14 +33,14 @@ def read_required(prompt: str) -> str:
         if value:
             return value
 
-        print("Dieses Feld darf nicht leer sein.")
+        print("This field must not be empty.")
 
 
 def read_password(
     policy: PasswordPolicy,
 ) -> str:
     while True:
-        password = getpass("Passwort: ")
+        password = getpass("Password: ")
 
         try:
             validate_password(
@@ -52,11 +52,11 @@ def read_password(
             continue
 
         confirmation = getpass(
-            "Passwort wiederholen: "
+            "Repeat password: "
         )
 
         if password != confirmation:
-            print("Die Passwörter stimmen nicht überein.")
+            print("The passwords do not match.")
             continue
 
         return password
@@ -88,8 +88,7 @@ def bootstrap_lock(
 
         if acquired != 1:
             raise BootstrapRefusedError(
-                "Der Bootstrap ist bereits in "
-                "einem anderen Prozess aktiv."
+                "The bootstrap is already running in another process."
             )
 
     try:
@@ -121,9 +120,8 @@ def ensure_no_admin_exists(
 
     if admin_id is not None:
         raise BootstrapRefusedError(
-            "Es existiert bereits mindestens ein "
-            "Administrator. Der Bootstrap wurde "
-            "ohne Änderung abgebrochen."
+            "At least one administrator already exists. The bootstrap "
+            "was aborted without changes."
         )
 
 
@@ -139,9 +137,8 @@ def ensure_email_is_available(
 
     if existing_user_id is not None:
         raise BootstrapRefusedError(
-            "Für diese E-Mail-Adresse existiert "
-            "bereits ein Benutzer. Der Bootstrap "
-            "ändert keine vorhandenen Konten."
+            "A user with this email address already exists. The "
+            "bootstrap does not change existing accounts."
         )
 
 
@@ -158,7 +155,7 @@ def create_first_admin_with_values(
 
     if not normalized_email:
         raise BootstrapRefusedError(
-            "Die E-Mail-Adresse darf nicht leer sein."
+            "The email address must not be empty."
         )
 
     normalized_first_name = first_name.strip()
@@ -166,7 +163,7 @@ def create_first_admin_with_values(
 
     if not normalized_first_name or not normalized_last_name:
         raise BootstrapRefusedError(
-            "Vor- und Nachname dürfen nicht leer sein."
+            "First and last name must not be empty."
         )
 
     ensure_email_is_available(
@@ -211,14 +208,14 @@ def create_first_admin(
 ) -> User:
     ensure_no_admin_exists(db)
     email = read_required(
-        "E-Mail-Adresse: "
+        "Email address: "
     ).lower()
     ensure_email_is_available(db, email)
     first_name = read_required(
-        "Vorname: "
+        "First name: "
     )
     last_name = read_required(
-        "Nachname: "
+        "Last name: "
     )
     password = read_password(
         load_password_policy(db)
@@ -250,9 +247,9 @@ def main() -> None:
         raise SystemExit(str(exc)) from exc
 
     print()
-    print("Erster Administrator angelegt:")
+    print("First administrator created:")
     print(f"  ID:     {user.id}")
-    print(f"  E-Mail: {user.email}")
+    print(f"  Email: {user.email}")
     print(
         "  Name:   "
         f"{user.first_name} {user.last_name}"

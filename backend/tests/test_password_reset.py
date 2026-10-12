@@ -349,7 +349,8 @@ def test_invitation_message_contains_reset_link(
     body = message.get_content()
 
     assert message["Subject"] == (
-        "Ihr Zugang zu Witty-Accounting"
+        "Ihr Zugang zu Witty-Accounting / "
+        "Your access to Witty-Accounting"
     )
     assert (
         "https://accounting.example.com/"
@@ -357,6 +358,10 @@ def test_invitation_message_contains_reset_link(
     ) in body
     assert "einmalig" in body
     assert "45 Minuten gültig" in body
+    # zweisprachig: Deutsch oben, Englisch darunter, Link in beiden Teilen
+    assert "valid for 45 minutes" in body
+    assert body.index("Minuten gültig") < body.index("valid for 45 minutes")
+    assert body.count("/reset-password?token=") == 2
 
 
 def test_reset_token_uses_configured_expiry(

@@ -16,7 +16,7 @@ class ChargingSession(Base):
         primary_key=True
     )
 
-    # ID aus der Hager Flow API
+    # ID aus der Hager Cloud
     hager_session_id: Mapped[str] = mapped_column(
         String(100),
         unique=True,
@@ -51,6 +51,40 @@ class ChargingSession(Base):
     end_time: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False
+    )
+
+    # Technische ID der Wallbox beim Hersteller (bleibt stabil, auch wenn
+    # sich der angezeigte Name ändert; ändert sich bei Gerätetausch)
+    wallbox_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+
+    # Verworfen (z. B. Testladung): bleibt für die Dublettenprüfung
+    # erhalten, wird aber nicht angezeigt, bepreist oder abgerechnet
+    discarded_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        index=True,
+    )
+
+    discarded_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    discard_reason: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    # RFID-Nummer laut Import – auch ohne Zuordnung gespeichert,
+    # damit Ladevorgänge später nachträglich zugeordnet werden können
+    rfid_number: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        index=True,
     )
 
     # Zuordnung zur RFID-Karte

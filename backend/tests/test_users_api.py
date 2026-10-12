@@ -139,11 +139,9 @@ def test_list_users_rejects_non_admin(
     )
 
     assert response.status_code == 403
-    assert response.json() == {
-        "detail": (
-            "Administratorrechte erforderlich."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "Administrator rights required."
+    )
 
 
 def test_create_user_requires_authentication(
@@ -286,7 +284,7 @@ def test_rejects_combined_email_and_post_delivery(
     )
 
     assert response.status_code == 422
-    assert "genau eine" in response.json()["detail"]
+    assert "exactly one" in response.json()["detail"]
 
 
 def test_user_creation_rolls_back_if_invitation_fails(
@@ -516,12 +514,9 @@ def test_update_own_profile_rejects_duplicate_email(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": (
-            "Diese E-Mail-Adresse wird "
-            "bereits verwendet."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "This email address is already in use."
+    )
 
 
 def test_update_own_profile_rejects_admin_fields(
@@ -612,13 +607,10 @@ def test_change_own_password_rejects_weak_password(
     )
 
     assert response.status_code == 422
-    assert response.json() == {
-        "detail": (
-            "Das Passwort muss einen "
-            "Großbuchstaben, eine Zahl und "
-            "ein Sonderzeichen enthalten."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "The password must contain an uppercase letter, a digit and "
+        "a special character."
+    )
 
     database_session.refresh(user)
 
@@ -652,12 +644,9 @@ def test_change_own_password_rejects_wrong_password(
     )
 
     assert response.status_code == 400
-    assert response.json() == {
-        "detail": (
-            "Das aktuelle Passwort ist "
-            "nicht korrekt."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "The current password is incorrect."
+    )
 
     database_session.refresh(user)
 
@@ -895,13 +884,10 @@ def test_admin_password_reset_rejects_weak_password(
     )
 
     assert response.status_code == 422
-    assert response.json() == {
-        "detail": (
-            "Das Passwort muss einen "
-            "Großbuchstaben, eine Zahl und "
-            "ein Sonderzeichen enthalten."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "The password must contain an uppercase letter, a digit and "
+        "a special character."
+    )
 
     database_session.refresh(target)
 
@@ -972,9 +958,92 @@ def test_admin_user_routes_return_not_found(
     )
 
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": (
-            "Benutzer 999999 wurde nicht "
-            "gefunden."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "User 999999 was not found."
+    )
+
+
+# --------------------------------------------------------------------------
+# Persönliche Sprache
+# --------------------------------------------------------------------------
+def test_own_language_is_stored_and_reset_to_default(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="sprache@example.com",
+        first_name="Max",
+        last_name="Mustermann",
+    )
+
+    assert client.get(
+        "/api/users/me",
+        headers=authorization_header(user),
+    ).json()["language"] is None
+
+    response = client.patch(
+        "/api/users/me",
+        headers=authorization_header(user),
+        json={"language": "en"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] == "en"
+    assert client.get(
+        "/api/auth/me",
+        headers=authorization_header(user),
+    ).json()["language"] == "en"
+
+    # null = wieder Standardsprache des Mandanten
+    response = client.patch(
+        "/api/users/me",
+        headers=authorization_header(user),
+        json={"language": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] is None
+
+
+def test_unsupported_language_is_rejected(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="sprache2@example.com",
+        first_name="Max",
+        last_name="Mustermann",
+    )
+
+    response = client.patch(
+        "/api/users/me",
+        headers=authorization_header(user),
+        json={"language": "fr"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_other_profile_fields_keep_language(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user = create_user(
+        database_session,
+        email="sprache3@example.com",
+        first_name="Max",
+        last_name="Mustermann",
+    )
+    user.language = "en"
+    database_session.commit()
+
+    response = client.patch(
+        "/api/users/me",
+        headers=authorization_header(user),
+        json={"phone": "+49 1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["language"] == "en"

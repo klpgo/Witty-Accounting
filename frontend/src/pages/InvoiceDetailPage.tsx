@@ -9,6 +9,8 @@ import {
 } from 'react-router-dom'
 
 import {
+  archiveInvoicePdf,
+  downloadInvoiceDraftPdf,
   downloadInvoicePdf,
   getInvoice,
   InvoiceApiError,
@@ -22,117 +24,33 @@ import { useAuth } from '../auth/useAuth'
 import InvoiceFinalizeForm from '../components/InvoiceFinalizeForm'
 import InvoiceCancellationCreateForm from '../components/InvoiceCancellationCreateForm'
 import InvoiceCancellationFinalizeForm from '../components/InvoiceCancellationFinalizeForm'
+import InvoiceReviewPanel from '../components/InvoiceReviewPanel'
 
 import {
   getUser,
   UserApiError,
   type User,
 } from '../api/users'
+import {
+  formatDate,
+  formatLocalDateTime,
+  formatServicePeriod,
+  formatUtcDateTime,
+} from '../utils/dateFormat'
+import {
+  formatCurrency,
+  formatNumber,
+} from '../utils/numberFormat'
+import {
+  documentTypeLabel,
+  invoiceBadge,
+} from '../i18n/invoiceLabels'
+import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
-function formatCurrency(
-  value: string | number,
-  currency: string,
-): string {
-  const numericValue = Number(value)
-
-  if (!Number.isFinite(numericValue)) {
-    return '–'
-  }
-
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency,
-  }).format(numericValue)
-}
-
-function formatNumber(
-  value: string | number | null,
-  maximumFractionDigits = 3,
-): string {
-  if (value === null) {
-    return '–'
-  }
-
-  const numericValue = Number(value)
-
-  if (!Number.isFinite(numericValue)) {
-    return '–'
-  }
-
-  return new Intl.NumberFormat('de-DE', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(numericValue)
-}
-
-function formatDate(
-  value: string | null,
-): string {
-  if (value === null) {
-    return '–'
-  }
-
-  const date = new Date(
-    value.length === 10
-      ? `${value}T00:00:00`
-      : value,
-  )
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat(
-    'de-DE',
-  ).format(date)
-}
-
-function formatDateTime(
-  value: string | null,
-): string {
-  if (value === null) {
-    return '–'
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
-
-function getStatusLabel(
-  status: string,
-): string {
-  switch (status) {
-    case 'draft':
-      return 'Entwurf'
-    case 'finalized':
-      return 'Finalisiert'
-    default:
-      return status
-  }
-}
-
-function getDocumentTypeLabel(
-  documentType: string,
-): string {
-  switch (documentType) {
-    case 'invoice':
-      return 'Rechnung'
-    case 'cancellation':
-      return 'Stornorechnung'
-    default:
-      return documentType
-  }
-}
 
 function InvoiceDetailPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { invoiceId } = useParams()
   const { user, signOut } = useAuth()
@@ -158,6 +76,14 @@ function InvoiceDetailPage() {
     pdfErrorMessage,
     setPdfErrorMessage,
   ] = useState<string | null>(null)
+
+  const [
+    pdfSuccessMessage,
+    setPdfSuccessMessage,
+  ] = useState<string | null>(null)
+
+  const [isArchiving, setIsArchiving] =
+    useState(false)
 
   const [isDeleting, setIsDeleting] =
     useState(false)
@@ -209,7 +135,7 @@ function InvoiceDetailPage() {
       numericInvoiceId <= 0
     ) {
       setErrorMessage(
-        'Die Rechnungs-ID ist ungültig.',
+        t('invoiceDetail.invalidId'),
       )
       setIsLoading(false)
       return
@@ -239,7 +165,7 @@ function InvoiceDetailPage() {
         )
         setInvoice(loadedInvoice)
 
-        if (isAdmin) {
+        if (isAdmin && loadedInvoice.user_id !== null) {
           const loadedRecipient = await getUser(
             token,
             loadedInvoice.user_id,
@@ -274,7 +200,7 @@ function InvoiceDetailPage() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : 'Die Rechnung konnte nicht geladen werden.',
+            : t('invoiceDetail.loadFailed'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -365,10 +291,137 @@ function InvoiceDetailPage() {
       setPdfErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die PDF konnte nicht geladen werden.',
+          : t('invoiceDetail.pdf.loadFailed'),
       )
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  async function handleDraftPdfDownload(): Promise<void> {
+    if (invoice === null) {
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+
+      navigate('/login', {
+        replace: true,
+      })
+
+      return
+    }
+
+    setPdfErrorMessage(null)
+    setIsDownloading(true)
+
+    try {
+      const pdfBlob = await downloadInvoiceDraftPdf(
+        accessToken,
+        invoice.id,
+      )
+      const downloadUrl = URL.createObjectURL(pdfBlob)
+      const anchor = document.createElement('a')
+
+      anchor.href = downloadUrl
+      anchor.download = `rechnungsentwurf-${invoice.id}.pdf`
+
+      document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+
+      URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      if (
+        error instanceof InvoiceApiError &&
+        error.status === 401
+      ) {
+        signOut()
+
+        navigate('/login', {
+          replace: true,
+        })
+
+        return
+      }
+
+      setPdfErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t('invoiceReview.draftPdfFailed'),
+      )
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  function handleFinalized(
+    finalizedInvoice: Invoice,
+    warning?: string,
+    notice?: string,
+  ): void {
+    setInvoice(finalizedInvoice)
+    setPdfSuccessMessage(null)
+    setPdfErrorMessage(warning ?? null)
+    setEmailErrorMessage(null)
+    setEmailSuccessMessage(notice ?? null)
+  }
+
+  async function handleArchivePdf(): Promise<void> {
+    if (invoice === null) {
+      return
+    }
+
+    const accessToken = getAccessToken()
+
+    if (accessToken === null) {
+      signOut()
+
+      navigate('/login', {
+        replace: true,
+      })
+
+      return
+    }
+
+    setPdfErrorMessage(null)
+    setPdfSuccessMessage(null)
+    setIsArchiving(true)
+
+    try {
+      setInvoice(
+        await archiveInvoicePdf(
+          accessToken,
+          invoice.id,
+        ),
+      )
+      setPdfSuccessMessage(
+        t('invoiceDetail.pdf.generated'),
+      )
+    } catch (error) {
+      if (
+        error instanceof InvoiceApiError &&
+        error.status === 401
+      ) {
+        signOut()
+
+        navigate('/login', {
+          replace: true,
+        })
+
+        return
+      }
+
+      setPdfErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t('invoiceDetail.pdf.generateFailed'),
+      )
+    } finally {
+      setIsArchiving(false)
     }
   }
 
@@ -384,10 +437,8 @@ function InvoiceDetailPage() {
       return
     }
 
-    const documentLabel =
+    const isCancellation =
       invoice.document_type === 'cancellation'
-        ? 'Stornorechnung'
-        : 'Rechnung'
 
     const documentNumber =
       invoice.invoice_number ??
@@ -397,12 +448,19 @@ function InvoiceDetailPage() {
       !recipient.invoice_delivery_email &&
       !recipient.invoice_delivery_post
 
+    const confirmKey = isPortalNotification
+      ? isCancellation
+        ? 'invoiceDetail.email.confirmPortalCancellation'
+        : 'invoiceDetail.email.confirmPortalInvoice'
+      : isCancellation
+        ? 'invoiceDetail.email.confirmCancellation'
+        : 'invoiceDetail.email.confirmInvoice'
+
     const confirmed = window.confirm(
-      `${documentLabel} ${documentNumber} ` +
-        (isPortalNotification
-          ? 'als im Portal verfügbar melden?\n\n'
-          : 'per E-Mail versenden?\n\n') +
-        'Empfänger:\n' +
+      t(confirmKey, { number: documentNumber }) +
+        '\n\n' +
+        t('invoiceDetail.email.recipient') +
+        '\n' +
         `${invoice.recipient_name}\n` +
         recipient.email,
     )
@@ -434,11 +492,14 @@ function InvoiceDetailPage() {
       )
 
       setEmailSuccessMessage(
-        isPortalNotification
-          ? `Die Download-Benachrichtigung wurde an ` +
-            `${result.recipient_email} gesendet.`
-          : `Die ${documentLabel} wurde an ` +
-            `${result.recipient_email} gesendet.`,
+        t(
+          isPortalNotification
+            ? 'invoiceDetail.email.sentPortal'
+            : isCancellation
+              ? 'invoiceDetail.email.sentCancellation'
+              : 'invoiceDetail.email.sentInvoice',
+          { email: result.recipient_email },
+        ),
       )
     } catch (error) {
       if (
@@ -457,7 +518,7 @@ function InvoiceDetailPage() {
       setEmailErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die Rechnung konnte nicht per E-Mail gesendet werden.',
+          : t('invoiceDetail.email.failed'),
       )
     } finally {
       setIsSendingEmail(false)
@@ -503,7 +564,7 @@ function InvoiceDetailPage() {
         'iframe',
       )
 
-      printFrame.title = 'Rechnung drucken'
+      printFrame.title = t('invoiceDetail.print.frameTitle')
       printFrame.style.position = 'fixed'
       printFrame.style.right = '0'
       printFrame.style.bottom = '0'
@@ -519,7 +580,7 @@ function InvoiceDetailPage() {
           URL.revokeObjectURL(printUrl)
           reject(
             new Error(
-              'Die PDF konnte nicht zum Drucken geöffnet werden.',
+              t('invoiceDetail.print.openFailed'),
             ),
           )
         }, 15_000)
@@ -536,7 +597,7 @@ function InvoiceDetailPage() {
 
                 if (printWindow === null) {
                   throw new Error(
-                    'Das Druckfenster konnte nicht geöffnet werden.',
+                    t('invoiceDetail.print.windowFailed'),
                   )
                 }
 
@@ -578,7 +639,7 @@ function InvoiceDetailPage() {
       setPdfErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die PDF konnte nicht gedruckt werden.',
+          : t('invoiceDetail.print.failed'),
       )
     } finally {
       setIsPrinting(false)
@@ -634,7 +695,7 @@ function InvoiceDetailPage() {
             },
       )
       setExportSuccessMessage(
-        `Die PDF wurde nach ${result.remote_path} exportiert.`,
+        t('invoiceDetail.exported', { path: result.remote_path }),
       )
     } catch (error) {
       if (
@@ -649,7 +710,7 @@ function InvoiceDetailPage() {
       setExportErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Die PDF konnte nicht per SFTP exportiert werden.',
+          : t('invoiceDetail.exportFailed'),
       )
     } finally {
       setIsExporting(false)
@@ -665,13 +726,12 @@ function InvoiceDetailPage() {
       return
     }
 
-    const documentLabel =
-      invoice.document_type === 'cancellation'
-        ? 'Stornoentwurf'
-        : 'Rechnungsentwurf'
-
     const confirmed = window.confirm(
-      `Soll dieser ${documentLabel} wirklich gelöscht werden?`,
+      t(
+        invoice.document_type === 'cancellation'
+          ? 'invoiceDetail.deleteConfirmCancellation'
+          : 'invoiceDetail.deleteConfirmInvoice',
+      ),
     )
 
     if (!confirmed) {
@@ -719,7 +779,7 @@ function InvoiceDetailPage() {
       setDeleteErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Der Entwurf konnte nicht gelöscht werden.',
+          : t('invoiceDetail.deleteFailed'),
       )
     } finally {
       setIsDeleting(false)
@@ -731,7 +791,7 @@ function InvoiceDetailPage() {
       <div className="page">
         <section className="card">
           <p className="muted">
-            Rechnung wird geladen …
+            {t('invoiceDetail.loading')}
           </p>
         </section>
       </div>
@@ -748,7 +808,7 @@ function InvoiceDetailPage() {
           className="back-link"
           to="/invoices"
         >
-          ← Zurück zu den Rechnungen
+          {t('invoiceDetail.back')}
         </Link>
 
         <section
@@ -756,7 +816,7 @@ function InvoiceDetailPage() {
           role="alert"
         >
           {errorMessage ??
-            'Die Rechnung wurde nicht gefunden.'}
+            t('invoiceDetail.notFound')}
         </section>
       </div>
     )
@@ -786,7 +846,7 @@ function InvoiceDetailPage() {
           className="back-link"
           to="/invoices"
         >
-          ← Zurück zu den Rechnungen
+          {t('invoiceDetail.back')}
         </Link>
 
         {isAdmin && invoice.status === 'draft' && (
@@ -799,8 +859,8 @@ function InvoiceDetailPage() {
             }}
           >
             {isDeleting
-              ? 'Entwurf wird gelöscht …'
-              : 'Entwurf löschen'}
+              ? t('invoiceDetail.deleting')
+              : t('invoiceDetail.delete')}
           </button>
         )}
 
@@ -819,10 +879,10 @@ function InvoiceDetailPage() {
             }}
           >
             {isSendingEmail
-              ? 'E-Mail wird gesendet …'
+              ? t('invoiceDetail.email.sending')
               : isPortalDelivery
-                ? 'Download-Nachricht senden'
-                : 'Per E-Mail senden'}
+                ? t('invoiceDetail.email.sendPortal')
+                : t('invoiceDetail.email.send')}
           </button>
         )}
 
@@ -840,8 +900,8 @@ function InvoiceDetailPage() {
             }}
           >
             {isPrinting
-              ? 'Druck wird vorbereitet …'
-              : 'PDF drucken'}
+              ? t('invoiceDetail.printing')
+              : t('invoiceDetail.print')}
           </button>
         )}
 
@@ -859,120 +919,168 @@ function InvoiceDetailPage() {
             }}
           >
             {isExporting
-              ? 'PDF wird exportiert …'
-              : 'PDF per SFTP exportieren'}
+              ? t('invoiceDetail.exporting')
+              : t('invoiceDetail.export')}
           </button>
         )}
 
-        <button
-          className="button button-primary"
-          type="button"
-          disabled={
-            !hasArchivedPdf ||
-            isDownloading
-          }
-          onClick={() => {
-            void handlePdfDownload()
-          }}
-        >
-          {isDownloading
-            ? 'PDF wird geladen …'
-            : 'PDF herunterladen'}
-        </button>
+        {isAdmin &&
+          invoice.status === 'finalized' &&
+          !hasArchivedPdf && (
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={isArchiving}
+            onClick={() => {
+              void handleArchivePdf()
+            }}
+          >
+            {isArchiving
+              ? t('invoiceDetail.pdf.generating')
+              : t('invoiceDetail.pdf.generate')}
+          </button>
+        )}
+
+        {invoice.status === 'draft' &&
+        invoice.document_type === 'invoice' ? (
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={isDownloading}
+            onClick={() => {
+              void handleDraftPdfDownload()
+            }}
+          >
+            {isDownloading
+              ? t('invoiceReview.draftPdfLoading')
+              : t('invoiceReview.draftPdf')}
+          </button>
+        ) : (
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={
+              !hasArchivedPdf ||
+              isDownloading
+            }
+            onClick={() => {
+              void handlePdfDownload()
+            }}
+          >
+            {isDownloading
+              ? t('invoiceDetail.pdf.downloading')
+              : t('invoiceDetail.pdf.download')}
+          </button>
+        )}
       </div>
 
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            {getDocumentTypeLabel(
+            {documentTypeLabel(
+              t,
               invoice.document_type,
             )}
           </p>
 
           <h1>
             {invoice.invoice_number ??
-              `Entwurf #${invoice.id}`}
+              t('common.draftNumber', { id: invoice.id })}
           </h1>
 
           <p className="muted">
-            Empfänger: {invoice.recipient_name}
+            {t('invoiceDetail.recipientLine', { name: invoice.recipient_name })}
           </p>
         </div>
 
-        <span
-          className={
-            invoice.status === 'finalized'
-              ? 'status-badge status-finalized'
-              : 'status-badge status-draft'
-          }
-        >
-          {getStatusLabel(invoice.status)}
+        <span className={invoiceBadge(t, invoice).className}>
+          {invoiceBadge(t, invoice).label}
         </span>
       </header>
 
-      {deleteErrorMessage && (
+      <InvoiceReviewPanel
+        invoice={invoice}
+        isAdmin={isAdmin}
+        onChanged={setInvoice}
+      />
+
+      <SystemMessage
+        kind="error"
+        message={deleteErrorMessage}
+        onClose={() => {
+          setDeleteErrorMessage(null)
+        }}
+      />
+
+      {isAdmin &&
+        invoice.status === 'finalized' &&
+        !hasArchivedPdf &&
+        !pdfErrorMessage && (
         <section
           className="form-error detail-error"
-          role="alert"
-        >
-          {deleteErrorMessage}
-        </section>
-      )}
-
-      {pdfErrorMessage && (
-        <section
-          className="form-error detail-error"
-          role="alert"
-        >
-          {pdfErrorMessage}
-        </section>
-      )}
-
-      {emailErrorMessage && (
-        <section
-          className="form-error detail-error"
-          role="alert"
-        >
-          {emailErrorMessage}
-        </section>
-      )}
-
-      {emailSuccessMessage && (
-        <section
-          className="form-success detail-error"
           role="status"
         >
-          {emailSuccessMessage}
+          {t('invoiceDetail.pdf.missingHint')}
         </section>
       )}
 
-      {exportErrorMessage && (
-        <section
-          className="form-error detail-error"
-          role="alert"
-        >
-          {exportErrorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={pdfErrorMessage}
+        onClose={() => {
+          setPdfErrorMessage(null)
+        }}
+      />
 
-      {exportSuccessMessage && (
-        <section
-          className="form-success detail-error"
-          role="status"
-        >
-          {exportSuccessMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="success"
+        message={pdfSuccessMessage}
+        onClose={() => {
+          setPdfSuccessMessage(null)
+        }}
+      />
+
+      <SystemMessage
+        kind="error"
+        message={emailErrorMessage}
+        onClose={() => {
+          setEmailErrorMessage(null)
+        }}
+      />
+
+      <SystemMessage
+        kind="success"
+        message={emailSuccessMessage}
+        onClose={() => {
+          setEmailSuccessMessage(null)
+        }}
+      />
+
+      <SystemMessage
+        kind="error"
+        message={exportErrorMessage}
+        onClose={() => {
+          setExportErrorMessage(null)
+        }}
+      />
+
+      <SystemMessage
+        kind="success"
+        message={exportSuccessMessage}
+        onClose={() => {
+          setExportSuccessMessage(null)
+        }}
+      />
 
       <section className="invoice-summary-grid">
         <article className="card">
           <p className="eyebrow">
-            Rechnungsdaten
+            {t('invoiceDetail.data.eyebrow')}
           </p>
 
           <dl className="detail-list">
             <div>
-              <dt>Rechnungsdatum</dt>
+              <dt>{t('invoiceDetail.data.issueDate')}</dt>
               <dd>
                 {formatDate(
                   invoice.issue_date,
@@ -981,7 +1089,7 @@ function InvoiceDetailPage() {
             </div>
 
             <div>
-              <dt>Fälligkeitsdatum</dt>
+              <dt>{t('invoiceDetail.data.dueDate')}</dt>
               <dd>
                 {formatDate(
                   invoice.due_date,
@@ -990,22 +1098,19 @@ function InvoiceDetailPage() {
             </div>
 
             <div>
-              <dt>Leistungszeitraum</dt>
+              <dt>{t('invoiceDetail.data.servicePeriod')}</dt>
               <dd>
-                {formatDateTime(
+                {formatServicePeriod(
                   invoice.service_period_start,
-                )}
-                {' – '}
-                {formatDateTime(
                   invoice.service_period_end,
                 )}
               </dd>
             </div>
 
             <div>
-              <dt>Erstellt</dt>
+              <dt>{t('invoiceDetail.data.created')}</dt>
               <dd>
-                {formatDateTime(
+                {formatUtcDateTime(
                   invoice.created_at,
                 )}
               </dd>
@@ -1014,9 +1119,9 @@ function InvoiceDetailPage() {
             {isAdmin &&
               invoice.pdf_exported_at !== null && (
               <div>
-                <dt>Zuletzt per SFTP exportiert</dt>
+                <dt>{t('invoiceDetail.data.lastExport')}</dt>
                 <dd>
-                  {formatDateTime(
+                  {formatUtcDateTime(
                     invoice.pdf_exported_at,
                   )}
                   {invoice.pdf_export_remote_path && (
@@ -1035,7 +1140,7 @@ function InvoiceDetailPage() {
 
         <article className="card">
           <p className="eyebrow">
-            Rechnungsempfänger
+            {t('invoiceDetail.recipient.eyebrow')}
           </p>
 
           <h2>{invoice.recipient_name}</h2>
@@ -1043,36 +1148,46 @@ function InvoiceDetailPage() {
           <p className="invoice-address">
             {invoice.recipient_address}
           </p>
+
+          {invoice.user_id === null && (
+            <p className="muted">
+              {t('invoiceDetail.recipient.deleted')}
+            </p>
+          )}
         </article>
 
         <article className="card summary-card">
           <p className="eyebrow">
-            Summen
+            {t('invoiceDetail.totals.eyebrow')}
           </p>
 
           <dl className="detail-list">
-            <div>
-              <dt>Netto</dt>
-              <dd>
-                {formatCurrency(
-                  invoice.total_net,
-                  invoice.currency,
-                )}
-              </dd>
-            </div>
+            {!invoice.vat_exempt && (
+              <>
+                <div>
+                  <dt>{t('invoiceDetail.totals.net')}</dt>
+                  <dd>
+                    {formatCurrency(
+                      invoice.total_net,
+                      invoice.currency,
+                    )}
+                  </dd>
+                </div>
 
-            <div>
-              <dt>Umsatzsteuer</dt>
-              <dd>
-                {formatCurrency(
-                  invoice.vat_amount,
-                  invoice.currency,
-                )}
-              </dd>
-            </div>
+                <div>
+                  <dt>{t('invoiceDetail.totals.vat')}</dt>
+                  <dd>
+                    {formatCurrency(
+                      invoice.vat_amount,
+                      invoice.currency,
+                    )}
+                  </dd>
+                </div>
+              </>
+            )}
 
             <div className="invoice-total-row">
-              <dt>Gesamt</dt>
+              <dt>{t('invoiceDetail.totals.total')}</dt>
               <dd>
                 {formatCurrency(
                   invoice.total_gross,
@@ -1081,6 +1196,10 @@ function InvoiceDetailPage() {
               </dd>
             </div>
           </dl>
+
+          {invoice.vat_exempt && invoice.vat_exemption_note && (
+            <p className="muted">{invoice.vat_exemption_note}</p>
+          )}
         </article>
       </section>
 
@@ -1089,7 +1208,9 @@ function InvoiceDetailPage() {
         invoice.document_type === 'invoice' && (
           <InvoiceFinalizeForm
             invoiceId={invoice.id}
-            onFinalized={setInvoice}
+            onFinalized={handleFinalized}
+            canNotifyCustomer={canSendInvoiceEmail}
+            notifyByDefault={invoice.review_status !== null}
           />
       )}
 
@@ -1099,7 +1220,7 @@ function InvoiceDetailPage() {
           'cancellation' && (
           <InvoiceCancellationFinalizeForm
             cancellationId={invoice.id}
-            onFinalized={setInvoice}
+            onFinalized={handleFinalized}
           />
       )}
 
@@ -1107,12 +1228,12 @@ function InvoiceDetailPage() {
         'cancellation' && (
         <section className="card detail-section">
           <p className="eyebrow">
-            Stornierung
+            {t('invoiceDetail.cancellation.eyebrow')}
           </p>
 
           <dl className="detail-list">
             <div>
-              <dt>Originalrechnung</dt>
+              <dt>{t('invoiceDetail.cancellation.original')}</dt>
               <dd>
                 {invoice.original_invoice_id
                   ? `#${invoice.original_invoice_id}`
@@ -1121,7 +1242,7 @@ function InvoiceDetailPage() {
             </div>
 
             <div>
-              <dt>Stornogrund</dt>
+              <dt>{t('invoiceDetail.cancellation.reason')}</dt>
               <dd>
                 {invoice.cancellation_reason ??
                   '–'}
@@ -1135,37 +1256,44 @@ function InvoiceDetailPage() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">
-              Positionen
+              {t('invoiceDetail.items.eyebrow')}
             </p>
 
             <h2>
-              {invoice.items.length}{' '}
-              {invoice.items.length === 1
-                ? 'Position'
-                : 'Positionen'}
+              {t('invoiceDetail.items.count', {
+                count: invoice.items.length,
+              })}
             </h2>
           </div>
         </div>
 
         <div className="table-scroll">
-          <table className="data-table">
+          <table className="data-table invoice-items-table">
             <thead>
               <tr>
-                <th>Pos.</th>
-                <th>Beschreibung</th>
-                <th>Zeitraum</th>
-                <th>Ladestation</th>
-                <th className="table-number">
-                  Energie
+                <th>{t('invoiceDetail.items.position')}</th>
+                <th className="invoice-item-description">
+                  {t('invoiceDetail.items.description')}
                 </th>
+                <th>{t('invoiceDetail.items.period')}</th>
+                <th>{t('invoiceDetail.items.station')}</th>
                 <th className="table-number">
-                  Netto
+                  {t('invoiceDetail.items.energy')}
                 </th>
+                {!invoice.vat_exempt && (
+                  <>
+                    <th className="table-number">
+                      {t('invoiceDetail.items.net')}
+                    </th>
+                    <th className="table-number">
+                      {t('invoiceDetail.items.vat')}
+                    </th>
+                  </>
+                )}
                 <th className="table-number">
-                  USt.
-                </th>
-                <th className="table-number">
-                  Brutto
+                  {invoice.vat_exempt
+                    ? t('invoiceDetail.items.amount')
+                    : t('invoiceDetail.items.gross')}
                 </th>
               </tr>
             </thead>
@@ -1177,7 +1305,7 @@ function InvoiceDetailPage() {
                     {item.position_number}
                   </td>
 
-                  <td>
+                  <td className="invoice-item-description">
                     <strong>
                       {item.description}
                     </strong>
@@ -1187,13 +1315,13 @@ function InvoiceDetailPage() {
                     {item.item_type ===
                     'charging_session' ? (
                       <>
-                        {formatDateTime(
+                        {formatLocalDateTime(
                           item.session_start,
                         )}
                         <br />
                         <span className="muted">
-                          bis{' '}
-                          {formatDateTime(
+                          {t('common.until')}{' '}
+                          {formatLocalDateTime(
                             item.session_end,
                           )}
                         </span>
@@ -1213,19 +1341,23 @@ function InvoiceDetailPage() {
                         )} kWh`}
                   </td>
 
-                  <td className="table-number">
-                    {formatCurrency(
-                      item.net_amount,
-                      invoice.currency,
-                    )}
-                  </td>
+                  {!invoice.vat_exempt && (
+                    <>
+                      <td className="table-number">
+                        {formatCurrency(
+                          item.net_amount,
+                          invoice.currency,
+                        )}
+                      </td>
 
-                  <td className="table-number">
-                    {formatCurrency(
-                      item.vat_amount,
-                      invoice.currency,
-                    )}
-                  </td>
+                      <td className="table-number">
+                        {formatCurrency(
+                          item.vat_amount,
+                          invoice.currency,
+                        )}
+                      </td>
+                    </>
+                  )}
 
                   <td className="table-number">
                     <strong>
@@ -1244,7 +1376,8 @@ function InvoiceDetailPage() {
       {isAdmin &&
         invoice.status === 'finalized' &&
         invoice.document_type === 'invoice' &&
-        invoice.cancelled_at === null && (
+        invoice.cancelled_at === null &&
+        invoice.user_id !== null && (
           <InvoiceCancellationCreateForm
             invoiceId={invoice.id}
           />

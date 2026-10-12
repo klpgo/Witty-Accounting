@@ -40,7 +40,7 @@ def create_test_workbook(path: Path) -> None:
             "Ja",
             0,
             "0 %",
-            "Wartung Gottschalk (DE0D02A6)",
+            "Wartung Muster (A1B2C3D4)",
             "WB5",
         ]
     )
@@ -101,10 +101,10 @@ def test_parse_duration_rejects_invalid_values(
 @pytest.mark.parametrize(
     ("authentication", "expected"),
     [
-        ("Wartung Gottschalk (DE0D02A6)", "DE0D02A6"),
-        ("RFID Nr.4 (6005E5AC)", "6005E5AC"),
-        ("RFID N.3 (D0BEEEAC)", "D0BEEEAC"),
-        ("RFID Nr.5 (e033f68c)", "E033F68C"),
+        ("Wartung Muster (A1B2C3D4)", "A1B2C3D4"),
+        ("RFID Nr.4 (C3D4E5F6)", "C3D4E5F6"),
+        ("RFID N.3 (B2C3D4E5)", "B2C3D4E5"),
+        ("RFID Nr.5 (b8c9d0e1)", "B8C9D0E1"),
         ("Keine Authentifizierung", None),
         ("", None),
         ("Unbekannter Text", None),
@@ -124,14 +124,14 @@ def test_create_import_hash_is_stable() -> None:
         start_time=start_time,
         station="WB5",
         energy=1.234,
-        rfid="DE0D02A6",
+        rfid="A1B2C3D4",
     )
 
     second_hash = create_import_hash(
         start_time=start_time,
         station="WB5",
         energy=1.234,
-        rfid="DE0D02A6",
+        rfid="A1B2C3D4",
     )
 
     assert first_hash == second_hash
@@ -145,14 +145,14 @@ def test_create_import_hash_changes_with_session_data() -> None:
         start_time=start_time,
         station="WB5",
         energy=1.234,
-        rfid="DE0D02A6",
+        rfid="A1B2C3D4",
     )
 
     second_hash = create_import_hash(
         start_time=start_time,
         station="WB4",
         energy=1.234,
-        rfid="DE0D02A6",
+        rfid="A1B2C3D4",
     )
 
     assert first_hash != second_hash
@@ -187,7 +187,7 @@ def test_import_xlsx_parses_sessions(
         29,
     )
     assert first_session["station_id"] == "WB5"
-    assert first_session["rfid"] == "DE0D02A6"
+    assert first_session["rfid"] == "A1B2C3D4"
     assert first_session["energy_total_kwh"] == 0.0
     assert first_session["energy_pv_kwh"] == 0.0
     assert first_session["source"] == "xlsx"
@@ -224,7 +224,7 @@ def test_import_xlsx_rejects_missing_file(
 
     with pytest.raises(
         FileNotFoundError,
-        match="XLSX-Datei nicht gefunden",
+        match="XLSX file not found",
     ):
         import_xlsx(missing_path)
 
@@ -246,7 +246,7 @@ def test_import_xlsx_reports_invalid_duration(
             "Ja",
             0.0,
             "0 %",
-            "RFID Nr.1 (6AA972EA)",
+            "RFID Nr.1 (D4E5F6A7)",
             "WB2",
         ]
     )
@@ -255,7 +255,7 @@ def test_import_xlsx_reports_invalid_duration(
 
     with pytest.raises(
         ValueError,
-        match="Fehler in XLSX-Zeile 2",
+        match="Error in XLSX row 2",
     ):
         import_xlsx(xlsx_path)
 
@@ -282,6 +282,6 @@ def test_import_xlsx_rejects_invalid_headers(
 
     with pytest.raises(
         ValueError,
-        match="Ungültige XLSX-Kopfzeile",
+        match="Invalid XLSX header row",
     ):
         import_xlsx(xlsx_path)

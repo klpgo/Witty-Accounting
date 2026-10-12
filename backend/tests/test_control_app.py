@@ -12,10 +12,20 @@ from sqlalchemy.pool import StaticPool
 
 from app.config import Settings
 from app.control.auth import ControlAuthenticationError, ControlAuthenticator
+from app.control.i18n import MESSAGES, UI_TEXTS, set_language, tr
 from app.control.main import create_control_app
 from app.control.service import TenantControlError, TenantControlService
 from app.tenancy.models import ControlBase, Tenant, TenantDomain
 from app.tenancy.secrets import encrypt_tenant_db_password
+
+
+@pytest.fixture(autouse=True)
+def default_control_language():
+    # die Sprache wird modulweit gespeichert: vor und nach jedem Test auf
+    # den Standard setzen, damit Tests sich nicht gegenseitig beeinflussen
+    set_language(None)
+    yield
+    set_language(None)
 
 
 def make_settings(tmp_path: Path, **overrides) -> Settings:
@@ -176,7 +186,7 @@ def test_control_session_expires() -> None:
     auth.verify_session(token)
     now[0] += 61
 
-    with pytest.raises(ControlAuthenticationError, match="abgelaufen"):
+    with pytest.raises(ControlAuthenticationError, match="expired"):
         auth.verify_session(token)
 
 
@@ -351,7 +361,7 @@ def test_set_name_rejects_empty_name(
         control_engine=control_engine,
     )
 
-    with pytest.raises(TenantControlError, match="nicht leer"):
+    with pytest.raises(TenantControlError, match="must not be empty"):
         service.set_name(tenant_id, name="   ")
 
 
@@ -399,7 +409,7 @@ def test_set_hostname_rejects_registered_hostname(
         control_engine=control_engine,
     )
 
-    with pytest.raises(TenantControlError, match="bereits registriert"):
+    with pytest.raises(TenantControlError, match="already registered"):
         service.set_hostname(
             tenant_id,
             hostname="other.example.test",
@@ -421,5 +431,63 @@ def test_delete_refuses_unexpected_database_name(
         settings=settings,
         control_engine=control_engine,
     )
-    with pytest.raises(TenantControlError, match="Datenbankname"):
+    with pytest.raises(TenantControlError, match="Database name"):
         service.delete_tenant(tenant_id, confirmation="wb42")
+
+
+
+def test_control_language_defaults_to_english(tmp_path: Path) -> None:
+    app = create_control_app(make_settings(tmp_path), service=DummyService())
+    client = TestClient(app)
+
+    body = client.get("/api/i18n").json()
+
+    assert body["language"] == "en"
+    assert body["texts"]["login.title"] == "Sign in"
+    response = client.post("/api/login", json={"password": "wrong"})
+    assert response.json()["detail"] == "The password is incorrect."
+
+
+def test_control_language_german(tmp_path: Path) -> None:
+    app = create_control_app(
+        make_settings(tmp_path, witty_control_language="de"),
+        service=DummyService(),
+    )
+    client = TestClient(app)
+
+    body = client.get("/api/i18n").json()
+
+    assert body["language"] == "de"
+    assert body["texts"]["login.title"] == "Anmelden"
+    response = client.post("/api/login", json={"password": "wrong"})
+    assert response.json()["detail"] == "Das Passwort ist falsch."
+
+
+def test_unknown_control_language_falls_back_to_english(tmp_path: Path) -> None:
+    create_control_app(
+        make_settings(tmp_path, witty_control_language="fr"),
+        service=DummyService(),
+    )
+
+    assert tr("tenant.notFound") == "The tenant was not found."
+
+
+def test_control_texts_are_complete_in_both_languages() -> None:
+    import re
+
+    for key, entry in {**MESSAGES, **UI_TEXTS}.items():
+        assert set(entry) == {"en", "de"}, key
+        assert set(re.findall(r"\{(\w+)\}", entry["en"])) == set(
+            re.findall(r"\{(\w+)\}", entry["de"])
+        ), key
+
+
+def test_control_page_uses_only_known_texts() -> None:
+    import re
+
+    static = Path(__file__).parents[1] / "app" / "control" / "static"
+    keys = set(re.findall(r'data-i18n="([^"]+)"', (static / "index.html").read_text()))
+    keys |= set(re.findall(r'\bt\("([^"]+)"', (static / "app.js").read_text()))
+
+    assert keys
+    assert keys <= set(UI_TEXTS)

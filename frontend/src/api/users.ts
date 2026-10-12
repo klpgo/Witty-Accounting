@@ -1,3 +1,5 @@
+import { readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -16,6 +18,7 @@ export interface User {
   last_login: string | null
   created_at: string
   updated_at: string
+  language?: string | null
 }
 
 export interface UserProfileUpdate {
@@ -26,6 +29,8 @@ export interface UserProfileUpdate {
   phone?: string | null
   invoice_delivery_email?: boolean
   invoice_delivery_post?: boolean
+  // null = Standardsprache des Mandanten
+  language?: string | null
 }
 
 export interface UserAdminUpdate
@@ -77,10 +82,6 @@ export function getInvoiceDeliveryFlags(
   }
 }
 
-interface ApiErrorResponse {
-  detail?: string
-}
-
 export class UserApiError extends Error {
   readonly status: number
 
@@ -92,23 +93,6 @@ export class UserApiError extends Error {
     this.name = 'UserApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (body.detail) {
-      return body.detail
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Anfrage fehlgeschlagen (${response.status}).`
 }
 
 function createHeaders(
@@ -139,7 +123,7 @@ export async function getOwnProfile(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -165,7 +149,7 @@ export async function updateOwnProfile(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -195,7 +179,7 @@ export async function changeOwnPassword(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -215,7 +199,7 @@ export async function listUsers(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -238,7 +222,7 @@ export async function getUser(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -264,7 +248,7 @@ export async function createUser(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -291,7 +275,7 @@ export async function updateUser(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -320,7 +304,73 @@ export async function resetUserPassword(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
+      response.status,
+    )
+  }
+}
+
+export interface UserDeletionBlocker {
+  code: string
+  count: number
+  message: string
+  discardable: boolean
+}
+
+export interface UserDeletionCheck {
+  user_id: number
+  can_delete: boolean
+  can_delete_with_discard: boolean
+  blockers: UserDeletionBlocker[]
+  charging_sessions: number
+  base_fees: number
+  rfid_assignments: number
+  invoices_kept: number
+}
+
+export async function getUserDeletionCheck(
+  accessToken: string,
+  userId: number,
+  signal?: AbortSignal,
+): Promise<UserDeletionCheck> {
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}/deletion-check`,
+    {
+      headers: createHeaders(accessToken),
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await readApiError(response),
+      response.status,
+    )
+  }
+
+  return (await response.json()) as UserDeletionCheck
+}
+
+export async function deleteUser(
+  accessToken: string,
+  userId: number,
+  discardUnbilled: boolean,
+): Promise<void> {
+  const query = discardUnbilled
+    ? '?discard_unbilled=true'
+    : ''
+
+  const response = await fetch(
+    `${API_BASE_URL}/users/${userId}${query}`,
+    {
+      method: 'DELETE',
+      headers: createHeaders(accessToken),
+    },
+  )
+
+  if (!response.ok) {
+    throw new UserApiError(
+      await readApiError(response),
       response.status,
     )
   }

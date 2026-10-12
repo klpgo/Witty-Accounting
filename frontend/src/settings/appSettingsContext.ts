@@ -7,6 +7,10 @@ export type AppSettingsStatus =
 export interface AppSettingsContextValue {
   appName: string
   tenantName: string
+  // Standardsprache des Mandanten ('de' | 'en')
+  defaultLanguage: string
+  // Umsatzsteuer ausweisen (aus bei Kleinunternehmern)
+  vatEnabled: boolean
   status: AppSettingsStatus
   refreshSettings: () => Promise<void>
 }

@@ -102,8 +102,7 @@ def migrate_active_tenants(
 
     if tenant_slug is not None and not selected_tenants:
         raise ValueError(
-            "Der angegebene aktive Mandant wurde "
-            "nicht gefunden."
+            "The given active tenant was not found."
         )
 
     results: list[TenantMigrationResult] = []

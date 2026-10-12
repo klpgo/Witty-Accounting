@@ -1,3 +1,28 @@
+// Texte in der Sprache der Server-Konfiguration (WITTY_CONTROL_LANGUAGE)
+let texts = {};
+
+function t(key, params = {}) {
+  let text = texts[key] || key;
+  for (const [name, value] of Object.entries(params)) {
+    text = text.replaceAll(`{${name}}`, String(value));
+  }
+  return text;
+}
+
+async function loadTexts() {
+  try {
+    const response = await fetch("/api/i18n");
+    const body = await response.json();
+    texts = body.texts || {};
+    document.documentElement.lang = body.language || "en";
+  } catch {
+    texts = {};
+  }
+  document.querySelectorAll("[data-i18n]").forEach((element) => {
+    element.textContent = t(element.dataset.i18n);
+  });
+}
+
 const state = {
   csrf: null,
   tenants: [],
@@ -31,7 +56,7 @@ function requestHeaders(options = {}) {
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: requestHeaders(options) });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail || "Die Anfrage ist fehlgeschlagen.");
+  if (!response.ok) throw new Error(body.detail || t("error.request"));
   return body;
 }
 
@@ -44,11 +69,11 @@ function setMessage(text, error = false) {
 function beginDeleteProgress(tenant) {
   state.deletingTenantId = tenant.id;
   deleteProgressTitle.textContent = `${tenant.name} (${tenant.code})`;
-  deleteProgressState.textContent = "Läuft";
+  deleteProgressState.textContent = t("progress.running");
   deleteProgressState.className = "progress-state";
   deleteProgressSteps.replaceChildren();
   deleteProgress.classList.remove("hidden");
-  appendDeleteProgress("Löschauftrag wird geprüft …", "current");
+  appendDeleteProgress(t("progress.checking"), "current");
   renderTenants();
 }
 
@@ -67,14 +92,14 @@ function appendDeleteProgress(text, status) {
 function showDeleteEvent(event) {
   if (event.type === "error") {
     appendDeleteProgress(event.message, "error");
-    deleteProgressState.textContent = "Fehler";
+    deleteProgressState.textContent = t("progress.error");
     deleteProgressState.className = "progress-state error";
     return;
   }
 
   if (event.type === "complete") {
     appendDeleteProgress(event.message, "done");
-    deleteProgressState.textContent = "Fertig";
+    deleteProgressState.textContent = t("progress.done");
     deleteProgressState.className = "progress-state complete";
     return;
   }
@@ -100,10 +125,10 @@ async function deleteTenantWithProgress(tenant, payload) {
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || "Die Löschung konnte nicht gestartet werden.");
+    throw new Error(body.detail || t("error.deleteStart"));
   }
   if (!response.body) {
-    throw new Error("Der Löschfortschritt konnte nicht empfangen werden.");
+    throw new Error(t("error.deleteProgress"));
   }
 
   const reader = response.body.getReader();
@@ -130,7 +155,7 @@ async function deleteTenantWithProgress(tenant, payload) {
   processLine(buffer);
 
   if (!completed) {
-    throw new Error("Die Löschung wurde ohne Abschlussmeldung beendet.");
+    throw new Error(t("error.deleteNoCompletion"));
   }
 }
 
@@ -154,7 +179,7 @@ function renderTenants() {
   if (!state.tenants.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "Noch keine Mandanten vorhanden.";
+    empty.textContent = t("list.empty");
     tenantList.append(empty);
     return;
   }
@@ -168,24 +193,29 @@ function renderTenants() {
         <span class="status"></span>
       </div>
       <dl class="tenant-meta">
-        <dt>Hostname</dt><dd class="hostname"></dd>
-        <dt>Datenbank</dt><dd class="database"></dd>
+        <dt class="label-hostname"></dt><dd class="hostname"></dd>
+        <dt class="label-database"></dt><dd class="database"></dd>
       </dl>
       <div class="tenant-actions">
-        <button class="secondary edit-button" type="button">Anzeigename ändern</button>
-        <button class="secondary hostname-button" type="button">Hostname ändern</button>
+        <button class="secondary edit-button" type="button"></button>
+        <button class="secondary hostname-button" type="button"></button>
         <button class="secondary state-button" type="button"></button>
-        <button class="danger delete-button" type="button">Löschen</button>
+        <button class="danger delete-button" type="button"></button>
       </div>`;
+    card.querySelector(".label-hostname").textContent = t("list.hostname");
+    card.querySelector(".label-database").textContent = t("list.database");
+    card.querySelector(".edit-button").textContent = t("list.rename");
+    card.querySelector(".hostname-button").textContent = t("list.changeHostname");
+    card.querySelector(".delete-button").textContent = t("list.delete");
     card.querySelector("h4").textContent = tenant.name;
     card.querySelector(".code").textContent = tenant.code;
     card.querySelector(".hostname").textContent = tenant.hostname;
     card.querySelector(".database").textContent = tenant.db_name;
     const status = card.querySelector(".status");
-    status.textContent = tenant.active ? "Aktiv" : "Gesperrt";
+    status.textContent = tenant.active ? t("list.active") : t("list.locked");
     status.classList.add(tenant.active ? "active" : "blocked");
     const stateButton = card.querySelector(".state-button");
-    stateButton.textContent = tenant.active ? "Sperren" : "Entsperren";
+    stateButton.textContent = tenant.active ? t("list.lock") : t("list.unlock");
     stateButton.addEventListener("click", () => changeState(tenant));
     const editButton = card.querySelector(".edit-button");
     const hostnameButton = card.querySelector(".hostname-button");
@@ -210,7 +240,7 @@ async function changeState(tenant) {
       body: JSON.stringify({ active: !tenant.active }),
     });
     await loadTenants();
-    setMessage(tenant.active ? "Mandant wurde gesperrt." : "Mandant wurde entsperrt.");
+    setMessage(tenant.active ? t("state.locked") : t("state.unlocked"));
   } catch (error) { setMessage(error.message, true); }
 }
 
@@ -234,7 +264,7 @@ function openHostname(tenant) {
 
 function openDelete(tenant) {
   state.deleteTenant = tenant;
-  document.querySelector("#delete-title").textContent = `${tenant.name} löschen`;
+  document.querySelector("#delete-title").textContent = t("delete.titleNamed", { name: tenant.name });
   document.querySelector("#delete-code").textContent = tenant.code;
   document.querySelector("#delete-confirmation").value = "";
   document.querySelector("#delete-password").value = "";
@@ -263,21 +293,21 @@ document.querySelector("#create-form").addEventListener("submit", async (event) 
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   if (data.admin_password !== document.querySelector("#admin-password-confirmation").value) {
-    setMessage("Die Admin-Passwörter stimmen nicht überein.", true);
+    setMessage(t("create.passwordMismatch"), true);
     return;
   }
   const submit = form.querySelector("button[type=submit]");
   submit.disabled = true;
-  submit.textContent = "Mandant wird angelegt …";
+  submit.textContent = t("create.submitting");
   try {
     await api("/api/tenants", { method: "POST", body: JSON.stringify(data) });
     form.reset();
     await loadTenants();
-    setMessage("Mandant, Datenbank und erster Administrator wurden angelegt.");
+    setMessage(t("create.done"));
   } catch (error) { setMessage(error.message, true); }
   finally {
     submit.disabled = false;
-    submit.textContent = "Mandant vollständig anlegen";
+    submit.textContent = t("create.submit");
   }
 });
 
@@ -295,7 +325,7 @@ document.querySelector("#edit-form").addEventListener("submit", async (event) =>
     editDialog.close();
     state.editTenant = null;
     await loadTenants();
-    setMessage("Der Anzeigename wurde geändert.");
+    setMessage(t("edit.done"));
   } catch (error) { setMessage(error.message, true); }
   finally { submit.disabled = false; }
 });
@@ -316,7 +346,7 @@ document.querySelector("#hostname-form").addEventListener("submit", async (event
     hostnameDialog.close();
     state.hostnameTenant = null;
     await loadTenants();
-    setMessage("Der Hostname wurde geändert.");
+    setMessage(t("hostname.done"));
   } catch (error) { setMessage(error.message, true); }
   finally { submit.disabled = false; }
 });
@@ -338,7 +368,7 @@ document.querySelector("#delete-form").addEventListener("submit", async (event) 
   try {
     await deleteTenantWithProgress(tenant, payload);
     await loadTenants();
-    setMessage("Mandant, Datenbank und Rechnungsarchiv wurden vollständig gelöscht.");
+    setMessage(t("delete.done"));
   } catch (error) {
     showDeleteError(error.message);
     setMessage(error.message, true);
@@ -360,7 +390,8 @@ document.querySelector("#logout-button").addEventListener("click", async () => {
   showApp(false);
 });
 
-api("/api/session")
+loadTexts()
+  .then(() => api("/api/session"))
   .then(async (session) => {
     state.csrf = session.csrf_token;
     showApp(true);

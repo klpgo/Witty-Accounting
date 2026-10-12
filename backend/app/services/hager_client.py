@@ -1,0 +1,459 @@
+"""
+Hager-Cloud-Client: Anmeldung und Abruf der Ladesessions ohne Browser.
+
+Ablauf (aus der Aufzeichnung von `discover-login` abgeleitet):
+  1. E3/DC-SAML-Login  -> Keycloak (auth.hagerenergy.com) -> login.hager.com
+  2. Formular auf login.hager.com mit den Feldern email/password absenden
+  3. Weiterleitungen zurück zu Keycloak; dessen Seite enthält ein Formular,
+     das die SAMLResponse an E3/DC schickt
+  4. E3/DC antwortet mit einer Weiterleitung auf flow.hager.com/login,
+     deren URL das Zugriffstoken (ca. 10 min) und das Re-Auth-Token
+     (30 Tage) enthält
+  5. re-auth liefert jederzeit ein neues Token-Paar
+
+Das Modul gibt niemals Passwörter oder Tokens aus.
+"""
+from __future__ import annotations
+
+import html as html_lib
+import logging
+import re
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from html.parser import HTMLParser
+from typing import Callable
+from urllib.parse import parse_qsl, urljoin, urlsplit
+
+import httpx
+
+DEFAULT_SAML_APP = "hager"
+E3DC_SAML_LOGIN = "https://e3dc.e3dc.com/auth-saml/service-providers/hager/login"
+E3DC_REAUTH = "https://e3dc.e3dc.com/auth-saml/re-auth"
+BRIDGE_API = "https://hager-bridge.production.production.eks.e3dc.com/hager-bridge/v1"
+EMOBILITY_API = "https://e-mobility.e3dc.com/e-mobility"
+FLOW_ORIGIN = "https://flow.hager.com"
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+)
+TIMEOUT = httpx.Timeout(30.0)
+
+logger = logging.getLogger(__name__)
+PAGE_SIZE = 100
+MAX_PAGES = 500
+
+
+class HagerLoginError(RuntimeError):
+    """Anmeldung fehlgeschlagen (falsche Zugangsdaten oder geänderter Ablauf)."""
+
+
+class HagerApiError(RuntimeError):
+    """Fehler beim Abruf der Daten."""
+
+
+class HagerUnauthorizedError(HagerApiError):
+    """Zugriffstoken abgelehnt (abgelaufen oder ungültig)."""
+
+
+@dataclass
+class HagerTokens:
+    token: str          # Zugriffstoken für die API (kurzlebig)
+    reauth_token: str   # zum Erneuern (30 Tage)
+
+
+# --------------------------------------------------------------------------
+# HTML-Formulare auslesen (ohne zusätzliche Bibliothek)
+# --------------------------------------------------------------------------
+class _FormParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.forms: list[dict] = []
+        self._current: dict | None = None
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "form":
+            self._current = {
+                "action": attributes.get("action") or "",
+                "method": (attributes.get("method") or "get").upper(),
+                "fields": {},
+            }
+            self.forms.append(self._current)
+        elif tag in ("input", "textarea") and self._current is not None:
+            name = attributes.get("name")
+            if name:
+                self._current["fields"][name] = attributes.get("value") or ""
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            self._current = None
+
+
+def parse_forms(html: str) -> list[dict]:
+    parser = _FormParser()
+    parser.feed(html)
+    return parser.forms
+
+
+def _describe(url: str | httpx.URL) -> str:
+    parts = urlsplit(str(url))
+    return f"{parts.netloc}{parts.path}"
+
+
+# --------------------------------------------------------------------------
+# SAML-Antwort finden – Formular, rohes HTML oder JavaScript
+# --------------------------------------------------------------------------
+_LONG_TOKEN = re.compile(r"[A-Za-z0-9+/=_\-]{16,}")
+
+
+def _attr(tag: str, name: str) -> str | None:
+    match = re.search(rf"""\b{name}\s*=\s*(["'])(.*?)\1""", tag, re.I | re.S)
+    return html_lib.unescape(match.group(2)) if match else None
+
+
+def find_saml_post(page_html: str, page_url: str) -> tuple[str, dict] | None:
+    """Liefert (Ziel-URL, Felder) für den SAML-POST oder None."""
+    # 1. regulär als Formular
+    for form in parse_forms(page_html):
+        if "SAMLResponse" in form["fields"] and form["action"]:
+            return urljoin(page_url, form["action"]), form["fields"]
+
+    # 2. rohes HTML, unabhängig von Verschachtelung und Attributreihenfolge
+    fields: dict[str, str] = {}
+    for tag in re.findall(r"<input\b[^>]*>", page_html, re.I | re.S):
+        name = _attr(tag, "name")
+        if name in ("SAMLResponse", "RelayState"):
+            fields[name] = _attr(tag, "value") or ""
+
+    # 3. Werte in JavaScript, z. B. SAMLResponse: "..." oder "SAMLResponse", "..."
+    if "SAMLResponse" not in fields:
+        match = re.search(
+            r"""SAMLResponse["']?\s*[:=,]\s*["']([A-Za-z0-9+/=]{100,})["']""", page_html
+        )
+        if match:
+            fields["SAMLResponse"] = match.group(1)
+
+    if "SAMLResponse" not in fields:
+        return None
+
+    action = None
+    form_tag = re.search(r"<form\b[^>]*>", page_html, re.I | re.S)
+    if form_tag:
+        action = _attr(form_tag.group(0), "action")
+    if not action:
+        match = re.search(r"""(https://[^"'\s<>]*auth-saml/[^"'\s<>]*assert)""", page_html)
+        action = match.group(1) if match else None
+    if not action:
+        return None
+    return urljoin(page_url, action), fields
+
+
+def describe_page(page_html: str) -> str:
+    """Aufbau einer Seite ohne Werte – für Fehlermeldungen."""
+    title = re.search(r"<title[^>]*>(.*?)</title>", page_html, re.I | re.S)
+    lines = [f"Titel: {title.group(1).strip() if title else '-'}",
+             f"Length: {len(page_html)} characters, <script> tags: {len(re.findall(r'<script', page_html, re.I))}",
+             f"'SAMLResponse' in text: {'yes' if 'SAMLResponse' in page_html else 'no'}"]
+    for form in parse_forms(page_html):
+        target = urlsplit(form["action"])
+        lines.append(f"Formular {form['method']} {target.netloc}{target.path} Felder: "
+                     f"{', '.join(form['fields']) or '-'}")
+    idx = page_html.find("SAMLResponse")
+    if idx >= 0:
+        context = _LONG_TOKEN.sub("<…>", page_html[max(0, idx - 80): idx + 40])
+        lines.append("Kontext: " + " ".join(context.split()))
+    text = re.sub(r"<(script|style)\b.*?</\1>", " ", page_html, flags=re.I | re.S)
+    text = _LONG_TOKEN.sub("<…>", html_lib.unescape(re.sub(r"<[^>]+>", " ", text)))
+    lines.append("Sichtbarer Text: " + " ".join(text.split())[:300])
+    return "\n      ".join(lines)
+
+
+# --------------------------------------------------------------------------
+# Anmeldung und Token-Erneuerung
+# --------------------------------------------------------------------------
+def login(
+    email: str,
+    password: str,
+    saml_app: str = DEFAULT_SAML_APP,
+    log: Callable[[str], None] | None = None,
+    transport: httpx.BaseTransport | None = None,
+) -> HagerTokens:
+    """Vollständige Anmeldung mit E-Mail und Passwort.
+    Ohne `log` werden die Schritte unter dem Logger dieses Moduls
+    protokolliert (nur Host und Pfad, keine Parameter)."""
+    log = log or logger.info
+    if not email or not password:
+        raise HagerLoginError("Email and password are required.")
+
+    with httpx.Client(
+        follow_redirects=True,
+        timeout=TIMEOUT,
+        transport=transport,
+        headers={"User-Agent": USER_AGENT, "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"},
+    ) as client:
+        # 1. SAML-Login starten, Weiterleitungen bis zur Hager-Anmeldeseite folgen
+        response = client.get(E3DC_SAML_LOGIN, params={"app": saml_app})
+        log(f"Sign-in page: HTTP {response.status_code} {_describe(response.url)}")
+        if response.status_code != 200:
+            raise HagerLoginError(f"Sign-in page not reachable (HTTP {response.status_code}).")
+
+        # 2. Formular mit email/password absenden
+        login_forms = [f for f in parse_forms(response.text) if "password" in f["fields"]]
+        if login_forms:
+            form = login_forms[0]
+            action = urljoin(str(response.url), form["action"] or str(response.url))
+            data = dict(form["fields"])
+        elif urlsplit(str(response.url)).path.endswith("/login"):
+            # Formular wird per JavaScript erzeugt -> direkt an die Seite posten
+            action, data = str(response.url), {}
+        else:
+            raise HagerLoginError(
+                f"No sign-in form found at {_describe(response.url)}."
+            )
+        data.update({"email": email, "password": password})
+
+        response = client.post(action, data=data)
+        log(f"After sign-in: HTTP {response.status_code} {_describe(response.url)}")
+
+        # 3. Keycloak-Seite mit der SAML-Antwort
+        saml_post = find_saml_post(response.text, str(response.url))
+        if saml_post is None:
+            if any("password" in f["fields"] for f in parse_forms(response.text)) or \
+                    "login.hager.com" in str(response.url):
+                raise HagerLoginError("Sign-in rejected – please check email and password.")
+            raise HagerLoginError(
+                f"No SAML response at {_describe(response.url)} (HTTP {response.status_code}"
+                f").\n      {describe_page(response.text)}"
+            )
+
+        target, fields = saml_post
+        log(f"SAML response found, sending to {_describe(target)}")
+        # 4. SAMLResponse an E3/DC; die Weiterleitung selbst enthält die Tokens
+        response = client.post(target, data=fields, follow_redirects=False)
+        location = response.headers.get("location", "")
+        log(f"SAML response: HTTP {response.status_code} -> {_describe(location)}")
+
+    params = dict(parse_qsl(urlsplit(location).query))
+    if not params.get("token") or not params.get("reAuthToken"):
+        raise HagerLoginError(
+            "The sign-in returned no tokens – the flow may have changed."
+        )
+    return HagerTokens(token=params["token"], reauth_token=params["reAuthToken"])
+
+
+def refresh(
+    reauth_token: str,
+    transport: httpx.BaseTransport | None = None,
+) -> HagerTokens:
+    """Neues Token-Paar über das Re-Auth-Token (ohne Passwort)."""
+    with httpx.Client(timeout=TIMEOUT, transport=transport) as client:
+        response = client.post(
+            E3DC_REAUTH,
+            files={"reAuthToken": (None, reauth_token)},
+            headers={"User-Agent": USER_AGENT, "Origin": FLOW_ORIGIN, "Referer": FLOW_ORIGIN + "/"},
+        )
+    if response.status_code != 200:
+        raise HagerLoginError(f"Token renewal failed (HTTP {response.status_code}).")
+    data = response.json()
+    if not data.get("token") or not data.get("reAuthToken"):
+        raise HagerLoginError("The token renewal returned no tokens.")
+    return HagerTokens(token=data["token"], reauth_token=data["reAuthToken"])
+
+
+# --------------------------------------------------------------------------
+# Datenabruf
+# --------------------------------------------------------------------------
+def parse_api_time(value: object) -> datetime | None:
+    """ISO-Zeitstempel der API als UTC-Zeitpunkt, None wenn nicht lesbar."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def columns_to_rows(data: object) -> list[dict]:
+    """
+    Der E-Mobility-Endpunkt liefert spaltenweise: {"id": [...],
+    "startAt": [...], ...}. Umwandlung in eine Liste von Datensätzen.
+    """
+    if isinstance(data, list):
+        return [row for row in data if isinstance(row, dict)]
+
+    if not isinstance(data, dict):
+        raise HagerApiError("E-Mobility-API: unerwartetes Antwortformat.")
+
+    columns = {key: values for key, values in data.items() if isinstance(values, list)}
+
+    if not columns:
+        return []
+
+    lengths = {len(values) for values in columns.values()}
+
+    if len(lengths) != 1:
+        raise HagerApiError(
+            f"E-Mobility API: columns of different length ({sorted(lengths)}"
+            ")."
+        )
+
+    count = lengths.pop()
+
+    return [
+        {key: values[index] for key, values in columns.items()}
+        for index in range(count)
+    ]
+
+
+def _api_headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
+        "Origin": FLOW_ORIGIN,
+        "Referer": FLOW_ORIGIN + "/",
+    }
+
+
+def fetch_charging_sessions(
+    token: str,
+    serial_number: str,
+    stop_before: datetime | None = None,
+    max_pages: int | None = None,
+    info: dict | None = None,
+    transport: httpx.BaseTransport | None = None,
+) -> list[dict]:
+    """
+    Ladevorgänge aller Wallboxen des Systems, neueste zuerst.
+
+    Der Endpunkt sortiert serverseitig (sort=-startAt) und blättert über
+    limit/offset. Sobald eine Seite vor `stop_before` zurückreicht, wird
+    nicht weiter geblättert. Ist eine Seite wider Erwarten nicht
+    absteigend sortiert, werden zur Sicherheit alle Seiten abgerufen.
+
+    info erhält "pages" und "rows".
+    """
+    url = f"{EMOBILITY_API}/{serial_number}/charging"
+    rows: list[dict] = []
+    early_stop = stop_before is not None
+    previous_oldest: datetime | None = None
+
+    with httpx.Client(
+        timeout=TIMEOUT,
+        headers=_api_headers(token),
+        transport=transport,
+    ) as client:
+        for page in range(MAX_PAGES):
+            started = time.monotonic()
+            params = {"sort": "-startAt", "limit": PAGE_SIZE, "offset": page * PAGE_SIZE}
+
+            try:
+                response = client.get(url, params=params)
+            except httpx.TimeoutException:
+                logger.warning(
+                    "Hager: E-Mobility API page %s: no response after %.1f s",
+                    page,
+                    time.monotonic() - started,
+                )
+                raise
+
+            logger.info(
+                "Hager: E-Mobility API page %s: HTTP %s in %.1f s",
+                page,
+                response.status_code,
+                time.monotonic() - started,
+            )
+
+            if response.status_code in (401, 403):
+                raise HagerUnauthorizedError(
+                    f"E-Mobility API page {page}: HTTP {response.status_code}"
+                )
+
+            if response.status_code != 200:
+                raise HagerApiError(
+                    f"E-Mobility API page {page}: HTTP {response.status_code}"
+                )
+
+            page_rows = columns_to_rows(response.json())
+            rows.extend(page_rows)
+
+            if info is not None:
+                info["pages"] = page + 1
+                info["rows"] = len(rows)
+
+            if len(page_rows) < PAGE_SIZE:
+                return rows
+
+            if max_pages is not None and page + 1 >= max_pages:
+                return rows
+
+            if early_stop:
+                starts = [parse_api_time(row.get("startAt")) for row in page_rows]
+                ordered = (
+                    all(start is not None for start in starts)
+                    and all(a >= b for a, b in zip(starts, starts[1:]))
+                    and (previous_oldest is None or starts[0] <= previous_oldest)
+                )
+
+                if not ordered:
+                    logger.warning(
+                        "Hager: charging sessions not sorted in descending order – "
+                        "fetching all pages to be safe"
+                    )
+                    early_stop = False
+                else:
+                    previous_oldest = starts[-1]
+
+                    if starts[-1] < stop_before:
+                        logger.info(
+                            "Hager: fetch stopped after page %s, older charging sessions "
+                            "are before the cut-off",
+                            page,
+                        )
+                        return rows
+
+    raise HagerApiError(f"More than {MAX_PAGES} pages – aborting.")
+
+
+def fetch_wallbox_names(
+    token: str,
+    installation_id: str,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, str]:
+    """
+    Namen der aktiven Wallboxen der Installation: {wallboxId: Name}.
+    Getauschte Geräte stehen hier nicht mehr drin.
+    """
+    url = f"{BRIDGE_API}/wallbox/wallboxes/{installation_id}/active"
+
+    with httpx.Client(
+        timeout=TIMEOUT,
+        headers=_api_headers(token),
+        transport=transport,
+    ) as client:
+        response = client.get(url)
+
+    if response.status_code in (401, 403):
+        raise HagerUnauthorizedError(f"Wallbox-Liste: HTTP {response.status_code}")
+
+    if response.status_code != 200:
+        raise HagerApiError(f"Wallbox-Liste: HTTP {response.status_code}")
+
+    names: dict[str, str] = {}
+
+    for entry in response.json() or []:
+        if not isinstance(entry, dict):
+            continue
+
+        wallbox_id = str(entry.get("wallboxId") or "").strip()
+        name = str(entry.get("wallboxName") or "").strip()
+
+        if wallbox_id and name:
+            names[wallbox_id] = name
+
+    return names

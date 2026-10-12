@@ -10,10 +10,16 @@ from sqlalchemy import (
     String,
     Boolean,
     Text,
+    false,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+
+DEFAULT_VAT_EXEMPTION_NOTE = (
+    "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."
+)
 from app.utils.utc import utc_now
 
 
@@ -124,6 +130,37 @@ class GlobalSettings(Base):
     ] = mapped_column(
         String(11),
         nullable=True,
+    )
+
+    # E-Mail-Adresse des Rechnungsstellers: Kontakt für Kunden, Empfänger
+    # der Hinweise der automatischen Abrechnung (dort Pflicht)
+    invoice_issuer_email: Mapped[str | None] = mapped_column(
+        String(320),
+        nullable=True,
+    )
+
+    # E-Mail-Adresse auf der Rechnung angeben (unter der Telefonnummer)
+    invoice_issuer_email_on_invoice: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    # Umsatzsteuer ausweisen; aus bei Kleinunternehmern (§ 19 UStG)
+    vat_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
+
+    # Hinweis auf der Rechnung, wenn keine Umsatzsteuer ausgewiesen wird
+    # (frei editierbar, darf leer sein)
+    vat_exemption_note: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        default=DEFAULT_VAT_EXEMPTION_NOTE,
     )
 
     invoice_issuer_phone: Mapped[
@@ -367,6 +404,212 @@ class GlobalSettings(Base):
         str | None
     ] = mapped_column(
         Text,
+        nullable=True,
+    )
+
+    # Zugang zur Hager Cloud (Abruf der Ladevorgänge)
+    hager_username: Mapped[
+        str | None
+    ] = mapped_column(
+        String(320),
+        nullable=True,
+    )
+
+    hager_password_encrypted: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    hager_installation_id: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    # Standardsprache der Oberfläche für Benutzer ohne eigene Wahl
+    # und für die Seiten vor der Anmeldung
+    default_language: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="de",
+        server_default="de",
+    )
+
+    # Gebietsschema für Zahlen-, Datums- und Betragsformat (z. B. de-DE)
+    locale: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default="de-DE",
+        server_default="de-DE",
+    )
+
+    # Währung der Abrechnung (ISO 4217); nach der ersten Rechnung fest
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        nullable=False,
+        default="EUR",
+        server_default="EUR",
+    )
+
+    # Zeitzone, in der die Ortszeiten dieses Mandanten gespeichert sind
+    # (beim ersten Import festgehalten, danach unveränderlich)
+    data_timezone: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    # Aufbewahrung: Rechnungen werden frühestens so viele Jahre nach Ende
+    # des Ausstellungsjahres gelöscht (nur auf Anforderung im Admin-Bereich)
+    invoice_retention_years: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=10,
+        server_default="10",
+    )
+
+    # Letztes Jahr, dessen Rechnungen und Abrechnungsdaten gelöscht wurden;
+    # Ladevorgänge bis Ende dieses Jahres werden nicht mehr importiert
+    retention_purged_through_year: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    # Import: Ladevorgänge ohne Energie (0 kWh) nicht übernehmen
+    import_skip_empty_sessions: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    # Seriennummer des Systems (zweite Zahl in der Adresse der
+    # Hager-Weboberfläche); Grundlage des E-Mobility-Abrufs
+    hager_serial_number: Mapped[
+        str | None
+    ] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    # Automatischer Abruf: alle N Stunden ab HH:MM (Europe/Berlin)
+    hager_auto_import_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    hager_auto_import_interval_hours: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=24,
+        server_default="24",
+    )
+
+    hager_auto_import_start_time: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="03:00",
+        server_default="03:00",
+    )
+
+    # Start des letzten erfolgreichen Abrufs bis "jetzt" (manuell oder
+    # automatisch, UTC ohne tzinfo); Basis für den Cut-off
+    hager_last_successful_fetch_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    # Letzter automatischer Lauf (UTC ohne tzinfo)
+    hager_auto_import_last_started_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    hager_auto_import_last_finished_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    hager_auto_import_last_status: Mapped[
+        str | None
+    ] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    hager_auto_import_last_message: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # Automatische Abrechnung: Entwürfe je Leistungszeitraum, Prüfung durch
+    # die Kunden, danach automatische Finalisierung und Versand
+    auto_billing_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+
+    # weekly, monthly oder quarterly
+    auto_billing_interval: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="monthly",
+        server_default="monthly",
+    )
+
+    # Stichtag = letzter Tag des Leistungszeitraums. Wöchentlich: Wochentag
+    # 1 (Montag) bis 7 (Sonntag). Monatlich/vierteljährlich: Tag 1 bis 28
+    # des (Quartals-)Monats, 0 = Monatsletzter.
+    auto_billing_cutoff_day: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    # Tage nach dem Stichtag, bevor die Entwürfe erstellt werden
+    auto_billing_grace_days: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=2,
+        server_default="2",
+    )
+
+    # Prüffrist der Kunden in Tagen
+    auto_billing_review_days: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=7,
+        server_default="7",
+    )
+
+    # Uhrzeit (Ortszeit), zu der Entwürfe erstellt und Rechnungen
+    # finalisiert werden
+    auto_billing_run_time: Mapped[str] = mapped_column(
+        String(5),
+        nullable=False,
+        default="06:00",
+        server_default="06:00",
+    )
+
+    # Tag des (letzten) Einschaltens: abgerechnet werden Zeiträume, deren
+    # Stichtag an oder nach diesem Tag liegt
+    auto_billing_active_since: Mapped[date | None] = mapped_column(
+        Date,
         nullable=True,
     )
 

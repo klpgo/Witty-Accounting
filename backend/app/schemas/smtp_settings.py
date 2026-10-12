@@ -138,8 +138,7 @@ class SmtpSettingsUpdate(BaseModel):
     ) -> object:
         if value is None:
             raise ValueError(
-                "Der SMTP-Einstellungswert darf "
-                "nicht null sein."
+                "The SMTP setting value must not be null."
             )
 
         return value
@@ -203,9 +202,8 @@ class SmtpSettingsUpdate(BaseModel):
             and self.clear_smtp_password
         ):
             raise ValueError(
-                "Das SMTP-Passwort kann nicht "
-                "gleichzeitig gesetzt und gelöscht "
-                "werden."
+                "The SMTP password cannot be set and deleted at the same "
+                "time."
             )
 
         if (
@@ -216,9 +214,8 @@ class SmtpSettingsUpdate(BaseModel):
             )
         ):
             raise ValueError(
-                "Das S/MIME-Zertifikat kann nicht "
-                "gleichzeitig gesetzt und gelöscht "
-                "werden."
+                "The S/MIME certificate cannot be set and deleted at the "
+                "same time."
             )
 
         if (
@@ -226,8 +223,7 @@ class SmtpSettingsUpdate(BaseModel):
             and self.smime_pkcs12_filename is None
         ):
             raise ValueError(
-                "Zum S/MIME-Zertifikat fehlt der "
-                "Dateiname."
+                "The file name of the S/MIME certificate is missing."
             )
 
         if (
@@ -235,8 +231,8 @@ class SmtpSettingsUpdate(BaseModel):
             and self.smime_pkcs12_base64 is None
         ):
             raise ValueError(
-                "Ein S/MIME-Dateiname darf nur mit "
-                "einem Zertifikat übertragen werden."
+                "An S/MIME file name may only be sent together with a "
+                "certificate."
             )
 
         return self
