@@ -139,11 +139,9 @@ def test_list_users_rejects_non_admin(
     )
 
     assert response.status_code == 403
-    assert response.json() == {
-        "detail": (
-            "Administrator rights required."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "Administrator rights required."
+    )
 
 
 def test_create_user_requires_authentication(
@@ -516,11 +514,9 @@ def test_update_own_profile_rejects_duplicate_email(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": (
-            "This email address is already in use."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "This email address is already in use."
+    )
 
 
 def test_update_own_profile_rejects_admin_fields(
@@ -611,12 +607,10 @@ def test_change_own_password_rejects_weak_password(
     )
 
     assert response.status_code == 422
-    assert response.json() == {
-        "detail": (
-            "The password must contain an uppercase letter, a digit and "
-            "a special character."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "The password must contain an uppercase letter, a digit and "
+        "a special character."
+    )
 
     database_session.refresh(user)
 
@@ -650,11 +644,9 @@ def test_change_own_password_rejects_wrong_password(
     )
 
     assert response.status_code == 400
-    assert response.json() == {
-        "detail": (
-            "The current password is incorrect."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "The current password is incorrect."
+    )
 
     database_session.refresh(user)
 
@@ -892,12 +884,10 @@ def test_admin_password_reset_rejects_weak_password(
     )
 
     assert response.status_code == 422
-    assert response.json() == {
-        "detail": (
-            "The password must contain an uppercase letter, a digit and "
-            "a special character."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "The password must contain an uppercase letter, a digit and "
+        "a special character."
+    )
 
     database_session.refresh(target)
 
@@ -968,11 +958,9 @@ def test_admin_user_routes_return_not_found(
     )
 
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": (
-            "User 999999 was not found."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "User 999999 was not found."
+    )
 
 
 # --------------------------------------------------------------------------

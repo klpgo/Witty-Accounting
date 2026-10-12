@@ -1355,11 +1355,9 @@ def test_smtp_test_reports_configuration_error(
     )
 
     assert response.status_code == 422
-    assert response.json() == {
-        "detail": (
-            "Email delivery is disabled."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "Email delivery is disabled."
+    )
 
 
 def test_smtp_test_reports_delivery_error(
@@ -1386,11 +1384,9 @@ def test_smtp_test_reports_delivery_error(
     )
 
     assert response.status_code == 502
-    assert response.json() == {
-        "detail": (
-            "The SMTP test message could not be sent."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "The SMTP test message could not be sent."
+    )
 
 
 def test_updates_maintenance_mode(

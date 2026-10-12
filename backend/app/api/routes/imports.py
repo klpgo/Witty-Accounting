@@ -46,7 +46,7 @@ router = APIRouter(
 def save_upload_with_limit(
     file: UploadFile,
     destination,
-    file_label: str = "XLSX file",
+    file_type: str = "XLSX",
 ) -> int:
     """
     Speichert einen Upload blockweise und bricht bei Überschreitung
@@ -68,7 +68,7 @@ def save_upload_with_limit(
             raise HTTPException(
                 status_code=413,
                 detail=(
-                    f"The {file_label} is too large. The maximum is 10 MB."
+                    f"The {file_type} file is too large. The maximum is 10 MB."
                 ),
             )
 
@@ -248,7 +248,7 @@ def upload_json(
             uploaded_size = save_upload_with_limit(
                 file=file,
                 destination=temporary_file,
-                file_label="JSON file",
+                file_type="JSON",
             )
 
         if uploaded_size == 0:

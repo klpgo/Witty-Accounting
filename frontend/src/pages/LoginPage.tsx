@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
 /*
  * Ziel nach der Anmeldung: die ursprünglich aufgerufene Seite (z. B. der
@@ -176,14 +177,13 @@ function LoginPage() {
             </Link>
           </p>
 
-          {errorMessage && (
-            <p
-              className="form-error"
-              role="alert"
-            >
-              {errorMessage}
-            </p>
-          )}
+          <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
           <button
             className="button button-primary"

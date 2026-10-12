@@ -9,6 +9,7 @@ import {
   type HagerAutoImportStatus,
   type HagerSettings,
 } from '../api/settings'
+import { localizeMessage } from '../api/errors'
 import { getAccessToken } from '../auth/tokenStorage'
 import type { MessageKey } from '../i18n/de'
 import { useTranslation } from '../i18n/useTranslation'
@@ -91,7 +92,9 @@ function AdminAutomationStatus() {
           ? `${entry.name}: ${t('autoBilling.runs.existingDraft', {
               id: entry.invoice_id,
             })}`
-          : `${entry.name}: ${entry.message ?? ''}`,
+          : `${entry.name}: ${
+              localizeMessage(entry.message, entry.message_code) ?? ''
+            }`,
       )
       .join('\n')
   }
@@ -149,7 +152,10 @@ function AdminAutomationStatus() {
                       : undefined
                   }
                 >
-                  {hager.auto_import_last_message}
+                  {localizeMessage(
+                    hager.auto_import_last_message,
+                    hager.auto_import_last_message_code,
+                  )}
                 </dd>
               </div>
             )}

@@ -1,3 +1,5 @@
+import { type ApiErrorDescriptor, readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -73,6 +75,7 @@ export interface Invoice {
   delivery_status: string | null
   // nur für Administratoren
   notification_error: string | null
+  notification_error_code: ApiErrorDescriptor | null
   // Kontaktadresse für Nachfragen (nur bei Entwürfen zur Prüfung)
   review_contact_email: string | null
   items: InvoiceItem[]
@@ -95,10 +98,6 @@ export interface InvoiceExportResponse {
   exported_at: string
 }
 
-interface ApiErrorResponse {
-  detail?: string
-}
-
 export class InvoiceApiError extends Error {
   readonly status: number
 
@@ -110,23 +109,6 @@ export class InvoiceApiError extends Error {
     this.name = 'InvoiceApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (body.detail) {
-      return body.detail
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Request failed (${response.status}).`
 }
 
 export async function listInvoices(
@@ -145,7 +127,7 @@ export async function listInvoices(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -170,7 +152,7 @@ export async function getInvoice(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -196,7 +178,7 @@ export async function archiveInvoicePdf(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -219,7 +201,7 @@ export async function downloadInvoicePdf(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -243,7 +225,7 @@ export async function sendInvoiceEmail(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -269,7 +251,7 @@ export async function exportInvoiceSftp(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -305,7 +287,7 @@ export async function createInvoiceDraft(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -339,7 +321,7 @@ export async function finalizeInvoice(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -370,7 +352,7 @@ export async function createInvoiceCancellation(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -401,7 +383,7 @@ export async function finalizeInvoiceCancellation(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -425,7 +407,7 @@ export async function deleteInvoiceDraft(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -447,7 +429,7 @@ export async function downloadInvoiceDraftPdf(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -472,7 +454,7 @@ export async function requestInvoiceInquiry(
 
   if (!response.ok) {
     throw new InvoiceApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }

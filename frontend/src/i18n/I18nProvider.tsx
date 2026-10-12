@@ -4,6 +4,7 @@ import {
   useMemo,
 } from 'react'
 
+import { setApiErrorLanguage } from '../api/errors'
 import { useAuth } from '../auth/useAuth'
 import { useAppSettings } from '../settings/useAppSettings'
 import { I18nContext } from './i18nContext'
@@ -25,6 +26,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     normalizeLanguage(user?.language) ??
     normalizeLanguage(defaultLanguage) ??
     'de'
+
+  // Fehlermeldungen des Backends in derselben Sprache (vor den ersten
+  // Anfragen der Seiten, deshalb nicht erst im Effekt)
+  setApiErrorLanguage(language)
 
   useEffect(() => {
     document.documentElement.lang = language

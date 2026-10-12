@@ -20,6 +20,7 @@ import { useTranslation } from '../i18n/useTranslation'
 import { useAppSettings } from '../settings/useAppSettings'
 import { formatDate } from '../utils/dateFormat'
 import { formatNumber } from '../utils/numberFormat'
+import SystemMessage from '../components/SystemMessage'
 
 // Kalendertag JJJJ-MM-TT aus einem Zeitpunkt der API (lokale Zeit)
 function toDay(value: string): string {
@@ -331,17 +332,21 @@ function AdminEnergyPricesForm() {
           <p className="muted">{t('settings.energy.repriceHint')}</p>
         </div>
 
-        {errorMessage && (
-          <p className="form-error" role="alert">
-            {errorMessage}
-          </p>
-        )}
+        <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-        {successMessage && (
-          <p className="form-success" role="status">
-            {successMessage}
-          </p>
-        )}
+        <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
         <div className="form-grid">
           <label className="form-field">

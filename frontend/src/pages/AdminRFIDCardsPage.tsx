@@ -27,6 +27,7 @@ import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { getDisplayLocale } from '../utils/dateFormat'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
 // Nach Beschreibung ("Karte 2" vor "Karte 10"), Karten ohne
 // Beschreibung zuletzt, bei Gleichstand nach RFID-Nummer
@@ -659,23 +660,21 @@ function AdminRFIDCardsPage() {
         </section>
       )}
 
-      {!isLoading && errorMessage && (
-        <section
-          className="card form-error admin-message"
-          role="alert"
-        >
-          {errorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-      {!isLoading && successMessage && (
-        <section
-          className="card form-success admin-message"
-          role="status"
-        >
-          {successMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
       {!isLoading && (
         <div className="admin-layout">

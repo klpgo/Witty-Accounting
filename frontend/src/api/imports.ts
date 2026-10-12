@@ -1,3 +1,5 @@
+import { readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -21,14 +23,6 @@ export interface ImportResult {
   skipped_empty?: number
 }
 
-interface ValidationErrorDetail {
-  msg?: string
-}
-
-interface ApiErrorResponse {
-  detail?: string | ValidationErrorDetail[]
-}
-
 export class ImportApiError extends Error {
   status: number
 
@@ -41,36 +35,6 @@ export class ImportApiError extends Error {
     this.name = 'ImportApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (typeof body.detail === 'string') {
-      return body.detail
-    }
-
-    if (Array.isArray(body.detail)) {
-      const messages = body.detail
-        .map((detail) => detail.msg)
-        .filter(
-          (message): message is string =>
-            typeof message === 'string',
-        )
-
-      if (messages.length > 0) {
-        return messages.join(' ')
-      }
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Request failed (${response.status}).`
 }
 
 export type ImportFileType = 'xlsx' | 'json'
@@ -154,7 +118,7 @@ async function uploadFile(
 
   if (!response.ok) {
     throw new ImportApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -188,7 +152,7 @@ export async function importFromHager(
 
   if (!response.ok) {
     throw new ImportApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }

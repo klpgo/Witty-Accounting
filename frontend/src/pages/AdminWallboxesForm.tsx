@@ -11,6 +11,7 @@ import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { useTranslation } from '../i18n/useTranslation'
 import { formatDate } from '../utils/dateFormat'
+import SystemMessage from '../components/SystemMessage'
 
 /*
  * Namen der Wallboxen für Ladevorgänge und Rechnungen. Angezeigt wird der
@@ -133,17 +134,21 @@ function AdminWallboxesForm() {
           <p className="muted">{t('wallboxes.intro')}</p>
         </div>
 
-        {errorMessage && (
-          <p className="form-error" role="alert">
-            {errorMessage}
-          </p>
-        )}
+        <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-        {successMessage && (
-          <p className="form-success" role="status">
-            {successMessage}
-          </p>
-        )}
+        <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
         {isLoading ? (
           <p className="muted">{t('common.loading')}</p>

@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom'
 import { requestPasswordReset } from '../api/auth'
 import { useAppSettings } from '../settings/useAppSettings'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
 
 function ForgotPasswordPage() {
@@ -74,17 +75,21 @@ function ForgotPasswordPage() {
             />
           </label>
 
-          {errorMessage && (
-            <p className="form-error" role="alert">
-              {errorMessage}
-            </p>
-          )}
+          <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-          {successMessage && (
-            <p className="form-success" role="status">
-              {successMessage}
-            </p>
-          )}
+          <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
           <button
             className="button button-primary"

@@ -41,6 +41,18 @@
 
 ### Changes
 
+- Success and error messages are shown as a dialog with an **OK** button
+  instead of inline above the forms, so they are visible without scrolling.
+- **All server messages in the interface language**: error responses of the
+  API now carry a `code` and `params` in addition to the English `detail`
+  (validation errors per entry in `detail`). The interface takes the text for
+  the code from its language files (`apiError.<code>`), including nested
+  causes such as the reason an import failed. The stored status of the
+  automatic Hager fetch, errors of billing notifications and skipped
+  customers of a billing run are translated the same way. `detail` stays
+  English for logs and API clients. A test checks that every message in the
+  backend has a code (`backend/app/errors.py`) and German and English texts.
+
 - The status of the automatic Hager fetch and of automatic billing (including
   the billing runs) moved from the settings page to the administrators'
   dashboard.

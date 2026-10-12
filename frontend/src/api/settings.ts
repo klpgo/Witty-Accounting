@@ -1,3 +1,5 @@
+import { type ApiErrorDescriptor, readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -168,6 +170,8 @@ export interface HagerSettings {
   auto_import_last_finished_at: string | null
   auto_import_last_status: HagerAutoImportStatus | null
   auto_import_last_message: string | null
+  // Code zur Meldung (Übersetzung in der Oberfläche)
+  auto_import_last_message_code: ApiErrorDescriptor | null
   last_successful_fetch_at: string | null
 }
 
@@ -205,14 +209,6 @@ export interface CurrentEnergyPriceUpdate {
   vat_rate: string
 }
 
-interface ValidationErrorDetail {
-  msg?: string
-}
-
-interface ApiErrorResponse {
-  detail?: string | ValidationErrorDetail[]
-}
-
 export class SettingsApiError extends Error {
   readonly status: number
 
@@ -224,36 +220,6 @@ export class SettingsApiError extends Error {
     this.name = 'SettingsApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (typeof body.detail === 'string') {
-      return body.detail
-    }
-
-    if (Array.isArray(body.detail)) {
-      const messages = body.detail
-        .map((detail) => detail.msg)
-        .filter(
-          (message): message is string =>
-            typeof message === 'string',
-        )
-
-      if (messages.length > 0) {
-        return messages.join(' ')
-      }
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Request failed (${response.status}).`
 }
 
 function createHeaders(
@@ -278,7 +244,7 @@ Promise<PublicSettings> {
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -302,7 +268,7 @@ export async function getGlobalSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -326,7 +292,7 @@ export async function getSmtpSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -354,7 +320,7 @@ export async function updateSmtpSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -377,7 +343,7 @@ export async function testSmtpSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -400,7 +366,7 @@ export async function testSmimeSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -428,7 +394,7 @@ export async function updateGlobalSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -452,7 +418,7 @@ export async function getInvoiceExportSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -480,7 +446,7 @@ export async function updateInvoiceExportSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -503,7 +469,7 @@ export async function testInvoiceExportSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -527,7 +493,7 @@ export async function getCurrentEnergyPrice(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -555,7 +521,7 @@ export async function updateCurrentEnergyPrice(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -576,7 +542,7 @@ export interface EnergyPriceInput {
 async function readEnergyResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -697,7 +663,7 @@ export async function getHagerSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -725,7 +691,7 @@ export async function updateHagerSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -748,7 +714,7 @@ export async function testHagerSettings(
 
   if (!response.ok) {
     throw new SettingsApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -878,6 +844,7 @@ export interface BillingRunSkipped {
   reason: string
   invoice_id: number | null
   message: string | null
+  message_code: ApiErrorDescriptor | null
 }
 
 export interface BillingRun {

@@ -1,12 +1,14 @@
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
+from app.errors import message_code
 from app.services.hager_schedule import parse_start_time
 
 from pydantic import (
     BaseModel,
     Field,
     SecretStr,
+    computed_field,
     field_validator,
     model_validator,
 )
@@ -39,6 +41,12 @@ class HagerSettingsResponse(BaseModel):
     auto_import_last_status: str | None = None
     auto_import_last_message: str | None = None
     last_successful_fetch_at: datetime | None = None
+
+    @computed_field
+    @property
+    def auto_import_last_message_code(self) -> dict[str, Any] | None:
+        """Code zur Meldung, damit die Oberfläche sie übersetzen kann."""
+        return message_code(self.auto_import_last_message)
 
 
 class HagerSettingsUpdate(BaseModel):

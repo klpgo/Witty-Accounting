@@ -24,6 +24,7 @@ import AdminHagerSettingsForm from './AdminHagerSettingsForm'
 import AdminWallboxesForm from './AdminWallboxesForm'
 import AdminRetentionForm from './AdminRetentionForm'
 import AdminAutoBillingForm from './AdminAutoBillingForm'
+import SystemMessage from '../components/SystemMessage'
 
 function normalizeDecimal(value: string): string {
   return value.trim().replace(',', '.')
@@ -652,23 +653,21 @@ function AdminSettingsPage() {
         </section>
       )}
 
-      {!isLoading && errorMessage && (
-        <section
-          className="card form-error"
-          role="alert"
-        >
-          {errorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-      {!isLoading && successMessage && (
-        <section
-          className="card form-success"
-          role="status"
-        >
-          {successMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
       {!isLoading && (
         <form

@@ -1,3 +1,5 @@
+import { readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -20,27 +22,6 @@ export interface AuthenticatedUser {
 
 interface PasswordResetRequestResponse {
   message: string
-}
-
-interface ApiErrorResponse {
-  detail?: string
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (body.detail) {
-      return body.detail
-    }
-  } catch {
-    // Response did not contain JSON.
-  }
-
-  return `Request failed (${response.status}).`
 }
 
 export async function login(
@@ -66,7 +47,7 @@ export async function login(
 
   if (!response.ok) {
     throw new Error(
-      await getErrorMessage(response),
+      await readApiError(response),
     )
   }
 
@@ -87,7 +68,7 @@ export async function getCurrentUser(
 
   if (!response.ok) {
     throw new Error(
-      await getErrorMessage(response),
+      await readApiError(response),
     )
   }
 
@@ -112,7 +93,7 @@ export async function requestPasswordReset(
 
   if (!response.ok) {
     throw new Error(
-      await getErrorMessage(response),
+      await readApiError(response),
     )
   }
 
@@ -142,7 +123,7 @@ export async function confirmPasswordReset(
 
   if (!response.ok) {
     throw new Error(
-      await getErrorMessage(response),
+      await readApiError(response),
     )
   }
 }

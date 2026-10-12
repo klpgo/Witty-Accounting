@@ -17,6 +17,7 @@ import {
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
 
 function formatLocalDateTime(
@@ -322,17 +323,21 @@ function AdminHagerSettingsForm() {
           </p>
         </div>
 
-        {errorMessage && (
-          <div className="form-error" role="alert">
-            {errorMessage}
-          </div>
-        )}
+        <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-        {successMessage && (
-          <div className="form-success" role="status">
-            {successMessage}
-          </div>
-        )}
+        <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
         <div className="form-grid settings-business-grid">
           <label className="form-field">

@@ -20,6 +20,7 @@ import { useAuth } from '../auth/useAuth'
 import PasswordFields from '../components/PasswordFields'
 import { useTranslation } from '../i18n/useTranslation'
 import { useAppSettings } from '../settings/useAppSettings'
+import SystemMessage from '../components/SystemMessage'
 
 function ProfilePage() {
   const { t } = useTranslation()
@@ -330,23 +331,21 @@ function ProfilePage() {
               </p>
             </div>
 
-            {errorMessage && (
-              <div
-                className="form-error"
-                role="alert"
-              >
-                {errorMessage}
-              </div>
-            )}
+            <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-            {successMessage && (
-              <div
-                className="form-success"
-                role="status"
-              >
-                {successMessage}
-              </div>
-            )}
+            <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
             <div className="form-grid">
               <label className="form-field">
@@ -530,23 +529,21 @@ function ProfilePage() {
               </p>
             </div>
 
-            {passwordErrorMessage && (
-              <div
-                className="form-error"
-                role="alert"
-              >
-                {passwordErrorMessage}
-              </div>
-            )}
+            <SystemMessage
+        kind="error"
+        message={passwordErrorMessage}
+        onClose={() => {
+          setPasswordErrorMessage(null)
+        }}
+      />
 
-            {passwordSuccessMessage && (
-              <div
-                className="form-success"
-                role="status"
-              >
-                {passwordSuccessMessage}
-              </div>
-            )}
+            <SystemMessage
+        kind="success"
+        message={passwordSuccessMessage}
+        onClose={() => {
+          setPasswordSuccessMessage(null)
+        }}
+      />
 
             <label className="form-field">
               {t('profile.password.current')}

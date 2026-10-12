@@ -2,8 +2,11 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path, PurePosixPath
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import (
     HTTPException as StarletteHTTPException,
@@ -43,6 +46,7 @@ from app.api.routes.settings import (
     router as settings_router,
 )
 from app.config import settings
+from app.errors import error_content, validation_error_code
 from app.database import (
     engine,
     tenant_session_provider,
@@ -152,6 +156,54 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request,
+    exc: StarletteHTTPException,
+) -> Response:
+    """Fehlermeldung mit Code, damit die Oberfläche sie übersetzen kann."""
+
+    if exc.status_code in (204, 304):
+        return Response(
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
+
+    content = (
+        error_content(exc.detail)
+        if isinstance(exc.detail, str)
+        else {"detail": exc.detail}
+    )
+
+    return JSONResponse(
+        content=jsonable_encoder(content),
+        status_code=exc.status_code,
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Eingabefehler wie bisher, je Fehler zusätzlich mit Code."""
+
+    errors = exc.errors()
+    detail = jsonable_encoder(errors)
+
+    for raw, encoded in zip(errors, detail):
+        if isinstance(encoded, dict):
+            encoded.update(validation_error_code(raw))
+
+    return JSONResponse(
+        content={"detail": detail},
+        status_code=422,
+    )
+
 
 api_router = APIRouter(prefix=API_PREFIX)
 api_router.include_router(imports_router)

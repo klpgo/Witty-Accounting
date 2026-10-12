@@ -141,11 +141,9 @@ def test_upload_rejects_non_xlsx_file(
     )
 
     assert response.status_code == 400
-    assert response.json() == {
-        "detail": (
-            "Only XLSX files are supported."
-        )
-    }
+    assert response.json()["detail"] == (
+        "Only XLSX files are supported."
+    )
 
 def test_upload_rejects_empty_xlsx(
     client: TestClient,
@@ -165,9 +163,7 @@ def test_upload_rejects_empty_xlsx(
     )
 
     assert response.status_code == 400
-    assert response.json() == {
-        "detail": "The uploaded file is empty."
-    }
+    assert response.json()["detail"] == "The uploaded file is empty."
 
 
 def test_upload_rejects_oversized_file(
@@ -194,11 +190,9 @@ def test_upload_rejects_oversized_file(
     )
 
     assert response.status_code == 413
-    assert response.json() == {
-        "detail": (
-            "The XLSX file is too large. The maximum is 10 MB."
-        )
-    }
+    assert response.json()["detail"] == (
+        "The XLSX file is too large. The maximum is 10 MB."
+    )
 
 
 def test_upload_rejects_corrupt_xlsx(

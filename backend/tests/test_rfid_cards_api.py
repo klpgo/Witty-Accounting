@@ -333,11 +333,9 @@ def test_assignment_history_returns_not_found(
     )
 
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": (
-            "RFID card 999999 was not found."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "RFID card 999999 was not found."
+    )
 
 
 def test_admin_creates_rfid_card(
@@ -427,11 +425,9 @@ def test_create_rfid_card_rejects_duplicate_number(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": (
-            "This RFID number is already in use."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "This RFID number is already in use."
+    )
 
 
 def test_admin_updates_rfid_card(
@@ -568,11 +564,9 @@ def test_update_rfid_card_returns_not_found(
     )
 
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": (
-            "RFID card 999999 was not found."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "RFID card 999999 was not found."
+    )
 
 
 def test_admin_creates_rfid_assignment(
@@ -701,12 +695,10 @@ def test_create_assignment_rejects_overlap(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": (
-            "The assignment period overlaps with an existing assignment "
-            "of this RFID card."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "The assignment period overlaps with an existing assignment "
+        "of this RFID card."
+    )
 
 
 def test_create_assignment_allows_adjacent_period(

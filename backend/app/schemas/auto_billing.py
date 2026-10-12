@@ -1,7 +1,15 @@
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+)
+
+from app.errors import message_code
 
 from app.services.billing_schedule import (
     MAX_GRACE_DAYS,
@@ -22,6 +30,12 @@ class BillingRunSkipped(BaseModel):
     reason: str
     invoice_id: int | None = None
     message: str | None = None
+
+    @computed_field
+    @property
+    def message_code(self) -> dict[str, Any] | None:
+        """Code zur Meldung, damit die Oberfläche sie übersetzen kann."""
+        return message_code(self.message)
 
 
 class BillingRunResponse(BaseModel):

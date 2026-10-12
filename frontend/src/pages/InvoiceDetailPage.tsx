@@ -46,6 +46,7 @@ import {
   invoiceBadge,
 } from '../i18n/invoiceLabels'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
 
 function InvoiceDetailPage() {
@@ -1003,14 +1004,13 @@ function InvoiceDetailPage() {
         onChanged={setInvoice}
       />
 
-      {deleteErrorMessage && (
-        <section
-          className="form-error detail-error"
-          role="alert"
-        >
-          {deleteErrorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={deleteErrorMessage}
+        onClose={() => {
+          setDeleteErrorMessage(null)
+        }}
+      />
 
       {isAdmin &&
         invoice.status === 'finalized' &&
@@ -1024,59 +1024,53 @@ function InvoiceDetailPage() {
         </section>
       )}
 
-      {pdfErrorMessage && (
-        <section
-          className="form-error detail-error"
-          role="alert"
-        >
-          {pdfErrorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={pdfErrorMessage}
+        onClose={() => {
+          setPdfErrorMessage(null)
+        }}
+      />
 
-      {pdfSuccessMessage && (
-        <section
-          className="form-success detail-error"
-          role="status"
-        >
-          {pdfSuccessMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="success"
+        message={pdfSuccessMessage}
+        onClose={() => {
+          setPdfSuccessMessage(null)
+        }}
+      />
 
-      {emailErrorMessage && (
-        <section
-          className="form-error detail-error"
-          role="alert"
-        >
-          {emailErrorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={emailErrorMessage}
+        onClose={() => {
+          setEmailErrorMessage(null)
+        }}
+      />
 
-      {emailSuccessMessage && (
-        <section
-          className="form-success detail-error"
-          role="status"
-        >
-          {emailSuccessMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="success"
+        message={emailSuccessMessage}
+        onClose={() => {
+          setEmailSuccessMessage(null)
+        }}
+      />
 
-      {exportErrorMessage && (
-        <section
-          className="form-error detail-error"
-          role="alert"
-        >
-          {exportErrorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={exportErrorMessage}
+        onClose={() => {
+          setExportErrorMessage(null)
+        }}
+      />
 
-      {exportSuccessMessage && (
-        <section
-          className="form-success detail-error"
-          role="status"
-        >
-          {exportSuccessMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="success"
+        message={exportSuccessMessage}
+        onClose={() => {
+          setExportSuccessMessage(null)
+        }}
+      />
 
       <section className="invoice-summary-grid">
         <article className="card">

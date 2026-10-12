@@ -19,6 +19,7 @@ import type { I18nContextValue } from '../i18n/i18nContext'
 import { formatDate } from '../utils/dateFormat'
 import { formatNumber } from '../utils/numberFormat'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
 const MAX_UPLOAD_SIZE_BYTES =
   10 * 1024 * 1024
@@ -326,14 +327,13 @@ function AdminImportPage() {
         </div>
       </header>
 
-      {errorMessage && (
-        <section
-          className="card form-error admin-message"
-          role="alert"
-        >
-          {errorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
       <form
         className="card import-form"

@@ -23,6 +23,7 @@ import {
   formatServicePeriod,
   formatUtcDateTime,
 } from '../utils/dateFormat'
+import SystemMessage from '../components/SystemMessage'
 
 const INTERVAL_KEYS: Record<BillingInterval, MessageKey> = {
   weekly: 'autoBilling.interval.weekly',
@@ -229,17 +230,21 @@ function AdminAutoBillingForm() {
           <p className="muted">{t('autoBilling.intro')}</p>
         </div>
 
-        {errorMessage && (
-          <div className="form-error" role="alert">
-            {errorMessage}
-          </div>
-        )}
+        <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-        {successMessage && (
-          <div className="form-success" role="status">
-            {successMessage}
-          </div>
-        )}
+        <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
         <label className="settings-checkbox-control">
           <input

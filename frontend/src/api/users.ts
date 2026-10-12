@@ -1,3 +1,5 @@
+import { readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -80,10 +82,6 @@ export function getInvoiceDeliveryFlags(
   }
 }
 
-interface ApiErrorResponse {
-  detail?: string
-}
-
 export class UserApiError extends Error {
   readonly status: number
 
@@ -95,23 +93,6 @@ export class UserApiError extends Error {
     this.name = 'UserApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (body.detail) {
-      return body.detail
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Request failed (${response.status}).`
 }
 
 function createHeaders(
@@ -142,7 +123,7 @@ export async function getOwnProfile(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -168,7 +149,7 @@ export async function updateOwnProfile(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -198,7 +179,7 @@ export async function changeOwnPassword(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -218,7 +199,7 @@ export async function listUsers(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -241,7 +222,7 @@ export async function getUser(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -267,7 +248,7 @@ export async function createUser(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -294,7 +275,7 @@ export async function updateUser(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -323,7 +304,7 @@ export async function resetUserPassword(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -362,7 +343,7 @@ export async function getUserDeletionCheck(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -389,7 +370,7 @@ export async function deleteUser(
 
   if (!response.ok) {
     throw new UserApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }

@@ -15,6 +15,7 @@ import { useAuth } from '../auth/useAuth'
 import type { MessageKey } from '../i18n/de'
 import { useTranslation } from '../i18n/useTranslation'
 import { formatUtcDateTime } from '../utils/dateFormat'
+import SystemMessage from '../components/SystemMessage'
 
 const BLOCKER_KEYS: Record<string, MessageKey> = {
   older_year_pending: 'retention.blocker.olderYear',
@@ -201,20 +202,24 @@ function AdminRetentionForm() {
           <p className="muted">{t('retention.intro')}</p>
         </div>
 
-        {errorMessage && (
-          <p className="form-error" role="alert">
-            {errorMessage}
-          </p>
-        )}
+        <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-        {successMessage && (
-          <p className="form-success" role="status">
-            {successMessage}
-          </p>
-        )}
+        <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
         {isLoading || overview === null ? (
-          !errorMessage && <p className="muted">{t('common.loading')}</p>
+          isLoading && <p className="muted">{t('common.loading')}</p>
         ) : (
           <>
             <div className="retention-period">

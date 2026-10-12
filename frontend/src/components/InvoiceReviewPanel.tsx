@@ -6,10 +6,12 @@ import {
   requestInvoiceInquiry,
   type Invoice,
 } from '../api/invoices'
+import { localizeMessage } from '../api/errors'
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { useTranslation } from '../i18n/useTranslation'
 import { formatDate, formatUtcDateTime } from '../utils/dateFormat'
+import SystemMessage from './SystemMessage'
 
 interface InvoiceReviewPanelProps {
   invoice: Invoice
@@ -139,7 +141,10 @@ function InvoiceReviewPanel({
         {invoice.notification_error && (
           <p className="muted">
             {t('invoiceReview.admin.error', {
-              message: invoice.notification_error,
+              message: localizeMessage(
+                invoice.notification_error,
+                invoice.notification_error_code,
+              ) ?? '',
             })}
           </p>
         )}
@@ -177,11 +182,13 @@ function InvoiceReviewPanel({
             })}
           </p>
 
-          {errorMessage && (
-            <p className="form-error" role="alert">
-              {errorMessage}
-            </p>
-          )}
+          <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
           <div className="form-actions">
             <button

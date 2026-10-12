@@ -13,6 +13,7 @@ import {
 import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from './SystemMessage'
 
 interface InvoiceCancellationFinalizeFormProps {
   cancellationId: number
@@ -168,14 +169,13 @@ function InvoiceCancellationFinalizeForm({
           />
         </label>
 
-        {errorMessage && (
-          <p
-            className="form-error"
-            role="alert"
-          >
-            {errorMessage}
-          </p>
-        )}
+        <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
         <div className="form-actions">
           <button

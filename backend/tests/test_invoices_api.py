@@ -402,12 +402,10 @@ def test_draft_reports_missing_historical_tariff(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": (
-            f"No valid tariff for charging session {charging_session.id} "
-            "on 17.06.2026."
-        )
-    }
+    assert response.json()["detail"] == (
+        f"No valid tariff for charging session {charging_session.id} "
+        "on 17.06.2026."
+    )
     assert database_session.scalar(
         select(Invoice.id)
     ) is None
@@ -438,11 +436,9 @@ def test_create_draft_rejects_missing_recipient_address(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": (
-            "No address is stored for the invoice recipient."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "No address is stored for the invoice recipient."
+    )
 
 
 def test_finalizes_invoice(
@@ -1608,11 +1604,9 @@ def test_rejects_deleting_finalized_invoice(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": (
-            "Only a draft can be deleted."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "Only a draft can be deleted."
+    )
 
 
 def test_delete_invoice_returns_not_found(
@@ -1738,9 +1732,7 @@ def test_maps_invoice_email_errors(
     )
 
     assert response.status_code == expected_status
-    assert response.json() == {
-        "detail": message,
-    }
+    assert response.json()["detail"] == message
 
 
 def test_lists_invoices_newest_first(

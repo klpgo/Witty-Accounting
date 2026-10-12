@@ -12,6 +12,7 @@ import { confirmPasswordReset } from '../api/auth'
 import PasswordFields from '../components/PasswordFields'
 import { useAppSettings } from '../settings/useAppSettings'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
 
 function ResetPasswordPage() {
@@ -92,11 +93,13 @@ function ResetPasswordPage() {
                 }
               />
 
-              {errorMessage && (
-                <p className="form-error" role="alert">
-                  {errorMessage}
-                </p>
-              )}
+              <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
               <button
                 className="button button-primary"

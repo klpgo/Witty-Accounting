@@ -1,3 +1,5 @@
+import { readApiError } from './errors'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
   '/api'
@@ -26,10 +28,6 @@ export interface ChargingSession {
   discard_reason: string | null
 }
 
-interface ApiErrorResponse {
-  detail?: string
-}
-
 export class ChargingSessionApiError extends Error {
   readonly status: number
 
@@ -41,23 +39,6 @@ export class ChargingSessionApiError extends Error {
     this.name = 'ChargingSessionApiError'
     this.status = status
   }
-}
-
-async function getErrorMessage(
-  response: Response,
-): Promise<string> {
-  try {
-    const body =
-      (await response.json()) as ApiErrorResponse
-
-    if (body.detail) {
-      return body.detail
-    }
-  } catch {
-    // Die Antwort enthielt kein JSON.
-  }
-
-  return `Request failed (${response.status}).`
 }
 
 export async function listChargingSessions(
@@ -78,7 +59,7 @@ export async function listChargingSessions(
 
   if (!response.ok) {
     throw new ChargingSessionApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }
@@ -107,7 +88,7 @@ async function postSessionIds(
 
   if (!response.ok) {
     throw new ChargingSessionApiError(
-      await getErrorMessage(response),
+      await readApiError(response),
       response.status,
     )
   }

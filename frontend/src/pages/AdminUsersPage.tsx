@@ -28,6 +28,7 @@ import {
 import { getDisplayLocale } from '../utils/dateFormat'
 import { useTranslation } from '../i18n/useTranslation'
 import { useAppSettings } from '../settings/useAppSettings'
+import SystemMessage from '../components/SystemMessage'
 
 function sortUsers(users: User[]): User[] {
   return [...users].sort((first, second) => {
@@ -572,23 +573,21 @@ function AdminUsersPage() {
         </section>
       )}
 
-      {!isLoading && errorMessage && (
-        <section
-          className="card form-error"
-          role="alert"
-        >
-          {errorMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
-      {!isLoading && successMessage && (
-        <section
-          className="card form-success"
-          role="status"
-        >
-          {successMessage}
-        </section>
-      )}
+      <SystemMessage
+        kind="success"
+        message={successMessage}
+        onClose={() => {
+          setSuccessMessage(null)
+        }}
+      />
 
       {!isLoading && users.length === 0 && (
         <section className="card">

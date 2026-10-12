@@ -1581,3 +1581,60 @@ select {
 .review-panel p:last-child {
   margin-bottom: 0;
 }
+
+/* Systemmeldungen als Dialog mit OK-Button */
+.system-message-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(16 24 40 / 45%);
+}
+
+.system-message {
+  width: min(480px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  border-top: 6px solid #2949bd;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 24px;
+  box-shadow: 0 20px 48px rgb(16 24 40 / 25%);
+}
+
+.system-message-error {
+  border-top-color: #d92d20;
+}
+
+.system-message-success {
+  border-top-color: #067647;
+}
+
+.system-message h2 {
+  margin: 0 0 12px;
+  font-size: 1.15rem;
+}
+
+.system-message-error h2 {
+  color: #b42318;
+}
+
+.system-message-success h2 {
+  color: #067647;
+}
+
+.system-message p {
+  margin: 0;
+  color: #344054;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.system-message-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}

@@ -25,6 +25,7 @@ import { getAccessToken } from '../auth/tokenStorage'
 import { useAuth } from '../auth/useAuth'
 import { formatDate } from '../utils/dateFormat'
 import { useTranslation } from '../i18n/useTranslation'
+import SystemMessage from '../components/SystemMessage'
 
 function padNumber(value: number): string {
   return String(value).padStart(2, '0')
@@ -478,14 +479,13 @@ function InvoiceDraftCreatePage() {
               </span>
             </label>
 
-            {errorMessage && (
-              <p
-                className="form-error"
-                role="alert"
-              >
-                {errorMessage}
-              </p>
-            )}
+            <SystemMessage
+        kind="error"
+        message={errorMessage}
+        onClose={() => {
+          setErrorMessage(null)
+        }}
+      />
 
             <div className="form-actions">
               <Link

@@ -183,11 +183,9 @@ def test_rejects_duplicate_valid_from(
 
     assert first_response.status_code == 201
     assert second_response.status_code == 409
-    assert second_response.json() == {
-        "detail": (
-            "A tariff already exists for this validity date."
-        )
-    }
+    assert second_response.json()["detail"] == (
+        "A tariff already exists for this validity date."
+    )
 
 
 @pytest.mark.parametrize(
@@ -372,11 +370,9 @@ def test_current_energy_price_returns_not_found(
     )
 
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": (
-            "There is no currently valid energy tariff yet."
-        ),
-    }
+    assert response.json()["detail"] == (
+        "There is no currently valid energy tariff yet."
+    )
 
 
 def test_unchanged_current_energy_price_is_not_duplicated(
