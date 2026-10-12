@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased
+## 2.3.0 2026-10-12
 
 ### New features
 
@@ -64,6 +64,13 @@
   Before, `alembic upgrade head` silently migrated only the database from
   `DATABASE_URL` and left the tenant databases on the old schema.
 
+### Fixes
+
+- When finalizing an invoice, the due date was preset to 14 days instead of
+  the payment term configured in the settings. The form now uses the
+  configured payment term and follows changes of the invoice date; only a
+  manually changed due date is sent.
+
 ### Database
 
 - Migration `b8c0d2e4f6a3`: invoices keep working without a user account,
@@ -83,15 +90,6 @@
 - Migration `a3b5c7d9e1f4`: `global_settings.vat_enabled`,
   `vat_exemption_note`, and `invoices.vat_exempt`, `vat_exemption_note`.
 - Apply all six as described in the administrator guide, section 8.
-
-## 2.0.1 2026-10-02
-
-### Fixes
-
-- When finalizing an invoice, the due date was preset to 14 days instead of
-  the payment term configured in the settings. The form now uses the
-  configured payment term and follows changes of the invoice date; only a
-  manually changed due date is sent.
 
 ## 2.0.0 2026-10-02
 
