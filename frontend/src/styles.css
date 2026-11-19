@@ -1643,3 +1643,27 @@ select {
   justify-content: flex-end;
   margin-top: 20px;
 }
+
+/* Zeitraum langer Listen (Ladevorgänge, Rechnungen) */
+.time-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.time-window-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.time-window-select select {
+  min-width: 180px;
+}
+
+.time-window-hint {
+  flex-basis: 100%;
+  margin: 0;
+}

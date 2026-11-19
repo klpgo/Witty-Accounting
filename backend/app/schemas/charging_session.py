@@ -44,3 +44,7 @@ class ChargingSessionDiscardRequest(ChargingSessionIdsRequest):
 
 class ChargingSessionBulkResult(BaseModel):
     changed: int
+
+
+class ChargingSessionRange(BaseModel):
+    oldest_start: datetime | None

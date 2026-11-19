@@ -111,12 +111,17 @@ export class InvoiceApiError extends Error {
   }
 }
 
+// since: nur Rechnungen mit Rechnungsdatum ab diesem Tag (Entwürfe immer)
 export async function listInvoices(
   accessToken: string,
   signal?: AbortSignal,
+  since?: string | null,
 ): Promise<Invoice[]> {
+  const query = since
+    ? `?${new URLSearchParams({ since }).toString()}`
+    : ''
   const response = await fetch(
-    `${API_BASE_URL}/invoices`,
+    `${API_BASE_URL}/invoices${query}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -133,6 +138,30 @@ export async function listInvoices(
   }
 
   return (await response.json()) as Invoice[]
+}
+
+// Ältestes Rechnungsdatum (für „Ältere laden“)
+export async function getInvoiceRange(
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const response = await fetch(`${API_BASE_URL}/invoices/range`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new InvoiceApiError(
+      await readApiError(response),
+      response.status,
+    )
+  }
+
+  return (
+    (await response.json()) as { oldest_issue_date: string | null }
+  ).oldest_issue_date
 }
 
 export async function getInvoice(

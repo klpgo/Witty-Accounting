@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
 } from 'react'
 import {
@@ -9,6 +10,7 @@ import {
 
 import {
   InvoiceApiError,
+  getInvoiceRange,
   listInvoices,
   type Invoice,
 } from '../api/invoices'
@@ -23,6 +25,9 @@ import {
   invoiceBadge,
 } from '../i18n/invoiceLabels'
 import { useTranslation } from '../i18n/useTranslation'
+import TimeWindowControl, {
+  monthStartBefore,
+} from '../components/TimeWindowControl'
 
 
 function InvoicesPage() {
@@ -33,6 +38,13 @@ function InvoicesPage() {
 
   const [invoices, setInvoices] =
     useState<Invoice[]>([])
+
+  // Angezeigter Zeitraum: Rechnungen der letzten zwölf Monate,
+  // Entwürfe immer
+  const defaultSince = useMemo(() => monthStartBefore(11), [])
+  const [since, setSince] = useState<string | null>(defaultSince)
+  const [oldestIssueDate, setOldestIssueDate] =
+    useState<string | null>(null)
 
   const [isLoading, setIsLoading] =
     useState(true)
@@ -60,13 +72,13 @@ function InvoicesPage() {
 
     async function loadInvoices(): Promise<void> {
       try {
-        const loadedInvoices =
-          await listInvoices(
-            token,
-            controller.signal,
-          )
+        const [loadedInvoices, loadedOldest] = await Promise.all([
+          listInvoices(token, controller.signal, since),
+          getInvoiceRange(token, controller.signal),
+        ])
 
         setInvoices(loadedInvoices)
+        setOldestIssueDate(loadedOldest)
       } catch (error) {
         if (
           error instanceof Error &&
@@ -103,7 +115,7 @@ function InvoicesPage() {
     return () => {
       controller.abort()
     }
-  }, [navigate, signOut])
+  }, [navigate, signOut, since])
 
   return (
     <div className="page invoices-page">
@@ -244,6 +256,20 @@ function InvoicesPage() {
             </div>
           </section>
         )}
+
+      {!isLoading && !errorMessage && (
+        <section className="card">
+          <TimeWindowControl
+            since={since}
+            defaultSince={defaultSince}
+            oldest={oldestIssueDate}
+            stepMonths={12}
+            defaultLabel={t('timeWindow.lastMonths', { count: 12 })}
+            alwaysShownHint={t('invoices.timeWindowHint')}
+            onChange={setSince}
+          />
+        </section>
+      )}
     </div>
   )
 }

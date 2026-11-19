@@ -105,13 +105,17 @@ class SPAStaticFiles(StaticFiles):
                 scope,
             )
 
-        if (
-            response.status_code == 200
-            and path.startswith("assets/")
-        ):
-            response.headers["Cache-Control"] = (
-                "public, max-age=31536000, immutable"
-            )
+        if response.status_code in (200, 304):
+            if path.startswith("assets/"):
+                # Dateinamen enthalten einen Hash: dürfen ewig im Cache bleiben
+                response.headers["Cache-Control"] = (
+                    "public, max-age=31536000, immutable"
+                )
+            else:
+                # index.html (und SPA-Routen) bei jedem Aufruf neu prüfen,
+                # sonst lädt der Browser nach einem Update die alte
+                # Oberfläche mit den alten Asset-Namen
+                response.headers["Cache-Control"] = "no-cache"
 
         return response
 
@@ -156,6 +160,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def no_store_api_responses(
+    request: Request,
+    call_next,
+) -> Response:
+    """API-Antworten nie zwischenspeichern (Browser, Proxys), damit z. B.
+    die Liste der Ladevorgänge immer den aktuellen Stand zeigt."""
+    response = await call_next(request)
+
+    if (
+        request.url.path.startswith("/api/")
+        and "cache-control" not in response.headers
+    ):
+        response.headers["Cache-Control"] = "no-store"
+
+    return response
 
 
 

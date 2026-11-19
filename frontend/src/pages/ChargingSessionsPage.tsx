@@ -10,12 +10,16 @@ import {
 
 import {
   ChargingSessionApiError,
+  getChargingSessionRange,
   discardChargingSessions,
   listChargingSessions,
   restoreChargingSessions,
   type ChargingSession,
 } from '../api/chargingSessions'
 import { getAccessToken } from '../auth/tokenStorage'
+import TimeWindowControl, {
+  monthStartBefore,
+} from '../components/TimeWindowControl'
 import { useAuth } from '../auth/useAuth'
 import {
   formatDateValue,
@@ -209,6 +213,13 @@ function ChargingSessionsPage() {
   const [showDiscarded, setShowDiscarded] =
     useState(false)
 
+  // Angezeigter Zeitraum: abgerechnete Ladevorgänge der letzten drei
+  // Monate (aktueller und zwei vorherige), nicht abgerechnete immer
+  const defaultSince = useMemo(() => monthStartBefore(2), [])
+  const [since, setSince] = useState<string | null>(defaultSince)
+  const [oldestStart, setOldestStart] =
+    useState<string | null>(null)
+
   const visibleChargingSessions = useMemo(
     () =>
       chargingSessions.filter((chargingSession) => {
@@ -279,16 +290,25 @@ function ChargingSessionsPage() {
     async function loadChargingSessions():
       Promise<void> {
       try {
-        const loadedChargingSessions =
-          await listChargingSessions(
-            token,
-            controller.signal,
-            isAdmin,
-          )
+        const [loadedChargingSessions, loadedOldestStart] =
+          await Promise.all([
+            listChargingSessions(
+              token,
+              controller.signal,
+              isAdmin,
+              since,
+            ),
+            getChargingSessionRange(
+              token,
+              controller.signal,
+              isAdmin,
+            ),
+          ])
 
         setChargingSessions(
           loadedChargingSessions,
         )
+        setOldestStart(loadedOldestStart)
         setSelectedIds(new Set())
       } catch (error) {
         if (
@@ -329,7 +349,7 @@ function ChargingSessionsPage() {
     return () => {
       controller.abort()
     }
-  }, [navigate, signOut, isAdmin, reloadKey])
+  }, [navigate, signOut, isAdmin, reloadKey, since])
 
   const selectableIds = visibleChargingSessions
     .filter(isDiscardable)
@@ -825,6 +845,20 @@ function ChargingSessionsPage() {
             </div>
           </section>
         )}
+
+      {!isLoading && !errorMessage && (
+        <section className="card">
+          <TimeWindowControl
+            since={since}
+            defaultSince={defaultSince}
+            oldest={oldestStart}
+            stepMonths={3}
+            defaultLabel={t('timeWindow.lastMonths', { count: 3 })}
+            alwaysShownHint={t('sessions.timeWindowHint')}
+            onChange={setSince}
+          />
+        </section>
+      )}
     </div>
   )
 }

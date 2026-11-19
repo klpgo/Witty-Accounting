@@ -89,3 +89,29 @@ def test_versioned_assets_are_cached(
     assert response.headers["cache-control"] == (
         "public, max-age=31536000, immutable"
     )
+
+
+def test_index_html_is_always_revalidated(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "index.html").write_text(
+        "<html>Witty frontend</html>",
+        encoding="utf-8",
+    )
+
+    with TestClient(
+        build_static_test_app(tmp_path)
+    ) as client:
+        root = client.get("/")
+        spa_route = client.get("/charging-sessions")
+
+    assert root.headers["cache-control"] == "no-cache"
+    assert spa_route.headers["cache-control"] == "no-cache"
+
+
+def test_api_responses_are_not_stored() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/does-not-exist")
+
+    assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"

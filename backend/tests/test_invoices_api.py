@@ -1968,3 +1968,56 @@ def test_cancellation_keeps_language_of_original(
         "Cancellation of Charging session "
     )
     assert database_session.get(Invoice, cancellation["id"]).language == "en"
+
+
+def add_listed_invoice(
+    db: Session,
+    user: User,
+    number: str | None,
+    issue_date: date | None,
+) -> Invoice:
+    invoice = Invoice(
+        invoice_number=number,
+        document_type="invoice",
+        user_id=user.id,
+        issuer_name="Witty",
+        issuer_address="Testweg 1",
+        recipient_name="Test",
+        recipient_address="Test",
+        status="finalized" if issue_date else "draft",
+        issue_date=issue_date,
+        service_period_start=datetime(2025, 1, 1),
+        service_period_end=datetime(2025, 2, 1),
+        total_net=Decimal("1.00"),
+        vat_amount=Decimal("0.19"),
+        total_gross=Decimal("1.19"),
+    )
+    db.add(invoice)
+    db.commit()
+    return invoice
+
+
+def test_since_limits_invoices_but_keeps_drafts(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    user, _ = create_billable_session(database_session)
+    old = add_listed_invoice(
+        database_session, user, "RE-2025-0001", date(2025, 2, 3)
+    )
+    new = add_listed_invoice(
+        database_session, user, "RE-2026-0001", date(2026, 9, 2)
+    )
+    draft = add_listed_invoice(database_session, user, None, None)
+
+    all_ids = [item["id"] for item in client.get("/api/invoices").json()]
+    assert all_ids == [draft.id, new.id, old.id]
+
+    recent = client.get(
+        "/api/invoices", params={"since": "2026-01-01"}
+    ).json()
+    assert [item["id"] for item in recent] == [draft.id, new.id]
+
+    response = client.get("/api/invoices/range")
+    assert response.status_code == 200
+    assert response.json() == {"oldest_issue_date": "2025-02-03"}

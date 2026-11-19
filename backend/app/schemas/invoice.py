@@ -128,3 +128,6 @@ class InvoiceInquiryResponse(BaseModel):
     invoice: InvoiceResponse
     contact_email: str | None
 
+
+class InvoiceRange(BaseModel):
+    oldest_issue_date: date | None

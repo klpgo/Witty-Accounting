@@ -45,12 +45,33 @@ export class ChargingSessionApiError extends Error {
   }
 }
 
+function sessionQuery(
+  includeDiscarded: boolean,
+  since?: string | null,
+): string {
+  const params = new URLSearchParams()
+
+  if (includeDiscarded) {
+    params.set('include_discarded', 'true')
+  }
+
+  if (since) {
+    params.set('since', since)
+  }
+
+  const query = params.toString()
+
+  return query ? `?${query}` : ''
+}
+
+// since: nur Ladevorgänge ab diesem Tag (nicht abgerechnete immer)
 export async function listChargingSessions(
   accessToken: string,
   signal?: AbortSignal,
   includeDiscarded = false,
+  since?: string | null,
 ): Promise<ChargingSession[]> {
-  const query = includeDiscarded ? '?include_discarded=true' : ''
+  const query = sessionQuery(includeDiscarded, since)
   const response = await fetch(
     `${API_BASE_URL}/charging-sessions${query}`,
     {
@@ -71,6 +92,34 @@ export async function listChargingSessions(
   return (
     await response.json()
   ) as ChargingSession[]
+}
+
+// Beginn des ältesten sichtbaren Ladevorgangs (für „Ältere laden“)
+export async function getChargingSessionRange(
+  accessToken: string,
+  signal?: AbortSignal,
+  includeDiscarded = false,
+): Promise<string | null> {
+  const response = await fetch(
+    `${API_BASE_URL}/charging-sessions/range${sessionQuery(includeDiscarded)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw new ChargingSessionApiError(
+      await readApiError(response),
+      response.status,
+    )
+  }
+
+  return (
+    (await response.json()) as { oldest_start: string | null }
+  ).oldest_start
 }
 
 async function postSessionIds(

@@ -1,7 +1,8 @@
+from datetime import date, datetime, time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
@@ -14,6 +15,7 @@ from app.models.rfid_card_assignment import (
 )
 from app.models.user import User
 from app.schemas.charging_session import (
+    ChargingSessionRange,
     ChargingSessionBulkResult,
     ChargingSessionDiscardRequest,
     ChargingSessionIdsRequest,
@@ -47,7 +49,12 @@ def list_charging_sessions(
         Depends(get_db),
     ],
     include_discarded: bool = False,
+    since: date | None = None,
 ) -> list[ChargingSessionResponse]:
+    """
+    Ladevorgänge, neueste zuerst. Mit `since` nur Ladevorgänge ab diesem
+    Tag – noch nicht abgerechnete aber immer, egal wie alt.
+    """
     statement = (
         select(
             ChargingSession,
@@ -94,6 +101,18 @@ def list_charging_sessions(
     if not (current_user.is_admin and include_discarded):
         statement = statement.where(
             ChargingSession.discarded_at.is_(None)
+        )
+
+    if since is not None:
+        statement = statement.where(
+            or_(
+                ChargingSession.start_time
+                >= datetime.combine(since, time.min),
+                and_(
+                    ChargingSession.invoiced.is_(False),
+                    ChargingSession.discarded_at.is_(None),
+                ),
+            )
         )
 
     rows = db.execute(statement).all()
@@ -180,6 +199,40 @@ def list_charging_sessions(
         )
 
     return result
+
+
+@router.get(
+    "/range",
+    response_model=ChargingSessionRange,
+)
+def charging_session_range(
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+    include_discarded: bool = False,
+) -> ChargingSessionRange:
+    """Beginn des ältesten sichtbaren Ladevorgangs (für „Ältere laden“)."""
+    statement = select(func.min(ChargingSession.start_time)).outerjoin(
+        RFIDCardAssignment,
+        ChargingSession.rfid_assignment_id == RFIDCardAssignment.id,
+    )
+
+    if not current_user.is_admin:
+        statement = statement.where(
+            RFIDCardAssignment.user_id == current_user.id
+        )
+
+    if not (current_user.is_admin and include_discarded):
+        statement = statement.where(
+            ChargingSession.discarded_at.is_(None)
+        )
+
+    return ChargingSessionRange(oldest_start=db.scalar(statement))
 
 
 @router.post(

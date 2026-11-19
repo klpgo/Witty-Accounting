@@ -666,3 +666,45 @@ def test_admin_sees_imported_rfid_number_of_unassigned_session(
 
     assert item["rfid_number"] == "E5F6A7B8"
     assert item["user_id"] is None
+
+
+def test_since_limits_billed_sessions_but_keeps_unbilled_ones(
+    client: TestClient,
+    database_session: Session,
+) -> None:
+    admin, card, assignment, old_open = create_admin_with_session(
+        database_session
+    )  # 10.06., nicht abgerechnet
+    old_billed = create_charging_session(
+        database_session,
+        suffix="old-billed",
+        start_time=datetime(2026, 5, 3, 8, 0),
+        card=card,
+        assignment=assignment,
+        invoiced=True,
+    )
+    new_billed = create_charging_session(
+        database_session,
+        suffix="new-billed",
+        start_time=datetime(2026, 9, 3, 8, 0),
+        card=card,
+        assignment=assignment,
+        invoiced=True,
+    )
+
+    assert set(listed_ids(client, admin)) == {
+        old_open.id,
+        old_billed.id,
+        new_billed.id,
+    }
+    assert listed_ids(client, admin, since="2026-08-01") == [
+        new_billed.id,
+        old_open.id,
+    ]
+
+    response = client.get(
+        "/api/charging-sessions/range",
+        headers=authorization_header(admin),
+    )
+    assert response.status_code == 200
+    assert response.json() == {"oldest_start": "2026-05-03T08:00:00"}

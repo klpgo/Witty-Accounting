@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 from typing import Annotated
 
 from fastapi import (
@@ -10,7 +11,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import (
     Session,
     selectinload,
@@ -42,6 +43,7 @@ from app.schemas.invoice import (
     InvoiceEmailResponse,
     InvoiceFinalizeRequest,
     InvoiceInquiryResponse,
+    InvoiceRange,
     InvoiceResponse,
 )
 from app.schemas.invoice_export import (
@@ -201,7 +203,12 @@ def list_invoices(
         Session,
         Depends(get_db),
     ],
+    since: date | None = None,
 ) -> list[InvoiceResponse]:
+    """
+    Rechnungen, neueste zuerst. Mit `since` nur Rechnungen mit
+    Rechnungsdatum ab diesem Tag – Entwürfe aber immer.
+    """
     statement = (
         select(Invoice)
         .options(
@@ -224,10 +231,44 @@ def list_invoices(
             customer_visibility(),
         )
 
+    if since is not None:
+        statement = statement.where(
+            or_(
+                Invoice.status == "draft",
+                Invoice.issue_date >= since,
+            )
+        )
+
     return [
         to_invoice_response(db, invoice, current_user)
         for invoice in db.scalars(statement).all()
     ]
+
+
+@router.get(
+    "/range",
+    response_model=InvoiceRange,
+)
+def invoice_range(
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> InvoiceRange:
+    """Ältestes Rechnungsdatum der sichtbaren Rechnungen."""
+    statement = select(func.min(Invoice.issue_date))
+
+    if not current_user.is_admin:
+        statement = statement.where(
+            Invoice.user_id == current_user.id,
+            customer_visibility(),
+        )
+
+    return InvoiceRange(oldest_issue_date=db.scalar(statement))
 
 
 @router.post(

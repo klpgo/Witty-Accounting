@@ -4,6 +4,14 @@
 
 ### Changes
 
+- **Shorter lists of charging sessions and invoices.** The lists no longer
+  load everything. Charging sessions show the last three months (unbilled
+  sessions always), invoices the last twelve months (drafts always). A
+  period selection (whole years or all) and **Load older months** show more.
+- **No more outdated pages after an update.** The browser could keep an old
+  `index.html` and show the previous version of the interface (and with it
+  outdated status texts) until the page was reloaded. `index.html` is now
+  revalidated on every visit, and API responses are never cached.
 - **Hager Cloud: sessions that are not finished yet.** Until now the sync
   skipped sessions without an end time. A session that was completed (car
   full) but unplugged only after more than 3 days was never fetched. Now
