@@ -301,9 +301,11 @@ def test_creates_base_fee_only_draft_via_api(
     client: TestClient,
     database_session: Session,
 ) -> None:
-    user, _ = create_billable_session(
+    user, june_session = create_billable_session(
         database_session
     )
+    # Der Juni-Ladevorgang käme sonst als Nachzügler in den Juli-Entwurf
+    june_session.discarded_at = datetime(2026, 7, 1)
 
     database_session.add(
         GlobalSettings(
@@ -1464,9 +1466,11 @@ def test_deleting_draft_releases_monthly_base_fee(
     client: TestClient,
     database_session: Session,
 ) -> None:
-    user, _ = create_billable_session(
+    user, june_session = create_billable_session(
         database_session
     )
+    # Der Juni-Ladevorgang käme sonst als Nachzügler in den Juli-Entwurf
+    june_session.discarded_at = datetime(2026, 7, 1)
 
     database_session.add(
         GlobalSettings(

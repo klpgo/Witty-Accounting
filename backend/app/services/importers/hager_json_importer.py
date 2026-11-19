@@ -12,6 +12,7 @@ XLSX-Import als lokale, naive Zeit (Europe/Berlin).
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -19,12 +20,17 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.charging_session import ChargingSession
+from app.models.charging_session import (
+    HAGER_STATE_COMPLETED,
+    HAGER_STATE_RUNNING,
+    ChargingSession,
+)
 from app.services.importers.xlsx_importer import create_import_hash
 from app.services.data_timezone import ensure_data_timezone
 from app.services.deleted_sessions import find_deleted_session
 from app.services.wallboxes import fallback_name
 from app.services.importers.import_filters import (
+    EMPTY,
     ExclusionCounter,
     ImportFilters,
     exclusion_reason,
@@ -40,6 +46,20 @@ from app.utils.local_time import LOCAL_TIMEZONE
 
 
 JSON_SOURCE = "json"
+
+logger = logging.getLogger(__name__)
+
+# Hager-Status eines abgeschlossenen Ladevorgangs (Auto voll, Kabel steckt)
+HAGER_STATUS_FULL = "FULL"
+
+
+def local_now() -> datetime:
+    """Aktuelle Zeit als naive lokale Zeit (Europe/Berlin), auf Sekunden."""
+    return (
+        datetime.now(UTC)
+        .astimezone(LOCAL_TIMEZONE)
+        .replace(tzinfo=None, microsecond=0)
+    )
 
 
 def extract_session_items(payload: Any) -> list[dict[str, Any]]:
@@ -183,16 +203,19 @@ WH_PER_KWH = 1000.0
 def parse_charging_row(
     row: dict[str, Any],
     wallbox_names: dict[str, str],
-) -> dict[str, Any] | None:
+    now: datetime | None = None,
+) -> dict[str, Any]:
     """
     Normalisiert einen Datensatz des E-Mobility-Endpunkts.
 
-    Energie liefert die API in Wh, Zeiten in UTC. Gibt None zurück,
-    wenn der Ladevorgang noch läuft (kein Endzeitpunkt).
-    """
-    if not row.get("stopAt"):
-        return None
+    Energie liefert die API in Wh, Zeiten in UTC. Ladevorgänge ohne
+    Endzeitpunkt (stopAt) sind noch nicht beendet:
 
+    - Status FULL: abgeschlossen (Auto voll, Kabel steckt). Die Energie
+      steht fest; als Endzeit gilt vorläufig der Abruf (`now`), weil Hager
+      den Zeitpunkt des Abschlusses erst beim Beenden liefert.
+    - sonst (CHARGING, WAIT_PV, …): läuft noch; Endzeit vorläufig `now`.
+    """
     session_id = str(row.get("sessionID") or "").strip()
 
     if not session_id:
@@ -203,11 +226,22 @@ def parse_charging_row(
     if not wallbox_id:
         raise ValueError("wallboxID missing")
 
+    status = str(row.get("status") or "").strip()
     start_time = parse_utc_to_local(row.get("startAt"), "startAt")
-    end_time = parse_utc_to_local(row.get("stopAt"), "stopAt")
 
-    if end_time < start_time:
-        raise ValueError("end time is before the start time")
+    if row.get("stopAt"):
+        state = None
+        end_time = parse_utc_to_local(row.get("stopAt"), "stopAt")
+
+        if end_time < start_time:
+            raise ValueError("end time is before the start time")
+    else:
+        state = (
+            HAGER_STATE_COMPLETED
+            if status.upper() == HAGER_STATUS_FULL
+            else HAGER_STATE_RUNNING
+        )
+        end_time = max(now or local_now(), start_time)
 
     station_id = wallbox_names.get(wallbox_id) or fallback_name(wallbox_id)
     rfid = str(row.get("authData") or "").strip().upper() or None
@@ -218,7 +252,8 @@ def parse_charging_row(
         "hager_session_id": session_id,
         "start_time": start_time,
         "end_time": end_time,
-        "status": str(row.get("status") or "").strip(),
+        "status": status,
+        "state": state,
         "station_id": station_id,
         # auch die frühere Schreibweise mit vollständiger ID wiedererkennen
         "station_aliases": {
@@ -243,23 +278,21 @@ def parse_charging_row(
 def parse_charging_rows(
     rows: list[dict[str, Any]],
     wallbox_names: dict[str, str],
-) -> tuple[list[dict[str, Any]], int]:
-    """Rückgabe: (normalisierte Sessions, Anzahl laufender Sessions)."""
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Normalisierte Sessions, auch noch nicht beendete."""
+    current_time = now or local_now()
     sessions: list[dict[str, Any]] = []
-    running = 0
 
     for index, row in enumerate(rows, start=1):
         try:
-            parsed = parse_charging_row(row, wallbox_names)
+            sessions.append(
+                parse_charging_row(row, wallbox_names, current_time)
+            )
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Error in charging session {index}: {exc}") from exc
 
-        if parsed is None:
-            running += 1
-        else:
-            sessions.append(parsed)
-
-    return sessions, running
+    return sessions
 
 
 def import_json(path: str | Path) -> tuple[list[dict[str, Any]], int]:
@@ -399,6 +432,82 @@ def backfill_existing_session(
     return False
 
 
+def update_open_session(
+    db: Session,
+    existing: ChargingSession,
+    session_data: dict[str, Any],
+) -> tuple[bool, bool]:
+    """
+    Aktualisiert einen gespeicherten, noch nicht beendeten Ladevorgang
+    (hager_state gesetzt) mit dem neuen Stand aus der Hager Cloud.
+
+    Rückgabe: (aktualisiert, neu zu bepreisen).
+    """
+    if existing.hager_state is None:
+        return False, False
+
+    new_state = session_data.get("state")
+    energy_changed = (
+        abs(existing.energy_total_kwh - session_data["energy_total_kwh"])
+        > 1e-9
+        or abs(existing.energy_pv_kwh - session_data["energy_pv_kwh"])
+        > 1e-9
+    )
+
+    if not is_editable(existing):
+        # Abgeschlossen und schon abgerechnet: die Rechnung bleibt, wie sie
+        # ist. Nur der Zustand wird nachgeführt, damit der Abruf nicht
+        # weiter zurückreicht.
+        existing.hager_status = session_data["status"] or existing.hager_status
+
+        if new_state is None:
+            existing.hager_state = None
+
+        if energy_changed:
+            logger.warning(
+                "Hager: charging session %s changed after it was invoiced "
+                "(%.3f kWh invoiced, %.3f kWh now); the invoice was not "
+                "changed",
+                existing.hager_session_id,
+                existing.energy_total_kwh,
+                session_data["energy_total_kwh"],
+            )
+
+        return True, False
+
+    existing.hager_status = session_data["status"] or existing.hager_status
+
+    if new_state is None:
+        # beendet: jetzt mit echter Endzeit
+        existing.end_time = session_data["end_time"]
+    elif new_state == HAGER_STATE_COMPLETED:
+        # Endzeit = erster Abruf, bei dem der Abschluss gesehen wurde
+        if existing.hager_state != HAGER_STATE_COMPLETED:
+            existing.end_time = session_data["end_time"]
+    else:
+        existing.end_time = session_data["end_time"]
+
+    existing.hager_state = new_state
+
+    if energy_changed:
+        existing.energy_total_kwh = session_data["energy_total_kwh"]
+        existing.energy_pv_kwh = session_data["energy_pv_kwh"]
+        existing.cost_grid_net = None
+        existing.cost_pv_net = None
+        existing.vat_rate = None
+
+    new_hash = session_data["import_hash"]
+
+    if new_hash != existing.import_hash and db.scalar(
+        select(ChargingSession.id).where(
+            ChargingSession.import_hash == new_hash
+        )
+    ) is None:
+        existing.import_hash = new_hash
+
+    return True, energy_changed
+
+
 def import_json_to_db(
     db: Session,
     path: str | Path,
@@ -436,15 +545,33 @@ def import_charging_rows_to_db(
     db: Session,
     rows: list[dict[str, Any]],
     wallbox_names: dict[str, str],
+    now: datetime | None = None,
 ) -> dict[str, object]:
-    """Importiert Datensätze des E-Mobility-Endpunkts."""
-    parsed_sessions, running_sessions = parse_charging_rows(rows, wallbox_names)
+    """Importiert Datensätze des E-Mobility-Endpunkts, auch noch nicht
+    beendete Ladevorgänge (siehe update_open_session)."""
+    parsed_sessions = parse_charging_rows(rows, wallbox_names, now)
 
-    return import_parsed_sessions_to_db(
-        db,
-        parsed_sessions,
-        running_sessions,
+    return import_parsed_sessions_to_db(db, parsed_sessions)
+
+
+def remove_empty_open_session(
+    db: Session,
+    session_data: dict[str, Any],
+) -> None:
+    """
+    Ein zunächst offen gespeicherter Ladevorgang endete ohne Energie
+    (und solche werden laut Einstellung nicht importiert): entfernen.
+    """
+    existing = db.scalar(
+        select(ChargingSession).where(
+            ChargingSession.hager_session_id
+            == session_data["hager_session_id"],
+            ChargingSession.hager_state.is_not(None),
+        )
     )
+
+    if existing is not None and is_editable(existing):
+        db.delete(existing)
 
 
 def import_parsed_sessions_to_db(
@@ -462,6 +589,8 @@ def import_parsed_sessions_to_db(
     excluded = ExclusionCounter()
 
     imported = 0
+    updated = 0
+    open_sessions = 0
     skipped = running_sessions
     backfilled = 0
     issues = RFIDIssueCollector()
@@ -469,14 +598,22 @@ def import_parsed_sessions_to_db(
     seen_ids: set[str] = set()
 
     for session_data in parsed_sessions:
+        state = session_data.get("state")
+
+        # Noch nicht beendete Ladevorgänge können noch Energie aufnehmen:
+        # die Regel "ohne Energie" gilt erst beim Beenden
         reason = exclusion_reason(
             filters,
             session_data["start_time"],
-            session_data["energy_total_kwh"],
+            session_data["energy_total_kwh"] if state is None else 1.0,
         )
 
         if reason is not None:
             excluded.add(reason)
+
+            if reason == EMPTY:
+                remove_empty_open_session(db, session_data)
+
             continue
 
         if session_data["hager_session_id"] in seen_ids:
@@ -500,7 +637,22 @@ def import_parsed_sessions_to_db(
         existing = find_existing_session(db, session_data)
 
         if existing is not None:
-            skipped += 1
+            was_updated, needs_pricing = update_open_session(
+                db,
+                existing,
+                session_data,
+            )
+
+            if was_updated:
+                updated += 1
+
+                if needs_pricing and existing.import_hash:
+                    imported_hashes.append(existing.import_hash)
+            else:
+                skipped += 1
+
+            if existing.hager_state is not None:
+                open_sessions += 1
 
             if backfill_existing_session(existing, session_data):
                 backfilled += 1
@@ -543,10 +695,15 @@ def import_parsed_sessions_to_db(
                 invoice_id=None,
                 import_hash=session_data["import_hash"],
                 source=session_data["source"],
+                hager_status=session_data.get("status") or None,
+                hager_state=state,
             )
         )
         imported += 1
         imported_hashes.append(session_data["import_hash"])
+
+        if state is not None:
+            open_sessions += 1
 
     db.flush()
     reassigned = reassign_open_sessions(db)
@@ -560,6 +717,8 @@ def import_parsed_sessions_to_db(
     return {
         "read": len(parsed_sessions) + running_sessions,
         "imported": imported,
+        "updated": updated,
+        "open_sessions": open_sessions,
         "skipped": skipped,
         **issues.as_result(),
         **excluded.as_result(),

@@ -134,6 +134,8 @@ def list_charging_sessions(
                 station_id=charging_session.station_id,
                 start_time=charging_session.start_time,
                 end_time=charging_session.end_time,
+                hager_status=charging_session.hager_status,
+                hager_state=charging_session.hager_state,
                 energy_total_kwh=(
                     charging_session.energy_total_kwh
                 ),

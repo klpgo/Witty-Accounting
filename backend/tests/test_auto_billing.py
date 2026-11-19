@@ -603,3 +603,26 @@ def test_weekly_run_bills_prorated_base_fee(db: Session, mails) -> None:
     [fee] = [item for item in invoice.items if item.item_type == "monthly_base_fee"]
     assert fee.net_amount == Decimal("7")
     assert "(anteilig 7/31 Tage)" in fee.description
+
+
+def test_late_session_after_assignment_end_gets_a_draft(
+    db: Session,
+    mails,
+) -> None:
+    # Zuordnung endete im September, der letzte Ladevorgang kam erst später
+    # aus der Hager Cloud: er wird im nächsten Lauf abgerechnet
+    late = add_customer(
+        db,
+        "late",
+        session_start=datetime(2026, 8, 30, 10, 0),
+        valid_to=datetime(2026, 9, 1),
+    )
+
+    process_tenant(db, at(2026, 11, 3, 6, 0))
+
+    [draft] = invoices(db)
+    assert draft.user_id == late.id
+    assert draft.service_period_start == datetime(2026, 10, 1)
+    assert [item.session_start for item in draft.items] == [
+        datetime(2026, 8, 30, 10, 0)
+    ]

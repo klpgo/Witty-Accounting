@@ -9,7 +9,10 @@ from sqlalchemy.orm import Session
 from app.i18n import normalize_language, translate
 from app.utils import locale_format
 from app.services.wallboxes import refresh_station_names
-from app.models.charging_session import ChargingSession
+from app.models.charging_session import (
+    ChargingSession,
+    billable_state_filter,
+)
 from app.models.energy_price import EnergyPrice
 from app.models.invoice import Invoice, InvoiceItem
 from app.models.rfid_card_assignment import (
@@ -874,6 +877,32 @@ def create_invoice_draft(
             billing_start,
         )
 
+    # Ein Ladevorgang gehört in den Zeitraum, in dem er endet. Deshalb
+    # zählt nur das Ende: Ladevorgänge über die Monatsgrenze und solche,
+    # die erst nach der Rechnung ihres Monats eingetroffen sind
+    # (Nachzügler), kommen in den nächsten Entwurf. Der Abrechnungsbeginn
+    # gilt weiter für den Beginn des Ladevorgangs.
+    session_filters = [
+        RFIDCardAssignment.user_id == user_id,
+        ChargingSession.end_time <= service_period_end,
+        ChargingSession.invoiced.is_(False),
+        ChargingSession.discarded_at.is_(None),
+        # laufende Ladevorgänge erst nach dem Abschluss abrechnen
+        billable_state_filter(),
+    ]
+
+    if (
+        global_settings is not None
+        and global_settings.billing_start_date is not None
+    ):
+        session_filters.append(
+            ChargingSession.start_time
+            >= datetime.combine(
+                global_settings.billing_start_date,
+                time.min,
+            )
+        )
+
     candidate_sessions = list(
         db.scalars(
             select(ChargingSession)
@@ -883,15 +912,7 @@ def create_invoice_draft(
                 ChargingSession.rfid_assignment_id
                 == RFIDCardAssignment.id,
             )
-            .where(
-                RFIDCardAssignment.user_id == user_id,
-                ChargingSession.start_time
-                >= effective_service_period_start,
-                ChargingSession.end_time
-                <= service_period_end,
-                ChargingSession.invoiced.is_(False),
-                ChargingSession.discarded_at.is_(None),
-            )
+            .where(*session_filters)
             .order_by(
                 ChargingSession.start_time,
                 ChargingSession.id,

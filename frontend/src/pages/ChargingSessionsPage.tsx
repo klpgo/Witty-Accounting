@@ -63,8 +63,10 @@ function formatPeriod(
 
 
 
-function formatNetCost(
+// Kosten inkl. Mehrwertsteuer (ohne MwSt.-Ausweis: netto = Endbetrag)
+function formatCost(
   chargingSession: ChargingSession,
+  vatEnabled: boolean,
 ): string {
   const gridCost = Number(
     chargingSession.cost_grid_net ?? 0,
@@ -82,7 +84,16 @@ function formatNetCost(
     return '–'
   }
 
-  return formatCurrency(gridCost + pvCost)
+  const net = gridCost + pvCost
+  const vatRate = Number(chargingSession.vat_rate ?? 0)
+
+  if (!vatEnabled || !Number.isFinite(vatRate)) {
+    return formatCurrency(net)
+  }
+
+  return formatCurrency(
+    Math.round(net * (1 + vatRate / 100) * 100) / 100,
+  )
 }
 
 
@@ -117,7 +128,26 @@ function getStatusKey(
     return 'sessions.status.draft'
   }
 
+  if (chargingSession.hager_state === 'running') {
+    return chargingSession.hager_status === 'WAIT_PV'
+      ? 'sessions.status.waiting'
+      : 'sessions.status.charging'
+  }
+
+  if (chargingSession.hager_state === 'completed') {
+    return 'sessions.status.completed'
+  }
+
   return 'sessions.status.open'
+}
+
+
+// Erklärung zum Status (Tooltip); Verworfen zeigt stattdessen den Grund
+const STATUS_HINT_KEYS: Partial<Record<MessageKey, MessageKey>> = {
+  'sessions.status.charging': 'sessions.statusHint.charging',
+  'sessions.status.waiting': 'sessions.statusHint.waiting',
+  'sessions.status.completed': 'sessions.statusHint.completed',
+  'sessions.status.open': 'sessions.statusHint.open',
 }
 
 
@@ -126,6 +156,13 @@ function getStatusClassName(
 ): string {
   if (chargingSession.discarded) {
     return 'status-badge status-discarded'
+  }
+
+  if (
+    chargingSession.hager_state === 'running' &&
+    chargingSession.invoice_status === null
+  ) {
+    return 'status-badge status-charging'
   }
 
   return chargingSession.invoice_status ===
@@ -622,7 +659,7 @@ function ChargingSessionsPage() {
                     </th>
 
                     <th className="table-number">
-                      {vatEnabled ? t('sessions.col.costNet') : t('sessions.col.cost')}
+                      {t('sessions.col.cost')}
                     </th>
 
                     <th>{t('sessions.col.status')}</th>
@@ -666,6 +703,12 @@ function ChargingSessionsPage() {
                               chargingSession.end_time,
                             )
 
+                            // läuft noch: Ende offen
+                            if (chargingSession.hager_state === 'running') {
+                              period.times =
+                                period.times.split(' – ')[0] + ' – …'
+                            }
+
                             return (
                               <>
                                 <span>{period.date}</span>
@@ -708,8 +751,9 @@ function ChargingSessionsPage() {
                         </td>
 
                         <td className="table-number">
-                          {formatNetCost(
+                          {formatCost(
                             chargingSession,
+                            vatEnabled,
                           )}
                         </td>
 
@@ -718,10 +762,21 @@ function ChargingSessionsPage() {
                             className={getStatusClassName(
                               chargingSession,
                             )}
-                            title={
-                              chargingSession.discard_reason ??
-                              undefined
-                            }
+                            title={(() => {
+                              if (chargingSession.discarded) {
+                                return (
+                                  chargingSession.discard_reason ??
+                                  undefined
+                                )
+                              }
+
+                              const hintKey =
+                                STATUS_HINT_KEYS[
+                                  getStatusKey(chargingSession)
+                                ]
+
+                              return hintKey ? t(hintKey) : undefined
+                            })()}
                           >
                             {t(getStatusKey(
                               chargingSession,

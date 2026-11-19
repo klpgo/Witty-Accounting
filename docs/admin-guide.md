@@ -400,11 +400,23 @@ Copies outside Witty are not affected: PDFs exported via SFTP and backups
 Witty fetches the charging sessions of all wallboxes of the installation from
 the Hager Cloud. Each fetch:
 
-- starts from the **last successful fetch minus 3 days** (overlap), but never
-  before the **billing start date**; the very first fetch starts at the
-  billing start date,
+- starts from the **last successful fetch minus 3 days** (overlap) – or
+  earlier, at the start of the oldest stored session that is not finished
+  yet (tracked for up to 60 days) –, but never before the
+  **billing start date**; the very first fetch starts at the billing start
+  date,
 - skips charging sessions that already exist, so repeated fetches are safe,
-- skips sessions that are still running; they are picked up by the next fetch,
+- also stores sessions that are **not finished yet** and updates them on
+  every fetch until the cable is unplugged:
+  - *Charging* or *Waiting for PV* (Hager status `CHARGING`, `WAIT_PV`): shown
+    in the list, but not billed yet,
+  - *Completed* (`FULL`: the car takes no more energy, the cable is still
+    plugged in): billed like a finished session. Hager reports the time of
+    completion only when the session ends, so Witty uses the fetch at which it
+    first saw the session as completed as end time and replaces it with the
+    real end time once the session is finished – unless it has been billed by
+    then. A billed session is never changed; if Hager reports a different
+    energy later, Witty writes a warning to the log,
 - prices the new sessions and assigns them to users via their charging cards,
 - assigns older, unassigned sessions retroactively if a matching card
   assignment exists in the meantime.
@@ -507,6 +519,14 @@ A JSON file created with the `hager-fetch` tool can be imported the same way.
    form suggests the current month. The draft contains all billable
    charging sessions, the monthly base fees and, for postal delivery, the
    postage.
+
+   A charging session belongs to the service period in which it **ends**;
+   its start does not matter. A session from 31 October 22:00 to
+   1 November 02:00 is billed with November. Sessions that ended earlier but
+   were not billed yet – for example because the Hager Cloud delivered them
+   only after the invoice of their month – are included in the next draft
+   with their actual date. Sessions that started before the billing start
+   date are never billed.
 3. **Finalize.** Open the draft, check it and click
    **Finalize invoice bindingly**. The invoice receives its number, becomes
    unchangeable and is archived as PDF. Invoices are created in the language
@@ -556,7 +576,8 @@ the next service period and the customers who would get a draft.
 
 1. **Drafts.** At the creation time (cutoff date + buffer, configured time),
    Witty creates one combined draft per customer with a card assignment in
-   the service period – charging sessions, base fees and, for postal
+   the service period or with unbilled charging sessions that ended by the
+   end of the period – charging sessions, base fees and, for postal
    delivery, postage, as for a manual draft. Customers with nothing to bill
    get no draft. Customers who already have a draft overlapping the period
    are skipped. If the automatic Hager fetch is enabled, Witty waits until a

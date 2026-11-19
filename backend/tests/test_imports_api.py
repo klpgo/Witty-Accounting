@@ -120,6 +120,8 @@ def test_upload_xlsx_returns_import_result(
         "unassigned_rfid_numbers": [],
         "backfilled_rfid_numbers": 0,
         "reassigned_sessions": 0,
+        "updated": 0,
+        "open_sessions": 0,
         "fetched_from": None,
         "skipped_before_billing_start": 0,
         "skipped_empty": 0,

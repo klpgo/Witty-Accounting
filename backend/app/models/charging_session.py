@@ -1,11 +1,17 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Numeric, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Float, Numeric, ForeignKey, String, or_
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 from app.utils.utc import utc_now
+
+
+# Zustände nicht beendeter Ladevorgänge aus der Hager Cloud (hager_state)
+HAGER_STATE_RUNNING = "running"
+HAGER_STATE_COMPLETED = "completed"
 
 
 class ChargingSession(Base):
@@ -57,6 +63,27 @@ class ChargingSession(Base):
     # sich der angezeigte Name ändert; ändert sich bei Gerätetausch)
     wallbox_id: Mapped[str | None] = mapped_column(
         String(64),
+        nullable=True,
+        index=True,
+    )
+
+    # Status laut Hager Cloud (z. B. CHARGING, WAIT_PV, FULL, FINISHED)
+    hager_status: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+
+    # Noch nicht beendeter Ladevorgang aus der Hager Cloud:
+    #   "running"   – lädt oder wartet (z. B. auf PV); nicht abrechenbar,
+    #                 Endzeit ist der letzte Abruf
+    #   "completed" – abgeschlossen (Auto voll), Kabel steckt noch;
+    #                 abrechenbar, Endzeit ist der Abruf, bei dem der
+    #                 Abschluss zuerst gesehen wurde
+    #   None        – beendet (oder aus einer Datei importiert)
+    # Solange der Wert gesetzt ist, wird der Ladevorgang bei jedem Abruf
+    # aktualisiert, und der Abruf reicht bis zu seinem Beginn zurück.
+    hager_state: Mapped[str | None] = mapped_column(
+        String(20),
         nullable=True,
         index=True,
     )
@@ -159,4 +186,12 @@ class ChargingSession(Base):
     rfid_assignment = relationship(
         "RFIDCardAssignment",
         back_populates="charging_sessions",
+    )
+
+
+def billable_state_filter() -> ColumnElement[bool]:
+    """Laufende oder unterbrochene Ladevorgänge werden nicht abgerechnet."""
+    return or_(
+        ChargingSession.hager_state.is_(None),
+        ChargingSession.hager_state != HAGER_STATE_RUNNING,
     )

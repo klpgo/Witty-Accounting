@@ -589,6 +589,11 @@ html {
   color: #067647;
 }
 
+.status-charging {
+  background: #eff8ff;
+  color: #175cd3;
+}
+
 .invoice-detail-page {
   padding-top: 32px;
 }

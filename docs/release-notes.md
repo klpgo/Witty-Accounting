@@ -1,5 +1,28 @@
 # Release notes
 
+## Unreleased
+
+### Changes
+
+- **Hager Cloud: sessions that are not finished yet.** Until now the sync
+  skipped sessions without an end time. A session that was completed (car
+  full) but unplugged only after more than 3 days was never fetched. Now
+  Witty stores charging, waiting and completed sessions, shows their status
+  in the list of charging sessions and updates them on every fetch until
+  they are finished; the fetch reaches back to the oldest of them. Completed
+  sessions are billed, charging and waiting ones only once they are
+  completed. Migration `b4d6f8a0c2e5`. See the administrator guide,
+  section 3.1.
+- **Charging sessions are billed in the period in which they end.** Until
+  now a draft only took sessions that started in the service period, so a
+  session across the end of a month (e.g. 31 October 22:00 to 1 November
+  02:00) and a session that arrived from the Hager Cloud after the invoice
+  of its month were never billed. Now every unbilled session that ended by
+  the end of the service period is included, with its actual date.
+  Automatic billing also creates a draft for customers whose card
+  assignment has ended but who still have such sessions. See the
+  administrator guide, section 5.
+
 ## 2.3.0 2026-10-12
 
 ### New features

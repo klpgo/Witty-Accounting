@@ -45,6 +45,10 @@ from app.models.billing_run import (
     RUN_WAITING_FOR_DATA,
     BillingRun,
 )
+from app.models.charging_session import (
+    ChargingSession,
+    billable_state_filter,
+)
 from app.models.global_settings import GlobalSettings
 from app.models.invoice import (
     DELIVERY_FAILED,
@@ -198,8 +202,12 @@ def billable_user_ids(
     period_start: datetime,
     period_end: datetime,
 ) -> list[int]:
-    """Kunden mit mindestens einer Kartenzuordnung im Zeitraum."""
-    return list(
+    """
+    Kunden mit mindestens einer Kartenzuordnung im Zeitraum, dazu Kunden
+    mit offenen Ladevorgängen, die bis zum Ende des Zeitraums geendet
+    haben (Nachzügler, auch nach Ende der Kartenzuordnung).
+    """
+    with_assignment = set(
         db.scalars(
             select(RFIDCardAssignment.user_id)
             .where(
@@ -212,6 +220,25 @@ def billable_user_ids(
             .distinct()
         ).all()
     )
+    with_open_sessions = set(
+        db.scalars(
+            select(RFIDCardAssignment.user_id)
+            .join(
+                ChargingSession,
+                ChargingSession.rfid_assignment_id
+                == RFIDCardAssignment.id,
+            )
+            .where(
+                ChargingSession.end_time <= period_end,
+                ChargingSession.invoiced.is_(False),
+                ChargingSession.discarded_at.is_(None),
+                billable_state_filter(),
+            )
+            .distinct()
+        ).all()
+    )
+
+    return sorted(with_assignment | with_open_sessions)
 
 
 def overlapping_draft(

@@ -24,6 +24,9 @@ class ChargingSessionResponse(BaseModel):
     discarded: bool = False
     discarded_at: datetime | None = None
     discard_reason: str | None = None
+    # Hager-Status und offener Zustand ("running", "completed" oder None)
+    hager_status: str | None = None
+    hager_state: str | None = None
 
 
 class ChargingSessionIdsRequest(BaseModel):

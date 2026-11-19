@@ -191,6 +191,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
+from app.models.charging_session import ChargingSession
 from app.models.global_settings import GlobalSettings
 from app.services.hager_sync import (
     determine_cutoff,
@@ -348,3 +349,56 @@ def test_range_before_billing_start_is_floored(sync_db) -> None:
 
     assert result["fetched_from"] == date(2026, 9, 20)
     assert fetched[0]["stop_before"] == local_day_start(date(2026, 9, 20))
+
+
+def add_open_session(db, start: datetime, state: str = "completed") -> None:
+    db.add(
+        ChargingSession(
+            hager_session_id=f"open-{start.isoformat()}",
+            station_id="WB2",
+            wallbox_id="WB-A",
+            start_time=start,
+            end_time=start,
+            energy_total_kwh=1.0,
+            energy_pv_kwh=0.0,
+            invoiced=False,
+            import_hash=f"{start.isoformat():x<64}"[:64],
+            source="hager",
+            hager_status="FULL",
+            hager_state=state,
+        )
+    )
+    db.commit()
+
+
+def test_cutoff_reaches_back_to_oldest_open_session(sync_db) -> None:
+    db, fetched, imported = sync_db
+    # seit dem 10.09. abgeschlossen, Kabel steckt noch
+    add_open_session(db, datetime(2026, 9, 10, 18, 0))
+
+    result = import_from_hager(db)
+
+    assert result["fetched_from"] == date(2026, 9, 10)
+    assert fetched[0]["stop_before"] == local_day_start(date(2026, 9, 10))
+    assert len(imported[0]) == 2
+
+
+def test_cutoff_ignores_open_sessions_older_than_limit(sync_db) -> None:
+    db, fetched, imported = sync_db
+    add_open_session(db, datetime(2026, 6, 1, 18, 0), state="running")
+
+    result = import_from_hager(db)
+
+    assert result["fetched_from"] == date(2026, 9, 21)
+
+
+def test_determine_cutoff_with_open_session() -> None:
+    last_fetch = datetime(2026, 9, 24, 1, 30)
+
+    assert determine_cutoff(last_fetch, None, date(2026, 9, 1)) == date(2026, 9, 1)
+    # offener Ladevorgang jünger als die Überlappung: bleibt bei 3 Tagen
+    assert determine_cutoff(last_fetch, None, date(2026, 9, 23)) == date(2026, 9, 21)
+    # nie vor dem Abrechnungsbeginn
+    assert determine_cutoff(
+        last_fetch, date(2026, 9, 5), date(2026, 9, 1)
+    ) == date(2026, 9, 5)

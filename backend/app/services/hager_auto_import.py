@@ -180,6 +180,12 @@ def summarize(import_result: dict, pricing_result: dict) -> str:
         f"{import_result['skipped']} skipped",
     ]
 
+    if import_result.get("updated"):
+        parts.append(f"{import_result['updated']} updated")
+
+    if import_result.get("open_sessions"):
+        parts.append(f"{import_result['open_sessions']} not finished yet")
+
     if pricing_result.get("missing_price"):
         parts.append(f"{pricing_result['missing_price']} without price")
 

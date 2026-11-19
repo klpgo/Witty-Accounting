@@ -5,7 +5,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.database import Base
-from app.models.charging_session import ChargingSession
+from app.models.charging_session import (
+    HAGER_STATE_COMPLETED,
+    HAGER_STATE_RUNNING,
+    ChargingSession,
+)
+from app.models.global_settings import GlobalSettings
 from app.services.importers.hager_json_importer import (
     import_charging_rows_to_db,
     parse_charging_row,
@@ -85,8 +90,28 @@ def test_parse_without_card() -> None:
     assert parse_charging_row(row(authType="NONE", authData=""), NAMES)["rfid"] is None
 
 
-def test_parse_running_session_is_skipped() -> None:
-    assert parse_charging_row(row(stopAt=None), NAMES) is None
+NOW = datetime(2026, 8, 12, 15, 0, 0)
+
+
+def test_parse_running_session_is_kept_as_running() -> None:
+    parsed = parse_charging_row(
+        row(stopAt=None, status="WAIT_PV"), NAMES, NOW
+    )
+
+    assert parsed["state"] == HAGER_STATE_RUNNING
+    assert parsed["status"] == "WAIT_PV"
+    assert parsed["end_time"] == NOW
+
+
+def test_parse_full_session_is_completed() -> None:
+    parsed = parse_charging_row(row(stopAt=None, status="FULL"), NAMES, NOW)
+
+    assert parsed["state"] == HAGER_STATE_COMPLETED
+    assert parsed["end_time"] == NOW
+
+
+def test_parse_finished_session_has_no_open_state() -> None:
+    assert parse_charging_row(row(), NAMES, NOW)["state"] is None
 
 
 # --------------------------------------------------------------------------
@@ -281,3 +306,117 @@ def test_parse_shortens_long_wallbox_id() -> None:
     assert parsed["station_id"] == "ID: ..Uydb3"
     # frühere Schreibweise mit vollständiger ID wird weiterhin erkannt
     assert "ID: C7Hkmi9cQsCdmZ4K4Uydb3" in parsed["station_aliases"]
+
+
+# --------------------------------------------------------------------------
+# Noch nicht beendete Ladevorgänge (laufend, unterbrochen, abgeschlossen)
+# --------------------------------------------------------------------------
+def test_open_session_lifecycle_until_finished() -> None:
+    with create_database_session() as db:
+        # 1. wartet auf PV, noch keine Energie
+        result = import_charging_rows_to_db(
+            db,
+            [row(stopAt=None, status="WAIT_PV", energyAll="0.00", energySolar="0.00")],
+            NAMES,
+            now=datetime(2026, 8, 12, 14, 30),
+        )
+        stored = db.scalar(select(ChargingSession))
+        assert result["imported"] == 1
+        assert result["open_sessions"] == 1
+        assert stored.hager_state == HAGER_STATE_RUNNING
+        assert stored.hager_status == "WAIT_PV"
+        assert stored.end_time == datetime(2026, 8, 12, 14, 30)
+
+        # 2. lädt
+        result = import_charging_rows_to_db(
+            db,
+            [row(stopAt=None, status="CHARGING", energyAll="120.00", energySolar="100.00")],
+            NAMES,
+            now=datetime(2026, 8, 12, 14, 45),
+        )
+        db.refresh(stored)
+        assert result["imported"] == 0
+        assert result["updated"] == 1
+        assert stored.energy_total_kwh == pytest.approx(0.12)
+        assert stored.end_time == datetime(2026, 8, 12, 14, 45)
+        assert stored.cost_grid_net is None
+
+        # 3. abgeschlossen (voll): Endzeit = erster Abruf mit FULL
+        import_charging_rows_to_db(
+            db,
+            [row(stopAt=None, status="FULL")],
+            NAMES,
+            now=datetime(2026, 8, 12, 15, 0),
+        )
+        import_charging_rows_to_db(
+            db,
+            [row(stopAt=None, status="FULL")],
+            NAMES,
+            now=datetime(2026, 8, 13, 9, 0),
+        )
+        db.refresh(stored)
+        assert stored.hager_state == HAGER_STATE_COMPLETED
+        assert stored.end_time == datetime(2026, 8, 12, 15, 0)
+        assert stored.energy_total_kwh == pytest.approx(0.188)
+
+        # 4. beendet (Kabel abgezogen): echte Endzeit aus stopAt
+        result = import_charging_rows_to_db(db, [row()], NAMES)
+        db.refresh(stored)
+        assert result["updated"] == 1
+        assert result["open_sessions"] == 0
+        assert stored.hager_state is None
+        assert stored.hager_status == "FINISHED"
+        assert stored.end_time == datetime(2026, 8, 12, 14, 14, 3)
+        assert len(db.scalars(select(ChargingSession)).all()) == 1
+
+        # danach wie bisher: wird übersprungen
+        result = import_charging_rows_to_db(db, [row()], NAMES)
+        assert result["skipped"] == 1
+        assert result["updated"] == 0
+
+
+def test_invoiced_completed_session_is_not_changed() -> None:
+    with create_database_session() as db:
+        import_charging_rows_to_db(
+            db,
+            [row(stopAt=None, status="FULL")],
+            NAMES,
+            now=datetime(2026, 8, 12, 15, 0),
+        )
+        stored = db.scalar(select(ChargingSession))
+        stored.invoiced = True
+        stored.invoice_id = 42
+        db.commit()
+
+        import_charging_rows_to_db(db, [row(energyAll="200.00")], NAMES)
+        db.refresh(stored)
+
+        # Energie und Endzeit bleiben wie abgerechnet, der Zustand ist beendet
+        assert stored.energy_total_kwh == pytest.approx(0.188)
+        assert stored.end_time == datetime(2026, 8, 12, 15, 0)
+        assert stored.hager_state is None
+        assert stored.hager_status == "FINISHED"
+
+
+def test_open_session_without_energy_is_removed_when_empty_ones_are_skipped() -> None:
+    with create_database_session() as db:
+        db.add(
+            GlobalSettings(id=1, import_skip_empty_sessions=True)
+        )
+        db.commit()
+
+        import_charging_rows_to_db(
+            db,
+            [row(stopAt=None, status="WAIT_PV", energyAll="0.00", energySolar="0.00")],
+            NAMES,
+            now=datetime(2026, 8, 12, 14, 30),
+        )
+        assert db.scalar(select(ChargingSession)) is not None
+
+        import_charging_rows_to_db(
+            db,
+            [row(status="FINISHED_NO_ACTION", energyAll="0.00", energySolar="0.00")],
+            NAMES,
+        )
+        db.commit()
+        assert db.scalar(select(ChargingSession)) is None

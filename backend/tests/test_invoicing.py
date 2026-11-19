@@ -91,6 +91,8 @@ def database_session() -> Generator[
 
 def create_test_data(
     db: Session,
+    *,
+    with_session: bool = True,
 ) -> User:
     user = User(
         email="invoice@example.com",
@@ -139,6 +141,11 @@ def create_test_data(
 
     db.add(rfid_assignment)
     db.flush()
+
+    if not with_session:
+        db.commit()
+        db.refresh(user)
+        return user
 
     db.add(
         ChargingSession(
@@ -2134,7 +2141,8 @@ def test_mid_day_change_counts_for_old_assignment(
 def test_creates_base_fee_only_invoice_draft(
     database_session: Session,
 ) -> None:
-    user = create_test_data(database_session)
+    # ohne Ladevorgang: der Juni-Ladevorgang käme sonst als Nachzügler mit
+    user = create_test_data(database_session, with_session=False)
 
     database_session.add(
         GlobalSettings(
@@ -2324,7 +2332,8 @@ def test_splits_monthly_base_fee_between_assignments(
 def test_zero_base_fee_creates_no_invoice_item(
     database_session: Session,
 ) -> None:
-    user = create_test_data(database_session)
+    # ohne Ladevorgang: der Juni-Ladevorgang käme sonst als Nachzügler mit
+    user = create_test_data(database_session, with_session=False)
 
     database_session.add(
         GlobalSettings(
@@ -2361,7 +2370,8 @@ def test_zero_base_fee_creates_no_invoice_item(
 def test_finalizes_monthly_base_fee_charge(
     database_session: Session,
 ) -> None:
-    user = create_test_data(database_session)
+    # ohne Ladevorgang: der Juni-Ladevorgang käme sonst als Nachzügler mit
+    user = create_test_data(database_session, with_session=False)
 
     database_session.add(
         GlobalSettings(
@@ -2411,7 +2421,8 @@ def test_finalizes_monthly_base_fee_charge(
 def test_rejects_unreserved_monthly_base_fee(
     database_session: Session,
 ) -> None:
-    user = create_test_data(database_session)
+    # ohne Ladevorgang: der Juni-Ladevorgang käme sonst als Nachzügler mit
+    user = create_test_data(database_session, with_session=False)
 
     database_session.add(
         GlobalSettings(
@@ -2461,7 +2472,8 @@ def test_rejects_unreserved_monthly_base_fee(
 def test_cancels_and_rebills_monthly_base_fee(
     database_session: Session,
 ) -> None:
-    user = create_test_data(database_session)
+    # ohne Ladevorgang: der Juni-Ladevorgang käme sonst als Nachzügler mit
+    user = create_test_data(database_session, with_session=False)
 
     database_session.add(
         GlobalSettings(
@@ -2748,3 +2760,174 @@ def test_draft_uses_current_wallbox_name(database_session: Session) -> None:
     item = next(i for i in invoice.items if i.item_type == "charging_session")
     assert item.station_id == "ID: ..Uydb3"
     assert item.description.endswith("an ID: ..Uydb3")
+
+
+# --------------------------------------------------------------------------
+# Ladevorgänge gehören in den Zeitraum, in dem sie enden
+# --------------------------------------------------------------------------
+
+
+def add_session(
+    db: Session,
+    start: datetime,
+    end: datetime,
+    key: str,
+) -> ChargingSession:
+    assignment = db.scalar(select(RFIDCardAssignment))
+    assert assignment is not None
+    session = ChargingSession(
+        hager_session_id=None,
+        station_id="WB2",
+        start_time=start,
+        end_time=end,
+        rfid_card_id=assignment.rfid_card_id,
+        rfid_assignment_id=assignment.id,
+        energy_total_kwh=10.0,
+        energy_pv_kwh=4.0,
+        cost_grid_net=Decimal("1.8000"),
+        cost_pv_net=Decimal("0.4000"),
+        vat_rate=Decimal("19.00"),
+        invoiced=False,
+        invoice_id=None,
+        import_hash=key * 64,
+        source="hager",
+    )
+    db.add(session)
+    db.commit()
+    return session
+
+
+def test_session_across_month_end_belongs_to_month_it_ends(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session, with_session=False)
+    crossing = add_session(
+        database_session,
+        datetime(2026, 6, 30, 22, 0),
+        datetime(2026, 7, 1, 2, 0),
+        "x",
+    )
+
+    with pytest.raises(NoBillableSessionsError):
+        create_invoice_draft(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(2026, 6, 1),
+            service_period_end=datetime(2026, 7, 1),
+        )
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(2026, 7, 1),
+        service_period_end=datetime(2026, 8, 1),
+    )
+
+    assert [item.charging_session_id for item in invoice.items] == [
+        crossing.id
+    ]
+    assert invoice.items[0].session_start == datetime(2026, 6, 30, 22, 0)
+
+
+def test_late_session_is_billed_in_next_draft(
+    database_session: Session,
+) -> None:
+    # Juni-Ladevorgang, der erst nach der Juni-Rechnung eingetroffen ist
+    user = create_test_data(database_session)
+    june_session = database_session.scalar(select(ChargingSession))
+    july_session = add_session(
+        database_session,
+        datetime(2026, 7, 5, 10, 0),
+        datetime(2026, 7, 5, 11, 0),
+        "y",
+    )
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(2026, 7, 1),
+        service_period_end=datetime(2026, 8, 1),
+    )
+
+    assert [item.charging_session_id for item in invoice.items] == [
+        june_session.id,
+        july_session.id,
+    ]
+    assert invoice.service_period_start == datetime(2026, 7, 1)
+
+
+def test_sessions_ending_after_the_period_stay_open(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)
+    later = add_session(
+        database_session,
+        datetime(2026, 7, 31, 23, 0),
+        datetime(2026, 8, 1, 1, 0),
+        "z",
+    )
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(2026, 7, 1),
+        service_period_end=datetime(2026, 8, 1),
+    )
+
+    assert later.id not in [
+        item.charging_session_id for item in invoice.items
+    ]
+    database_session.refresh(later)
+    assert later.invoiced is False
+
+
+def test_late_sessions_respect_billing_start_date(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session)  # Ladevorgang am 17.06.
+    database_session.add(
+        GlobalSettings(id=1, billing_start_date=date(2026, 7, 1))
+    )
+    database_session.commit()
+
+    with pytest.raises(NoBillableSessionsError):
+        create_invoice_draft(
+            database_session,
+            user_id=user.id,
+            service_period_start=datetime(2026, 7, 1),
+            service_period_end=datetime(2026, 8, 1),
+        )
+
+
+def test_running_sessions_are_billed_only_after_completion(
+    database_session: Session,
+) -> None:
+    user = create_test_data(database_session, with_session=False)
+    running = add_session(
+        database_session,
+        datetime(2026, 7, 10, 10, 0),
+        datetime(2026, 7, 10, 12, 0),
+        "r",
+    )
+    running.hager_status = "WAIT_PV"
+    running.hager_state = "running"
+    completed = add_session(
+        database_session,
+        datetime(2026, 7, 11, 10, 0),
+        datetime(2026, 7, 11, 12, 0),
+        "c",
+    )
+    completed.hager_status = "FULL"
+    completed.hager_state = "completed"
+    database_session.commit()
+
+    invoice = create_invoice_draft(
+        database_session,
+        user_id=user.id,
+        service_period_start=datetime(2026, 7, 1),
+        service_period_end=datetime(2026, 8, 1),
+    )
+
+    assert [item.charging_session_id for item in invoice.items] == [
+        completed.id
+    ]

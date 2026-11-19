@@ -26,6 +26,10 @@ export interface ChargingSession {
   discarded: boolean
   discarded_at: string | null
   discard_reason: string | null
+  // Hager-Status; hager_state: noch nicht beendet ('running' = lädt oder
+  // wartet, 'completed' = abgeschlossen, Kabel steckt), sonst null
+  hager_status?: string | null
+  hager_state?: 'running' | 'completed' | null
 }
 
 export class ChargingSessionApiError extends Error {

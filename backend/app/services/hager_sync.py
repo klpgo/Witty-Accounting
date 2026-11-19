@@ -14,9 +14,10 @@ from typing import Any, Callable, TypeVar
 
 import httpx
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from app.models.charging_session import ChargingSession
 from app.models.global_settings import GlobalSettings
 from app.services import hager_client
 from app.services.hager_secret import decrypt_hager_password
@@ -261,31 +262,71 @@ def filter_by_local_date(
 FETCH_OVERLAP = timedelta(days=3)
 
 
+# Noch nicht beendete Ladevorgänge werden höchstens so lange nachverfolgt
+# (falls Hager einen Ladevorgang nie beendet)
+OPEN_SESSION_MAX_AGE = timedelta(days=60)
+
+
 def determine_cutoff(
     last_successful_fetch_at: datetime | None,
     billing_start_date: date | None,
+    open_since: date | None = None,
 ) -> date | None:
     """
     Frühester Tag (Ortszeit), ab dem abgerufen wird:
-    letzter erfolgreicher Abruf minus Überlappung, aber nie vor dem
-    Abrechnungsbeginn. None = alles abrufen.
+    letzter erfolgreicher Abruf minus Überlappung – oder früher, wenn ein
+    gespeicherter Ladevorgang noch nicht beendet ist (open_since: Tag
+    seines Beginns) –, aber nie vor dem Abrechnungsbeginn.
+    None = alles abrufen.
     """
-    candidates: list[date] = []
-
-    if last_successful_fetch_at is not None:
+    if last_successful_fetch_at is None:
+        cutoff = None
+    else:
         last_utc = (
             last_successful_fetch_at.replace(tzinfo=UTC)
             if last_successful_fetch_at.tzinfo is None
             else last_successful_fetch_at
         )
-        candidates.append(
-            (last_utc - FETCH_OVERLAP).astimezone(LOCAL_TIMEZONE).date()
-        )
+        cutoff = (last_utc - FETCH_OVERLAP).astimezone(LOCAL_TIMEZONE).date()
+
+        if open_since is not None and open_since < cutoff:
+            cutoff = open_since
 
     if billing_start_date is not None:
-        candidates.append(billing_start_date)
+        cutoff = (
+            billing_start_date
+            if cutoff is None
+            else max(cutoff, billing_start_date)
+        )
 
-    return max(candidates) if candidates else None
+    return cutoff
+
+
+def earliest_open_session_day(
+    db: Session,
+    reference: datetime | None = None,
+) -> date | None:
+    """
+    Beginn (Tag) des ältesten noch nicht beendeten Ladevorgangs, höchstens
+    OPEN_SESSION_MAX_AGE vor `reference` (UTC, Standard: jetzt).
+    """
+    reference_utc = reference or datetime.now(UTC)
+
+    if reference_utc.tzinfo is None:
+        reference_utc = reference_utc.replace(tzinfo=UTC)
+
+    oldest_tracked = (
+        reference_utc.astimezone(LOCAL_TIMEZONE).replace(tzinfo=None)
+        - OPEN_SESSION_MAX_AGE
+    )
+    earliest = db.scalar(
+        select(func.min(ChargingSession.start_time)).where(
+            ChargingSession.hager_state.is_not(None),
+            ChargingSession.start_time >= oldest_tracked,
+        )
+    )
+
+    return earliest.date() if earliest is not None else None
 
 
 def local_day_start(day: date) -> datetime:
@@ -357,6 +398,10 @@ def _import_from_hager(
         effective_from = determine_cutoff(
             global_settings.hager_last_successful_fetch_at,
             billing_start,
+            earliest_open_session_day(
+                db,
+                global_settings.hager_last_successful_fetch_at,
+            ),
         )
 
     fetch_started_at = utc_now()

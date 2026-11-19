@@ -24,5 +24,8 @@ class ImportResult(BaseModel):
     backfilled_rfid_numbers: int = 0
     # ältere Ladevorgänge, die jetzt einer Zuordnung zugeordnet wurden
     reassigned_sessions: int = 0
+    # Hager: aktualisierte und noch nicht beendete Ladevorgänge
+    updated: int = 0
+    open_sessions: int = 0
     # Hager-Abruf: frühester abgerufener Tag (None = alles)
     fetched_from: date | None = None
