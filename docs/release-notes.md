@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased
+## 2.5.0 2026-11-19
 
 ### Changes
 
@@ -9,18 +9,14 @@
   sessions always), invoices the last twelve months (drafts always). A
   period selection (whole years or all) and **Load older months** show more.
 - **No more outdated pages after an update.** The browser could keep an old
-  `index.html` and show the previous version of the interface (and with it
-  outdated status texts) until the page was reloaded. `index.html` is now
-  revalidated on every visit, and API responses are never cached.
-- **Hager Cloud: sessions that are not finished yet.** Until now the sync
-  skipped sessions without an end time. A session that was completed (car
-  full) but unplugged only after more than 3 days was never fetched. Now
-  Witty stores charging, waiting and completed sessions, shows their status
-  in the list of charging sessions and updates them on every fetch until
-  they are finished; the fetch reaches back to the oldest of them. Completed
-  sessions are billed, charging and waiting ones only once they are
-  completed. Migration `b4d6f8a0c2e5`. See the administrator guide,
-  section 3.1.
+  `index.html` and show the previous version of the interface until the page
+  was reloaded. `index.html` is now revalidated on every visit, and API
+  responses are never cached.
+
+## 2.4.0 2026-11-19
+
+### Changes
+
 - **Charging sessions are billed in the period in which they end.** Until
   now a draft only took sessions that started in the service period, so a
   session across the end of a month (e.g. 31 October 22:00 to 1 November
@@ -30,6 +26,37 @@
   Automatic billing also creates a draft for customers whose card
   assignment has ended but who still have such sessions. See the
   administrator guide, section 5.
+- **Hager Cloud: charging sessions that are not finished yet.** Until now
+  the sync skipped every session without an end time, and a session that
+  stayed plugged in for more than 3 days was never fetched. Now Witty stores
+  these sessions, shows their state in the list of charging sessions and
+  updates them on every fetch until the cable is unplugged; the fetch reaches
+  back to the oldest of them (up to 60 days).
+
+  | State in the list | Hager status | Billed? |
+  |---|---|---|
+  | Charging | `CHARGING` | no |
+  | Waiting for PV | `WAIT_PV` | no |
+  | Completed (car full, cable still plugged in) | `FULL` | **yes** |
+  | To be billed (finished) | `FINISHED` | yes |
+
+  Hager reports no end time while the cable is plugged in. For a completed
+  session Witty uses the fetch at which it first saw the session as
+  completed as end time; this decides the month in which the session is
+  billed. When the cable is unplugged, Hager reports the time of unplugging
+  as end time, and Witty takes it over if the session has not been billed
+  yet. A billed session is never changed; if Hager reports a different
+  energy later, Witty logs a warning. See the administrator guide,
+  section 3.1.
+- **Clearer status in the list of charging sessions**, each with a tooltip:
+  *Charging*, *Waiting for PV*, *Completed*, *To be billed* (formerly
+  *Open*), *In invoice draft*, *Invoiced*, *Discarded*.
+- The list of charging sessions shows the **cost including VAT** (column
+  *Cost*); without VAT (§ 19 UStG) the net amount.
+
+### Database
+
+- Migration `b4d6f8a0c2e5`: Hager status of charging sessions.
 
 ## 2.3.0 2026-10-12
 

@@ -411,11 +411,14 @@ the Hager Cloud. Each fetch:
   - *Charging* or *Waiting for PV* (Hager status `CHARGING`, `WAIT_PV`): shown
     in the list, but not billed yet,
   - *Completed* (`FULL`: the car takes no more energy, the cable is still
-    plugged in): billed like a finished session. Hager reports the time of
-    completion only when the session ends, so Witty uses the fetch at which it
-    first saw the session as completed as end time and replaces it with the
-    real end time once the session is finished – unless it has been billed by
-    then. A billed session is never changed; if Hager reports a different
+    plugged in): billed like a finished session. Hager reports no end time
+    while the cable is plugged in, so Witty uses the fetch at which it first
+    saw the session as completed as end time. When the cable is unplugged,
+    Hager reports the time of unplugging as end time (the energy stays the
+    same); Witty takes it over unless the session has been billed by then.
+    A session that is completed at the end of a month and unplugged in the
+    next month is therefore billed in the next month, unless it was billed
+    before. A billed session is never changed; if Hager reports a different
     energy later, Witty writes a warning to the log,
 - prices the new sessions and assigns them to users via their charging cards,
 - assigns older, unassigned sessions retroactively if a matching card
